@@ -1,0 +1,7 @@
+.idea
+node_modules
+logs
+Discord Bot Tokens.txt
+resources/.env
+resources/secret.json
+.DS_Store
