@@ -21,7 +21,7 @@ async function getSheetData() {
     const sheets = google.sheets({ version: 'v4', auth: authorize() });
     const postsResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: '1Ze84DPzXsdaGAsg_t5MJMbmvGJlF1Q03R-uJ-OdpfU0',
-        range: 'Season 13 Posts',
+        range: 'Season 14 Posts',
     });
     const postsRows = postsResponse.data.values;
     if (!postsRows || postsRows.length === 0) {
