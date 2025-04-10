@@ -181,9 +181,9 @@ module.exports = {
             // Col AF (W3 Posts): Index 17
             // Col AH (W3 Likes): Index 19
             const subscribersStr = userPerformanceRow[5] || 'N/A'; // Index 5 (Col T rel O)
-            const week1 = checkRequirements(userPerformanceRow[6], userPerformanceRow[8]);    // Indices 6 (U rel O), 8 (W rel O)
-            const week2 = checkRequirements(userPerformanceRow[12], userPerformanceRow[14]);  // Indices 12 (AA rel O), 14 (AC rel O)
-            const week3 = checkRequirements(userPerformanceRow[17], userPerformanceRow[19]);  // Indices 17 (AF rel O), 19 (AH rel O)
+            const week1 = checkRequirements(userPerformanceRow[6], userPerformanceRow[8]);
+            const week2 = checkRequirements(userPerformanceRow[12], userPerformanceRow[14]);
+            const week3 = checkRequirements(userPerformanceRow[18], userPerformanceRow[20]);
 
             // --- Helper to generate embed description part ---
             const generateRequirementMessage = (weekLabel, weekData) => {

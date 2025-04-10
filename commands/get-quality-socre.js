@@ -3,7 +3,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const { google } = require('googleapis');
 const credentials = require('../resources/secret.json');
 
-const SEASON_YEAR = 2024;
+const SEASON_YEAR = 2025;
 
 function authorize() {
     const { client_email, private_key } = credentials;
