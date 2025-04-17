@@ -1,23 +1,24 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { google } = require('googleapis');
-// const axios = require('axios'); // axios doesn't seem to be used, commented out.
 const credentials = require('../resources/secret.json');
 
 // --- Constants (Role IDs seem correct) ---
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 const SQUAD_OWNER_ROLES = ['1218468103382499400', '1288918946258489354', '1290803054140199003'];
 const compSquadLevelRoles = [
-    '1288918067178508423',
-    '1288918165417365576',
-    '1288918209294237707',
-    '1288918281343733842',
-    '1200889836844896316' // Assuming this extra role is intended here
+    '1288918067178508423', '1288918165417365576', '1288918209294237707', '1288918281343733842', '1200889836844896316'
 ];
 const contentSquadLevelRoles = [
-    '1291090496869109762',
-    '1291090569346682931',
-    '1291090608315699229',
-    '1291090760405356708'
+    '1291090496869109762', '1291090569346682931', '1291090608315699229', '1291090760405356708'
+];
+// *** ADD Mascot Squad Roles ***
+const mascotSquads = [
+    { name: "Duck Squad", roleId: "1359614680615620608" },
+    { name: "Pumpkin Squad", roleId: "1361466564292907060" },
+    { name: "Snowman Squad", roleId: "1361466801443180584" },
+    { name: "Gorilla Squad", roleId: "1361466637261471961" },
+    { name: "Bee Squad", roleId: "1361466746149666956" },
+    { name: "Alligator Squad", roleId: "1361466697059664043" },
 ];
 
 // --- Authorization function remains the same ---
@@ -84,7 +85,6 @@ module.exports = {
             const allData = allDataResponse.data.values || [];
 
             // --- Find the Squad Leader by Name ---
-            // Squad name is in column C (index 2)
             const squadLeaderRow = squadLeaders.find(row => row && row.length > 2 && row[2].toUpperCase() === squadNameToDisband);
             if (!squadLeaderRow) {
                 return interaction.editReply({
@@ -95,17 +95,28 @@ module.exports = {
 
             const squadLeaderId = squadLeaderRow[1]; // Leader ID is column B (index 1)
 
-            // --- Determine Squad Type for Role Removal ---
-            // Find any row in All Data with the squad name (col C, index 2) to get type (col D, index 3)
+            // --- Determine Roles to Remove ---
             const squadTypeRow = allData.find(row => row && row.length > 3 && row[2].toUpperCase() === squadNameToDisband);
             const squadTypeForRoles = squadTypeRow ? squadTypeRow[3] : null;
             const squadTypeRoles = squadTypeForRoles === 'Competitive' ? compSquadLevelRoles :
                 squadTypeForRoles === 'Content' ? contentSquadLevelRoles : [];
 
+            // *** Get Mascot Role ID ***
+            const eventSquadName = squadLeaderRow[3]; // Get Event Squad from Leader
+            let mascotRoleIdToRemove = null;
+            if (eventSquadName && eventSquadName !== 'N/A') {
+                const mascotInfo = mascotSquads.find(m => m.name === eventSquadName);
+                if (mascotInfo) {
+                    mascotRoleIdToRemove = mascotInfo.roleId;
+                    console.log(`Squad ${squadNameToDisband} has mascot role: ${eventSquadName} (${mascotRoleIdToRemove})`);
+                } else {
+                    console.warn(`Squad ${squadNameToDisband} has event squad '${eventSquadName}' but no matching role ID found.`);
+                }
+            }
+
             // --- Member Notification and Cleanup ---
-            // Filter members based on squad name (Column C, index 2)
             const squadMembersToProcess = squadMembers.filter(row => row && row.length > 2 && row[2].toUpperCase() === squadNameToDisband);
-            const memberIdsToProcess = squadMembersToProcess.map(row => row[1]); // Get IDs for All Data update
+            const memberIdsToProcess = squadMembersToProcess.map(row => row[1]);
 
             for (const memberRow of squadMembersToProcess) {
                 const memberId = memberRow[1];
@@ -114,7 +125,7 @@ module.exports = {
                 try {
                     const guildMember = await guild.members.fetch(memberId);
                     if (guildMember) {
-                        // Send DM - Mention Moderator Action
+                        // Send DM
                         const dmEmbed = new EmbedBuilder()
                             .setTitle('Squad Disbanded')
                             .setDescription(`The squad **${squadNameToDisband}** you were in has been forcefully disbanded by a moderator.`)
@@ -130,12 +141,18 @@ module.exports = {
                             if (nickError.code !== 50013) { console.log(`Could not reset nickname for ${guildMember.user.tag} (${memberId}):`, nickError.message); }
                         }
 
-                        // Remove Squad Level Roles
-                        if (squadTypeRoles.length > 0) {
-                            await guildMember.roles.remove(squadTypeRoles).catch(roleErr => {
+                        // Remove Roles (Squad Level + Mascot, if any)
+                        const rolesToRemoveFromMember = [...squadTypeRoles]; // Create a copy of squadTypeRoles
+                        if (mascotRoleIdToRemove) {
+                            rolesToRemoveFromMember.push(mascotRoleIdToRemove); // Add mascot role if found
+                        }
+                        // Make sure there are any roles to remove before the API call
+                        if (rolesToRemoveFromMember.length > 0) {
+                            await guildMember.roles.remove(rolesToRemoveFromMember).catch(roleErr => {
                                 if (roleErr.code !== 50013 && roleErr.code !== 10011 ) { console.log(`Failed to remove roles from ${guildMember.user.tag} (${memberId}):`, roleErr.message); }
                             });
                         }
+
                     }
                 } catch (fetchError) {
                     if (fetchError.code === 10007) { console.log(`Member ${memberId} not found in guild, skipping cleanup.`); }
@@ -171,10 +188,16 @@ module.exports = {
                         if (nickError.code !== 50013) { console.log(`Could not reset nickname for leader ${leader.user.tag} (${squadLeaderId}):`, nickError.message); }
                     }
 
-                    // Remove Squad Level Roles
-                    if (squadTypeRoles.length > 0) {
-                        await leader.roles.remove(squadTypeRoles).catch(roleErr => {
-                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { console.log(`Failed to remove level roles from leader ${leader.user.tag} (${squadLeaderId}):`, roleErr.message); }
+                    // Remove Squad Level + Mascot Roles
+                    const rolesToRemoveFromLeader = [...squadTypeRoles];
+                    if (mascotRoleIdToRemove) {
+                        rolesToRemoveFromLeader.push(mascotRoleIdToRemove);
+                    }
+
+                    if (rolesToRemoveFromLeader.length > 0) {
+                        console.log(`Attempting to remove roles [${rolesToRemoveFromLeader.join(', ')}] from leader ${leader.user.tag}`);
+                        await leader.roles.remove(rolesToRemoveFromLeader).catch(roleErr => {
+                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { console.log(`Failed to remove squad level/mascot roles from leader ${leader.user.tag}:`, roleErr.message); }
                         });
                     }
                 }
@@ -184,24 +207,16 @@ module.exports = {
             }
 
             // --- Prepare Sheet Updates ---
-            // Filter out disbanded squad members (checks Column C, index 2)
             const updatedSquadMembers = squadMembers.filter(row => row && row.length > 2 && row[2].toUpperCase() !== squadNameToDisband);
-
-            // Filter out the disbanded squad leader (checks Column B, index 1)
             const updatedSquadLeaders = squadLeaders.filter(row => row && row.length > 1 && row[1] !== squadLeaderId);
-
-            // Create a set of IDs belonging to the disbanded squad for faster lookup
             const disbandedMemberIds = new Set(memberIdsToProcess);
-            disbandedMemberIds.add(squadLeaderId); // Add the leader's ID
+            disbandedMemberIds.add(squadLeaderId);
 
-            // Update All Data: Reset squad info for all members of the disbanded squad
-            // Format: {username} | {id} | N/A | N/A | N/A | FALSE | No | {preference}
             const updatedAllData = allData.map(row => {
-                if (!row || row.length < 2) return row; // Handle short/invalid rows
+                if (!row || row.length < 2) return row;
                 const memberId = row[1];
 
                 if (disbandedMemberIds.has(memberId)) {
-                    // This user was in the disbanded squad, reset to the specified format
                     const preference = row.length > 7 ? row[7] : ''; // Get existing preference
                     return [
                         row[0],      // Discord Username (Index 0)
@@ -214,7 +229,6 @@ module.exports = {
                         preference   // Preference (Index 7)
                     ];
                 } else {
-                    // User not in disbanded squad, return row unchanged, padding if necessary
                     const fullRow = Array(8).fill('');
                     for(let i = 0; i < Math.min(row.length, 8); i++) {
                         fullRow[i] = row[i] !== undefined && row[i] !== null ? row[i] : '';
@@ -225,7 +239,6 @@ module.exports = {
 
 
             // --- Execute Sheet Updates ---
-            // Clear and update Squad Members (Range A:E)
             await sheets.spreadsheets.values.clear({
                 spreadsheetId: spreadsheetId,
                 range: 'Squad Members!A:E' // Correct Range
@@ -240,7 +253,6 @@ module.exports = {
                 }).catch(err => console.error("Error updating Squad Members:", err.response?.data || err.message));
             }
 
-            // Clear and update Squad Leaders (Range A:F)
             await sheets.spreadsheets.values.clear({
                 spreadsheetId: spreadsheetId,
                 range: 'Squad Leaders!A:F' // Correct Range
@@ -255,14 +267,12 @@ module.exports = {
                 }).catch(err => console.error("Error updating Squad Leaders:", err.response?.data || err.message));
             }
 
-            // Update All Data (Range A:H)
             await sheets.spreadsheets.values.update({
                 spreadsheetId: spreadsheetId,
-                range: 'All Data!A1:H' + updatedAllData.length, // Use specific range
+                range: 'All Data!A:H',
                 valueInputOption: 'RAW',
                 resource: { values: updatedAllData }
             }).catch(err => console.error("Error updating All Data:", err.response?.data || err.message));
-
 
             // --- Logging ---
             const loggingChannel = await interaction.client.guilds.fetch('1233740086839869501')
@@ -281,7 +291,7 @@ module.exports = {
             // --- Success Response for Moderator ---
             const successEmbed = new EmbedBuilder()
                 .setTitle('Squad Forcefully Disbanded')
-                .setDescription(`The squad **${squadNameToDisband}** has been successfully disbanded. Members have been notified, roles removed, and nicknames reset (where possible).`)
+                .setDescription(`The squad **${squadNameToDisband}** has been successfully disbanded. Members have been notified, roles removed, and nicknames reset (where possible), including mascot role (if assigned).`) // Updated message
                 .setColor(0x00FF00); // Green
 
             await interaction.editReply({ embeds: [successEmbed], ephemeral: true });
