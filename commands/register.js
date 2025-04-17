@@ -1,9 +1,19 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { google } = require('googleapis');
-const axios = require('axios');
 const credentials = require('../resources/secret.json');
+const { Pool } = require('pg'); // Import the pg Pool
 
+// --- Load Environment Variables (Ensure dotenv is configured in entry point) ---
+// require('dotenv').config(); // Usually done in index.js
+
+// --- Constants ---
+const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
+const REQUIRED_ROLE_ID = '924522770057031740';
+const APPLICATION_CHANNEL_ID = '1218466649695457331';
+const LOGGING_GUILD_ID = '1233740086839869501';
+const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
+
+// --- Authorization Function (Google Sheets) ---
 function authorize() {
     const { client_email, private_key } = credentials;
     const auth = new google.auth.JWT(
@@ -15,18 +25,36 @@ function authorize() {
     return auth;
 }
 
+// --- Create PostgreSQL Connection Pool ---
+const pool = new Pool({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    database: process.env.DB_DATABASE_NAME,
+    password: process.env.DB_PASSWORD,
+    port: process.env.DB_PORT || 5432,
+    ssl: { rejectUnauthorized: false },
+});
+
+pool.query('SELECT NOW()', (err, res) => {
+    if (err) {
+        console.error('❌ PostgreSQL Pool Error: Failed to connect.', err.stack);
+    } else {
+        console.log('✅ PostgreSQL Pool Connected.');
+    }
+});
+
 module.exports = {
     cooldown: 604800,
     data: new SlashCommandBuilder()
         .setName('register')
-        .setDescription('Request the creation of a Squad!')
+        .setDescription('Apply to register a new Squad.')
         .addStringOption(option =>
             option.setName('squadname')
-                .setDescription('The name of your Squad!')
+                .setDescription('The desired name/tag for your Squad (1-4 alphanumeric chars).')
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('squadtype')
-                .setDescription('Select the type of your Squad.')
+                .setDescription('Select the intended type for your Squad.')
                 .setRequired(true)
                 .addChoices(
                     { name: 'Casual', value: 'Casual' },
@@ -35,140 +63,170 @@ module.exports = {
                 )),
 
     async execute(interaction) {
-        const requiredRoleId = '924522770057031740';
-        const hasRequiredRole = interaction.member.roles.cache.has(requiredRoleId);
+        await interaction.deferReply({ ephemeral: true });
 
-        if (!hasRequiredRole) {
-            return interaction.reply({ content: 'You must have the <@&924522770057031740> role to register a squad!', ephemeral: true });
+        // --- Initial Checks ---
+        const hasRequiredRole = interaction.member.roles.cache.has(REQUIRED_ROLE_ID);
+        if (!hasRequiredRole) { /* ... role check reply ... */
+            return interaction.editReply({ content: `You must have the <@&${REQUIRED_ROLE_ID}> role to register a squad!`, ephemeral: true });
         }
 
         const squadName = interaction.options.getString('squadname').toUpperCase();
         const squadType = interaction.options.getString('squadtype');
         const userId = interaction.user.id;
         const username = interaction.user.username;
+        const userTag = interaction.user.tag;
 
-        if (!/^[A-Z0-9]{1,4}$/.test(squadName)) {
-            return interaction.reply({
-                content: 'Squad names must be 1 to 4 alphabetical or numerical characters.',
-                ephemeral: true
-            });
+        if (!/^[A-Z0-9]{1,4}$/.test(squadName)) { /* ... format check reply ... */
+            return interaction.editReply({ content: 'Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).', ephemeral: true });
         }
 
-        const auth = authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const gAuth = authorize(); // Google Auth Client
+        const sheets = google.sheets({ version: 'v4', auth: gAuth });
+
+        let applicationMessage; // Define higher for potential cleanup
+
         try {
-            const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'All Data!A:E'
+            // --- Fetch Sheet Data ---
+            const [allDataResponse, squadLeadersResponse, applicationsResponse] = await Promise.all([
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Applications!A:F' })
+            ]).catch(err => { /* ... handle sheet fetch error ... */
+                console.error("Error fetching sheet data:", err); throw new Error("Failed to retrieve necessary data from Google Sheets.");
             });
 
-            const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'Squad Leaders!A:C'
+            const allData = (allDataResponse.data.values || []).slice(1);
+            const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
+            const applications = (applicationsResponse.data.values || []).slice(1);
+
+            // --- Perform User/Squad Checks ---
+            const userInAllData = allData.find(row => row && row.length > 1 && row[1] === userId);
+            const userInSquadLeaders = squadLeaders.find(row => row && row.length > 1 && row[1] === userId);
+            const squadNameTaken = squadLeaders.find(row => row && row.length > 2 && row[2]?.toUpperCase() === squadName);
+            const isMarkedLeaderInAllData = userInAllData && userInAllData.length > 6 && userInAllData[6] === 'Yes';
+            if (userInSquadLeaders || isMarkedLeaderInAllData) { /* ... already owner reply ... */
+                return interaction.editReply({ content: 'You appear to already own a squad.', ephemeral: true });
+            }
+            if (userInAllData && userInAllData.length > 2 && userInAllData[2] !== 'N/A' && userInAllData[2]?.toUpperCase() !== squadName) { /* ... already in squad reply ... */
+                return interaction.editReply({ content: `You are already listed as a member of squad **${userInAllData[2]}**.`, ephemeral: true });
+            }
+            if (squadNameTaken) { /* ... name taken reply ... */
+                return interaction.editReply({ content: `The squad tag **${squadName}** is already taken.`, ephemeral: true });
+            }
+            const existingPendingApp = applications.find(row => row && row.length > 5 && row[1] === userId && row[5] === 'Pending');
+            if (existingPendingApp) { /* ... pending app reply ... */
+                return interaction.editReply({ content: 'You already have a pending squad application.', ephemeral: true });
+            }
+
+            // --- Submit Application (Discord Part) ---
+            const applicationEmbed = new EmbedBuilder() /* ... embed ... */
+                .setColor('#FFA500').setTitle('New Squad Application')
+                .addFields( { name: 'Applicant', value: `${userTag} (<@${userId}>)`, inline: false }, { name: 'Requested Squad Name', value: squadName, inline: true }, { name: 'Requested Squad Type', value: squadType, inline: true } )
+                .setFooter({text: `Interaction ID: ${interaction.id}`}).setTimestamp();
+            const actionRow = new ActionRowBuilder() /* ... buttons ... */
+                .addComponents( new ButtonBuilder().setCustomId(`application_accept_${interaction.id}`).setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`application_deny_${interaction.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger) );
+            const channel = await interaction.client.channels.fetch(APPLICATION_CHANNEL_ID).catch(err => { /* ... handle channel fetch error ... */
+                console.error(`Failed to fetch application channel ${APPLICATION_CHANNEL_ID}: ${err.message}`); throw new Error('Could not find the application channel.');
+            });
+            applicationMessage = await channel.send({ embeds: [applicationEmbed], components: [actionRow] }).catch(err => { /* ... handle message send error ... */
+                console.error(`Failed to send application message to channel ${APPLICATION_CHANNEL_ID}: ${err.message}`); throw new Error('Failed to send the application message.');
             });
 
-            const applicationsResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'Applications!A:F'
-            });
 
-            const allData = allDataResponse.data.values;
-            const squadLeaders = squadLeadersResponse.data.values;
-            const applications = applicationsResponse.data.values;
+            // --- Insert into PostgreSQL Database ---
+            const tableName = 'squad_applications_data'; // Assumed table name - REPLACE IF NEEDED
+            const dbClient = await pool.connect();
+            try {
+                // *** UPDATED Column Names (Removed status, created_at) ***
+                const columns = [
+                    'member_display_name',
+                    'member_object',
+                    'member_squad_name',
+                    'message_url',
+                    'user_id',
+                    'squad_type'
+                    // Removed 'status', 'created_at'
+                ];
 
-            const userInAllData = allData.find(row => row[1] === userId);
-            const userInSquadLeaders = squadLeaders.find(row => row[1] === userId);
-            const squadNameTaken = squadLeaders.find(row => row[2] === squadName);
+                // Prepare Data Object for 'member_object' column
+                const memberInfoObject = {
+                    id: userId,
+                    username: username,
+                    tag: userTag,
+                    avatar: interaction.user.displayAvatarURL()
+                };
 
-            if (userInSquadLeaders || (userInAllData && userInAllData[3] === 'Yes')) {
-                return interaction.reply({
-                    content: 'You already own a squad and cannot register a new one.',
-                    ephemeral: true
-                });
+                // *** UPDATED Values Array (Removed 'Pending', new Date()) ***
+                const values = [
+                    interaction.member.displayName,     // member_display_name
+                    JSON.stringify(memberInfoObject),   // member_object (stringified JSON)
+                    squadName,                          // member_squad_name
+                    applicationMessage.url,             // message_url
+                    userId,                             // user_id (Discord ID as string)
+                    squadType                           // squad_type
+                    // Removed 'Pending', new Date()
+                ];
+
+                // Prepare Query String (uses updated columns/values count)
+                const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
+                const insertQuery = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *;`;
+
+
+                console.log(`Attempting to insert application into PostgreSQL table ${tableName} for interaction ${interaction.id}`);
+                // console.log(`Query: ${insertQuery}`); // Optional debug log
+                // console.log(`Values: ${JSON.stringify(values)}`); // Optional debug log
+
+                // Execute Query
+                const result = await dbClient.query(insertQuery, values);
+                console.log('✅ Application data successfully inserted into PostgreSQL:', result.rows?.[0] || 'No rows returned.');
+
+            } catch (dbError) {
+                console.error(`❌ Failed to insert application data into PostgreSQL table ${tableName}:`, dbError);
+                applicationMessage.delete().catch(delErr => console.error(`Failed to delete application msg ${applicationMessage.id} after DB error: ${delErr.message}`));
+                throw new Error('Failed to record the application in the database.');
+            } finally {
+                dbClient.release(); // Release client back to pool
             }
+            // *** END OF DATABASE INSERT BLOCK ***
 
-            if (userInAllData && userInAllData[2] !== 'N/A') {
-                return interaction.reply({
-                    content: 'You are already in a squad and cannot register a new one.',
-                    ephemeral: true
-                });
-            }
 
-            if (squadNameTaken) {
-                return interaction.reply({
-                    content: 'This squad tag is already taken. Please choose a different one.',
-                    ephemeral: true
-                });
-            }
-
-            const applicationEmbed = new EmbedBuilder()
-                .setTitle('New Squad Registration')
-                .addFields(
-                    { name: 'Username', value: username, inline: true },
-                    { name: 'User ID', value: userId, inline: true },
-                    { name: 'Squad Name', value: squadName, inline: true },
-                    { name: 'Squad Type', value: squadType, inline: true }
-                )
-                .setTimestamp();
-
-            const actionRow = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`application_accept_${interaction.id}`)
-                        .setLabel('Accept')
-                        .setStyle(ButtonStyle.Success),
-                    new ButtonBuilder()
-                        .setCustomId(`application_deny_${interaction.id}`)
-                        .setLabel('Deny')
-                        .setStyle(ButtonStyle.Danger)
-                );
-
-            const channel = await interaction.client.channels.fetch('1218466649695457331');
-            const applicationMessage = await channel.send({ embeds: [applicationEmbed], components: [actionRow] });
-
-            const applicationData = {
-                member_display_name: interaction.member.displayName,
-                member_object: {
-                    id: interaction.user.id,
-                    username: interaction.user.username,
-                    discriminator: interaction.user.discriminator,
-                    avatar: interaction.user.avatar
-                },
-                member_squad_name: squadName,
-                message_url: applicationMessage.url,
-                user_id: userId,
-                squad_type: squadType
-            };
-
-            await axios.post('http://localhost:3000/api/squad-application', applicationData);
-
+            // --- Append to Applications Sheet ---
             await sheets.spreadsheets.values.append({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'Applications!A:F',
+                spreadsheetId: SPREADSHEET_ID,
+                range: 'Applications!A1',
                 valueInputOption: 'RAW',
-                resource: {
-                    values: [
-                        [username, userId, squadName, squadType, applicationMessage.url, 'Pending']
-                    ]
-                }
+                resource: { values: [[username, userId, squadName, squadType, applicationMessage.url, 'Pending']] } // Sheet still includes 'Pending' status
+            }).catch(err => { /* ... handle sheet append error ... */
+                console.error(`Failed to append application to sheet after DB insert: ${err.message}`);
             });
 
-            await interaction.reply({ content: 'Your squad application has been submitted.', ephemeral: true });
-        } catch (error) {
-            console.error(error);
-            const errorEmbed = new EmbedBuilder()
-                .setTitle('Error')
-                .setDescription(`An error occurred while processing the squad registration command: ${error.message}`)
-                .setColor('#FF0000');
-
-            const errorGuild = await interaction.client.guilds.fetch('1233740086839869501');
-            const errorChannel = await errorGuild.channels.fetch('1233853458092658749');
-            await errorChannel.send({ embeds: [errorEmbed] });
-
+            // --- Confirm Submission to User ---
             await interaction.editReply({
-                content: 'An error occurred while processing your request. The admins have been notified.',
+                content: `Your application to register squad **${squadName}** (${squadType}) has been submitted for review.`,
                 ephemeral: true
             });
+
+        } catch (error) {
+            console.error(`Error processing /register command for ${userTag} (${userId}):`, error);
+            // Log error to specific channel
+            try {
+                const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
+                const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
+                const errorEmbed = new EmbedBuilder() /* ... error log embed ... */
+                    .setTitle('Squad Registration Command Error')
+                    .setDescription(`**User:** ${userTag} (${userId})\n**Error:** ${error.message}`)
+                    .setColor('#FF0000')
+                    .setTimestamp();
+                await errorChannel.send({ embeds: [errorEmbed] });
+            } catch (logError) {
+                console.error('Failed to log registration error to Discord:', logError);
+            }
+            // Reply to user about the error
+            await interaction.editReply({
+                content: `An error occurred while submitting your application: ${error.message || 'Please try again later or contact an admin.'}`,
+                ephemeral: true
+            }).catch(console.error);
         }
     }
 };
