@@ -23,6 +23,7 @@ const mascotSquads = [
     { name: "Bee Squad", roleId: "1361466746149666956" },
     { name: "Alligator Squad", roleId: "1361466697059664043" },
 ];
+
 // Column Indices (0-based)
 // Squad Leaders (A:F)
 const SL_ID = 1;

@@ -181,7 +181,7 @@ const handleModalSubmit = async (interaction, client) => {
     await interaction.reply({ content: 'This modal is not recognized.', ephemeral: true });
 };
 
-const handleButton = async (interaction, client) => {
+const handleButton = async(interaction, client) => {
     try {
         const [action, customId] = interaction.customId.split('_');
         if (!interaction.isButton() || interaction.message.partial) {
