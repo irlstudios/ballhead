@@ -1,4 +1,6 @@
 const axios = require('axios');
+const Mixpanel = require('mixpanel');
+const mixpanel  = Mixpanel.init(process.env.MIXPANEL_PROJECT_TOKEN);
 
 async function logCommandUsage(interaction) {
     const commandData = {
@@ -12,6 +14,17 @@ async function logCommandUsage(interaction) {
     try {
         await axios.post('https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/commands', commandData);
         console.log('Metrics logged successfully.');
+        mixpanel.track( 'Command Used', {
+            distinct_id:   commandData.user_id,
+            command_name:  commandData.command_name,
+            channel_id:    commandData.channel_id,
+            server_id:     commandData.server_id,
+            timestamp:     commandData.timestamp.toISOString()
+        }, (err) => {
+            if (err) {
+                console.error('Failed to send command usage to Mixpanel:', err);
+            }
+        });
     } catch (err) {
         console.error('Failed to send command usage data:', err);
     }
