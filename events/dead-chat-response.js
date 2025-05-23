@@ -811,7 +811,7 @@ module.exports = {
                     timestamp: new Date(),
                 };
 
-                await axios.post('http://localhost:3000/api/command-usage', logData)
+                await axios.post('https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/commands', logData)
                     .catch(err => {
                         console.error('Failed to send data:', err);
                     });
