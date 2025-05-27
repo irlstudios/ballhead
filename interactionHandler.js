@@ -44,8 +44,8 @@ const interactionHandler = async (interaction, client) => {
     try {
         if (interaction.isCommand()) {
             const command = client.commands.get(interaction.commandName);
-            await logCommandUsage(interaction);
             if (!command) return;
+            await logCommandUsage(interaction);
             await handleCommand(interaction, client);
         } else if (interaction.isStringSelectMenu()) {
             await handleSelectMenu(interaction);

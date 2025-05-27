@@ -1,5 +1,5 @@
 const Mixpanel = require('mixpanel');
-const mixpanel = Mixpanel.init(process.env.MIXPANEL_TOKEN);
+const mixpanel = Mixpanel.init(process.env.MIXPANEL_PROJECT_TOKEN);
 
 module.exports = {
     name: 'voiceStateUpdate',
