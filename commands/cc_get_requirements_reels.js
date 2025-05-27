@@ -4,7 +4,6 @@ const { google } = require('googleapis');
 const credentials = require('../resources/secret.json');
 const moment = require('moment');
 
-// --- Google Sheets Authentication ---
 function authorize() {
     const { client_email, private_key } = credentials;
     const auth = new google.auth.JWT(
@@ -19,14 +18,10 @@ function authorize() {
 const sheets = google.sheets({ version: 'v4', auth: authorize() });
 const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
 
-// --- Ranges ---
-const rangeReels = 'Reels!A:I'; // Application data (Date in D=3, DiscordID in C=2)
+const rangeReels = 'Reels!A:I';
 
-// --- CORRECTED Performance Data Range ---
-// Fetches Columns K through AF as requested. Relevant data starts here.
 const rangeIGData = 'IG NF Data!K:AF';
 
-// --- Fetch User Data from Sheets ---
 async function getUserData(discordId) {
     try {
         console.log(`[IG getUserData] Fetching data from Google Sheets for user ID: ${discordId}`);
@@ -38,15 +33,14 @@ async function getUserData(discordId) {
             }),
             sheets.spreadsheets.values.get({
                 spreadsheetId: sheetId,
-                range: rangeIGData, // Using specific range K:AF
+                range: rangeIGData,
             })
         ]);
 
         const rowsReels = resReels.data.values || [];
-        const rowsIGData = resIGData.data.values || []; // Data now starts with Column K
+        const rowsIGData = resIGData.data.values || [];
         console.log(`[IG getUserData] Data fetched: ${rowsReels.length} rows in ${rangeReels}, ${rowsIGData.length} rows in ${rangeIGData}.`);
 
-        // Find application row (Discord ID Col C, index 2 in Reels)
         let userReelsRow = null;
         for (const row of rowsReels) {
             if (row && row.length > 2 && row[2] === discordId) {
@@ -61,16 +55,12 @@ async function getUserData(discordId) {
             return null;
         }
 
-        // Find performance data row in IG NF Data (range K:AF)
-        // IMPORTANT: Skip first 2 rows (headers). Data rows start at sheet row 3 (index 2).
-        // IMPORTANT: Discord ID is in Column L, which is the 2nd column in range K:AF (Index 1).
         let userIGDataRow = null;
-        const discordIdIndexRelative = 1; // L is the 2nd col (index 1) when starting from K
-        for (let i = 2; i < rowsIGData.length; i++) { // Start loop from index 2 (Sheet Row 3)
+        const discordIdIndexRelative = 1;
+        for (let i = 2; i < rowsIGData.length; i++) {
             const row = rowsIGData[i];
-            // Check if row array exists and has enough columns fetched (at least up to Discord ID)
             if (row && row.length > discordIdIndexRelative && row[discordIdIndexRelative] === discordId) {
-                userIGDataRow = row; // This row array starts with data from Column K
+                userIGDataRow = row;
                 console.log(`[IG getUserData] Found performance data row for ${discordId} at sheet row index ${i} in ${rangeIGData} sheet.`);
                 break;
             }
@@ -80,7 +70,6 @@ async function getUserData(discordId) {
             console.log(`[IG getUserData] No performance data row found for user ID ${discordId} in ${rangeIGData} sheet (rows 3+).`);
         }
 
-        // userIGDataRow now holds the array starting from Column K's data
         return { userReelsRow, userIGDataRow };
     } catch (error) {
         console.error(`[IG getUserData] Error fetching user data from Google Sheets (Range: ${rangeIGData}):`, error);
@@ -88,13 +77,11 @@ async function getUserData(discordId) {
     }
 }
 
-// --- Helper to get the next Monday ---
 function getNextMonday() {
     const nextMonday = moment().day(8);
     return nextMonday;
 }
 
-// --- Discord Command Definition ---
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('check-reels-account')
@@ -110,7 +97,6 @@ module.exports = {
             const userId = interaction.user.id;
             const userData = await getUserData(userId);
 
-            // Case 1: User has not applied at all
             if (!userData || !userData.userReelsRow) {
                 await interaction.editReply({ content: `It looks like you haven't applied for the Instagram CC program yet, or we couldn't find your application record in the \`${rangeReels}\` sheet.`, ephemeral: true });
                 console.log(`[${commandName}] User ${userId} has not applied or application record not found in ${rangeReels}.`);
@@ -119,7 +105,6 @@ module.exports = {
 
             const { userReelsRow, userIGDataRow } = userData;
 
-            // --- Application Date Parsing (Col D, index 3 in Reels) ---
             const applicationDateStr = userReelsRow[3];
             if (!applicationDateStr) {
                 console.error(`[${commandName}] Application date missing or empty in cell D for user ${userId} in ${rangeReels} sheet row:`, userReelsRow);
@@ -130,14 +115,15 @@ module.exports = {
             const applicationDate = moment(trimmedDateStr, 'M/D/YYYY', true);
             if (!applicationDate.isValid()) {
                 console.error(`[${commandName}] Invalid application date format for user ${userId} in ${rangeReels} (Col D). Original: '${applicationDateStr}', Trimmed: '${trimmedDateStr}'. Expected M/D/YYYY.`);
-                await interaction.editReply({ content: `We found your application, but the date stored ('${applicationDateStr}') in the \`${rangeReels}\` sheet (Column D) doesn't seem to be in a recognizable MM/DD/YYYY format. Please contact support to check the sheet data.`, ephemeral: true });
+                await interaction.editReply({
+                    content: `We found your application, but the date stored ('${applicationDateStr}'). Please note that we begin pulling new form data every Sunday, and platform check data is updated on Mondays. If you believe there's an issue with your submission, please contact support to verify the sheet data.`,
+                    ephemeral: true
+                });
                 return;
             }
 
             const nextCheckDate = getNextMonday();
             const discordFormattedTimestamp = `<t:${nextCheckDate.unix()}:F>`;
-
-            // Case 2: User applied, but performance data row not found in IG NF Data (K:AF, Row 3+)
             if (!userIGDataRow) {
                 const applicationDateString = applicationDate.format('MMMM Do, YYYY');
                 const response = `We found your application submitted on **${applicationDateString}**. Your performance data wasn't found in the \`${rangeIGData}\` tracking sheet (rows 3+). Data is typically updated weekly. Please check back around ${discordFormattedTimestamp}.`;
@@ -146,12 +132,9 @@ module.exports = {
                 return;
             }
 
-            // Case 3: User applied AND data found in IG NF Data (K:AF)
-            // --- Data Extraction using RELATIVE indices from K:AF range ---
-            // userIGDataRow array starts with data from Column K
             console.log(`[${commandName}] Found application and performance data for user ${userId}. Preparing stats embed from ${rangeIGData}.`);
 
-            const requirements = { posts: 2, likes: 15 }; // VERIFY IG requirements
+            const requirements = { posts: 2, likes: 15 };
 
             const checkRequirements = (postsStr, likesStr) => {
                 const posts = parseInt(postsStr, 10) || 0;
@@ -161,20 +144,10 @@ module.exports = {
                 return { posts, likes, metPosts, metLikes };
             };
 
-            // --- CORRECTED INDICES based on K:AF range ---
-            // Col K (Username): Index 0
-            // Col L (Discord ID): Index 1
-            // Col P (Followers): Index 5
-            // Col Q (W1 Posts): Index 6
-            // Col S (W1 Likes): Index 8
-            // Col U (W2 Posts): Index 10
-            // Col W (W2 Likes): Index 12
-            // Col Y (W3 Posts): Index 14
-            // Col AA (W3 Likes): Index 16
-            const followersStr = userIGDataRow[5] || 'N/A';    // Index 5 (Col P rel K)
-            const week1 = checkRequirements(userIGDataRow[6], userIGDataRow[8]);    // Indices 6 (Q rel K), 8 (S rel K)
-            const week2 = checkRequirements(userIGDataRow[10], userIGDataRow[12]);  // Indices 10 (U rel K), 12 (W rel K)
-            const week3 = checkRequirements(userIGDataRow[14], userIGDataRow[16]);  // Indices 14 (Y rel K), 16 (AA rel K)
+            const followersStr = userIGDataRow[5] || 'N/A';
+            const week1 = checkRequirements(userIGDataRow[6], userIGDataRow[8]);
+            const week2 = checkRequirements(userIGDataRow[10], userIGDataRow[12]);
+            const week3 = checkRequirements(userIGDataRow[14], userIGDataRow[16]);
 
 
             const generateRequirementMessage = (weekLabel, weekData) => {
@@ -198,9 +171,9 @@ module.exports = {
                 .setColor('#E1306C')
                 .setDescription(
                     `**Followers:** ${followersStr}\n\n` +
-                    generateRequirementMessage('Week 1', week1) + '\n' +
-                    generateRequirementMessage('Week 2', week2) + '\n' +
-                    generateRequirementMessage('Week 3', week3)
+                    generateRequirementMessage('3 weeks ago', week1) + '\n' +
+                    generateRequirementMessage('2 weeks ago', week2) + '\n' +
+                    generateRequirementMessage('Last week', week3)
                 )
                 .setTimestamp()
                 .setFooter({ text: 'Instagram CC Requirements Check' });

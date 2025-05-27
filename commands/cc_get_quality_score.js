@@ -192,7 +192,8 @@ module.exports = {
                 .setThumbnail(userAvatar)
                 .setColor(platformOption ? '#32CD32' : '#0099ff')
                 .addFields(
-                    { name: '📈 Running Average (Season)', value: userData.runningAverage.toString(), inline: true }
+                    { name: '📈 Running Average (Season)', value: userData.runningAverage.toString(), inline: true },
+                    { name: '🟢 Average Quality', value: userData.runningAverage.toString(), inline: true }
                 );
 
             const formattedWeeklyFields = Object.entries(userData.weeklyAverages).map(([week, score]) => {

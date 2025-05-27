@@ -79,6 +79,11 @@ if (reportBugCommand?.data?.options?.[0]) {
 const interactionHandler = require('./interactionHandler');
 client.on('interactionCreate', async (interaction) => {
     try {
+        console.log('[Global Interaction] type:', interaction.type, 'customId:', interaction.customId);
+        console.log('[Global Interaction] Button pressed:', interaction.customId);
+        if (['squads_prev','squads_next'].includes(interaction.customId)) {
+            return handlePagination1(interaction.customId, interaction);
+        }
         await interactionHandler(interaction, client);
     } catch (error) {
         console.error('Error handling interaction:', error);

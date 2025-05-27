@@ -2,13 +2,10 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { google } = require('googleapis');
 const credentials = require('../resources/secret.json');
 
-// --- Constants ---
 const GUILD_ID = '752216589792706621';
 const LOGGING_GUILD_ID = '1233740086839869501';
 const LOGGING_CHANNEL_ID = '1233853415952748645';
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k'; // Use constant
-// *** ADD Mascot Roles ***
+const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const mascotSquads = [
     { name: "Duck Squad", roleId: "1359614680615620608" },
     { name: "Pumpkin Squad", roleId: "1361466564292907060" },
@@ -17,18 +14,12 @@ const mascotSquads = [
     { name: "Bee Squad", roleId: "1361466746149666956" },
     { name: "Alligator Squad", roleId: "1361466697059664043" },
 ];
-// Column Indices (0-based)
-// Squad Leaders (A:F)
 const SL_ID = 1;
 const SL_SQUAD_NAME = 2;
-const SL_EVENT_SQUAD = 3; // Column D
-// All Data (A:H)
+const SL_EVENT_SQUAD = 3;
 const AD_ID = 1;
-const AD_SQUAD_NAME = 2;
-const AD_PREFERENCE = 7; // Column H
 
 
-// --- Authorization function ---
 function authorize() {
     const { client_email, private_key } = credentials;
     return new google.auth.JWT(client_email, null, private_key, ['https://www.googleapis.com/auth/spreadsheets']);
@@ -40,12 +31,12 @@ module.exports = {
         .setDescription('Leave your current squad'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true }); // Defer reply early
+        await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
-        const userTag = interaction.user.tag; // Better for logging
-        const member = interaction.member; // Get member object for role removal
-        const guild = interaction.guild; // Get guild object
+        const userTag = interaction.user.tag;
+        const member = interaction.member;
+        const guild = interaction.guild;
 
         if (!member || !guild) {
             await interaction.editReply({ content: 'Could not retrieve necessary server information.', ephemeral: true });
@@ -56,19 +47,16 @@ module.exports = {
         const sheets = google.sheets({ version: 'v4', auth });
 
         try {
-            // --- Get Data with Corrected Ranges ---
             const [squadMembersResponse, squadLeadersResponse, allDataResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A:E' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' })
             ]).catch(err => { throw new Error("Failed to retrieve data from Google Sheets.") });
 
-            // Extract data, skip headers
             const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
             const squadLeadersData = (squadLeadersResponse.data.values || []).slice(1);
             const allData = (allDataResponse.data.values || []).slice(1);
 
-            // --- Check if user is Leader or in Squad ---
             const userIsLeader = squadLeadersData.find(row => row && row.length > SL_ID && row[SL_ID]?.trim() === userId);
             if (userIsLeader) {
                 return interaction.editReply({ content: 'Sorry, squad leaders cannot leave their squad using this command. Please use `/disband-squad`.', ephemeral: true });
@@ -89,11 +77,10 @@ module.exports = {
 
             console.log(`User ${userTag} (${userId}) is leaving squad: ${squadName}`);
 
-            // --- *** Find Mascot Role to Remove (BEFORE sheet cleanup) *** ---
             let mascotRoleIdToRemove = null;
             const squadOwnerRowForEvent = squadLeadersData.find(row => row && row.length > SL_SQUAD_NAME && row[SL_SQUAD_NAME]?.trim() === squadName);
             if (squadOwnerRowForEvent) {
-                const eventSquadName = squadOwnerRowForEvent[SL_EVENT_SQUAD]; // Get Event Squad from Leader (Col D / index 3)
+                const eventSquadName = squadOwnerRowForEvent[SL_EVENT_SQUAD];
                 if (eventSquadName && eventSquadName !== 'N/A') {
                     const mascotInfo = mascotSquads.find(m => m.name === eventSquadName);
                     if (mascotInfo) {
@@ -106,12 +93,10 @@ module.exports = {
             } else {
                 console.warn(`Could not find leader row for squad ${squadName} to check for Event Squad assignment.`);
             }
-            // --- *** END Find Mascot Role *** ---
 
 
-            // --- Update Squad Members Sheet ---
-            const squadMemberSheetRowIndex = userInSquadRowIndex + 2; // +1 for 0-based index, +1 for header
-            const clearRange = `Squad Members!A${squadMemberSheetRowIndex}:E${squadMemberSheetRowIndex}`; // Correct Range A:E
+            const squadMemberSheetRowIndex = userInSquadRowIndex + 2;
+            const clearRange = `Squad Members!A${squadMemberSheetRowIndex}:E${squadMemberSheetRowIndex}`;
             console.log(`Clearing Squad Members range ${clearRange}`);
             await sheets.spreadsheets.values.clear({
                 spreadsheetId: SPREADSHEET_ID,
@@ -119,12 +104,11 @@ module.exports = {
             }).catch(err => { throw new Error(`Failed to clear row in Squad Members sheet: ${err.message}`); });
 
 
-            // --- Update All Data Sheet ---
             const userInAllDataIndex = allData.findIndex(row => row && row.length > AD_ID && row[AD_ID]?.trim() === userId);
             if (userInAllDataIndex !== -1) {
                 const allDataSheetRowIndex = userInAllDataIndex + 2;
-                const rangeToUpdate = `All Data!C${allDataSheetRowIndex}:G${allDataSheetRowIndex}`; // C:G
-                const valuesToUpdate = [['N/A', 'N/A', 'N/A', 'FALSE', 'No']]; // Reset squad info
+                const rangeToUpdate = `All Data!C${allDataSheetRowIndex}:G${allDataSheetRowIndex}`;
+                const valuesToUpdate = [['N/A', 'N/A', 'N/A', 'FALSE', 'No']];
                 console.log(`Updating All Data range ${rangeToUpdate} for user ${userId}`);
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: SPREADSHEET_ID,
@@ -136,7 +120,6 @@ module.exports = {
                 console.warn(`User ${userTag} (${userId}) was found in Squad Members but not in All Data sheet.`);
             }
 
-            // --- Notify Squad Leader ---
             const squadOwnerRow = squadLeadersData.find(row => row && row.length > SL_SQUAD_NAME && row[SL_SQUAD_NAME]?.trim() === squadName);
             if (squadOwnerRow && squadOwnerRow[SL_ID]) {
                 const ownerId = squadOwnerRow[SL_ID].trim();
@@ -157,7 +140,6 @@ module.exports = {
                 console.warn(`Could not find leader for squad ${squadName} to notify.`);
             }
 
-            // --- Log Action ---
             try {
                 const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
@@ -172,12 +154,10 @@ module.exports = {
             }
 
 
-            // --- Reset Nickname AND Remove Mascot Role ---
             try {
-                // Nickname Reset
                 if (member.nickname && member.nickname.toUpperCase().startsWith(`[${squadName.toUpperCase()}]`)) {
                     console.log(`Resetting nickname for ${userTag}`);
-                    await member.setNickname(null).catch(nickErr => { // Catch specific nickname error
+                    await member.setNickname(null).catch(nickErr => {
                         if (nickErr.code !== 50013) { console.error(`Could not change nickname for ${userTag} (${userId}):`, nickErr.message); }
                         else { console.log(`Missing permissions to reset nickname for ${userTag} (${userId}).`);}
                     });
@@ -185,13 +165,12 @@ module.exports = {
                     console.log(`Nickname for ${userTag} doesn't match squad format, not resetting.`);
                 }
 
-                // Mascot Role Removal
                 if (mascotRoleIdToRemove) {
                     const roleToRemove = await guild.roles.fetch(mascotRoleIdToRemove).catch(() => null);
                     if (roleToRemove && member.roles.cache.has(roleToRemove.id)) {
                         console.log(`Removing mascot role ${roleToRemove.name} from ${userTag}`);
                         await member.roles.remove(roleToRemove).catch(roleErr => {
-                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { // Ignore perms/unknown role
+                            if (roleErr.code !== 50013 && roleErr.code !== 10011) {
                                 console.error(`Could not remove mascot role ${roleToRemove.name} from ${userTag}:`, roleErr.message);
                             } else {
                                 console.log(`Missing permissions or role already gone for mascot role ${roleToRemove.name} on ${userTag}.`);
@@ -203,20 +182,18 @@ module.exports = {
                         console.warn(`Mascot role ${mascotRoleIdToRemove} not found in guild for removal.`);
                     }
                 }
-            } catch (error) { // Catch error fetching member if initial fetch failed
+            } catch (error) {
                 if (error.code === 10007) { console.log(`Member ${userTag} (${userId}) not found in guild ${GUILD_ID}, cannot reset nickname/roles.`); }
                 else { console.error(`Error during nickname/role cleanup for ${userTag} (${userId}):`, error.message); }
             }
 
-            // --- Send Success Reply ---
             await interaction.editReply({
-                content: `You have successfully left the squad **${squadName}**. Any associated event roles have also been removed.`, // Updated message
+                content: `You have successfully left the squad **${squadName}**. Any associated event roles have also been removed.`,
                 ephemeral: true,
             });
 
         } catch (error) {
             console.error(`Error during /leave-squad for ${userTag} (${userId}):`, error);
-            // --- Error Logging ---
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
@@ -226,14 +203,13 @@ module.exports = {
                     .setColor('#FF0000')
                     .setTimestamp();
                 await errorChannel.send({ embeds: [errorEmbed] });
-            } catch (logError) { /* ... handle log error ... */
+            } catch (logError) {
                 console.error(`Failed to log error to error channel: ${logError.message}`);
             }
-            // --- Error Reply ---
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ /* ... Error reply ... */ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
+                await interaction.reply({ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
             } else if (!interaction.replied) {
-                await interaction.editReply({ /* ... Error reply ... */ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
+                await interaction.editReply({ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
             }
         }
     },

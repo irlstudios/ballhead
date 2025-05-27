@@ -1,26 +1,25 @@
 'use strict';
-const {ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle,
-    Collection} = require('discord.js');
+require('dotenv').config({ path: './resources/.env' });
 const logCommandUsage = require('./API/command-data');
+const axios = require('axios');
+const credentials = require('./resources/secret.json');
+
+const { ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection } = require('discord.js');
 const { google } = require('googleapis');
 const { createModal } = require('./modals/modalFactory');
 const { Client } = require('pg');
-const axios = require('axios');
-const puppeteer = require('puppeteer');
-const credentials = require('./resources/secret.json');
 const BALLHEAD_GUILD_ID = '1233740086839869501';
+
+const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
+const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
+const sheets= google.sheets({ version: 'v4', auth: authorize() });
+const DISCORD_BOT_TOKEN = process.env.TOKEN
+const SEASON_YEAR = 2025
+
+const SQUAD_APPLICATIONS_CHANNEL_ID = '1218466649695457331';
 const GYMCLASSVR_GUILD_ID = '752216589792706621';
 const BOT_ACTIVITIES_CHANNEL_ID = '1233854185276051516';
 const BOT_ACTIONS_CHANNEL_ID = '1233853415952748645';
-const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
-const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
-const SQUAD_APPLICATIONS_CHANNEL_ID = '1218466649695457331';
-const sheets= google.sheets({ version: 'v4', auth: authorize() });
-const { logger, createLogStream } = require('./logger/LogFacotry');
-const DISCORD_BOT_TOKEN = process.env.TOKEN
-const SEASON_YEAR = 2024
-require('dotenv').config({ path: './resources/.env' });
-
 
 const clientConfig = {
     host: process.env.DB_HOST,
@@ -594,13 +593,8 @@ const handleGenerateTemplateModal = async (interaction) => {
     }, 8500);
 };
 
-// Assume necessary imports (EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, google, axios)
-// and variables (credentials, GYMCLASSVR_GUILD_ID, BALLHEAD_GUILD_ID, BOT_ACTIONS_CHANNEL_ID, BOT_BUGS_CHANNEL_ID)
-// are available in the scope where this function is defined or called.
-
 const handleInviteButton = async (interaction, action) => {
-    // Hardcoded values instead of constants
-    const mascotSquads_local = [ // Renamed slightly to avoid potential global scope collision if mascotSquads exists globally
+    const mascotSquads_local = [
         { name: "Duck Squad", roleId: "1359614680615620608" },
         { name: "Pumpkin Squad", roleId: "1361466564292907060" },
         { name: "Snowman Squad", roleId: "1361466801443180584" },
@@ -610,14 +604,13 @@ const handleInviteButton = async (interaction, action) => {
     ];
     const SL_ID = 1;
     const SL_SQUAD_NAME = 2;
-    const SL_EVENT_SQUAD = 3; // Column D
+    const SL_EVENT_SQUAD = 3;
     const AD_ID = 1;
-    const AD_PREFERENCE = 7; // Column H
+    const AD_PREFERENCE = 7;
 
     try {
         await interaction.deferReply({ ephemeral: true });
 
-        // --- API Call to Validate Invite ---
         let inviteData;
         try {
             const response = await axios.get(`http://localhost:3000/api/invite/${interaction.message.id}`);
@@ -638,15 +631,14 @@ const handleInviteButton = async (interaction, action) => {
             await interaction.editReply({ content: 'You cannot interact with an invite meant for someone else.'}); return;
         }
 
-        // --- Discord Object Fetching ---
-        const gymClassGuild = await interaction.client.guilds.fetch('752216589792706621').catch(() => null); // Hardcoded ID
-        const ballheadGuild = await interaction.client.guilds.fetch('1233740086839869501').catch(() => null); // Hardcoded ID
+        const gymClassGuild = await interaction.client.guilds.fetch('752216589792706621').catch(() => null);
+        const ballheadGuild = await interaction.client.guilds.fetch('1233740086839869501').catch(() => null);
         const guild = interaction.guild && (interaction.guild.id === '752216589792706621' || interaction.guild.id === '1233740086839869501') ? interaction.guild : (gymClassGuild || ballheadGuild);
         if (!guild) {
             console.error('Could not fetch required Guilds.'); await interaction.editReply({ content: 'Could not find the necessary server.' }); return;
         }
         let trackingChannel;
-        if (ballheadGuild) { trackingChannel = ballheadGuild.channels.cache.get('1233853415952748645') || await ballheadGuild.channels.fetch('1233853415952748645').catch(err => { console.error(`Failed to fetch tracking channel: ${err.message}`); return null; }); } // Hardcoded ID
+        if (ballheadGuild) { trackingChannel = ballheadGuild.channels.cache.get('1233853415952748645') || await ballheadGuild.channels.fetch('1233853415952748645').catch(err => { console.error(`Failed to fetch tracking channel: ${err.message}`); return null; }); }
         let trackingMessage;
         if (trackingChannel && trackingMessageId) { trackingMessage = await trackingChannel.messages.fetch(trackingMessageId).catch(err => { console.warn(`Failed to fetch tracking message ${trackingMessageId}: ${err.message}`); return null; }); }
         const commandUser = await interaction.client.users.fetch(commandUserID).catch(err => { console.error(`Failed to fetch command user ${commandUserID}: ${err.message}`); return null; });
@@ -657,22 +649,19 @@ const handleInviteButton = async (interaction, action) => {
         if (!inviteMessage) { await interaction.editReply({ content: 'Failed to find the original invite message.' }); return; }
 
 
-        // --- Handle Actions ---
         if (action === 'accept') {
             const member = await guild.members.fetch(invitedMemberId).catch(() => null);
             if (!member) { await interaction.editReply({ content: 'You could not be found in the server.' }); return; }
 
-            // Inline Authorization for Sheets
             const sheetsAuthClient = new google.auth.JWT(
                 credentials.client_email, null, credentials.private_key, ['https://www.googleapis.com/auth/spreadsheets']
             );
             const sheets = google.sheets({ version: 'v4', auth: sheetsAuthClient });
 
-            // --- Fetch Relevant Sheet Data ---
             const [squadMembersResponse, allDataResponse, squadLeadersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Members!A:E' }), // Hardcoded ID
-                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'All Data!A:H' }), // Hardcoded ID
-                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Leaders!A:F' }) // Hardcoded ID
+                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Members!A:E' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'All Data!A:H' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Leaders!A:F' })
             ]).catch(err => { throw new Error("Failed to retrieve sheet data for processing invite.") });
 
             const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
@@ -680,15 +669,14 @@ const handleInviteButton = async (interaction, action) => {
             const allDataHeaderless = allData.slice(1);
             const squadLeadersData = (squadLeadersResponse.data.values || []).slice(1);
 
-            // --- Check Squad Member Count ---
             const membersInSquad = squadMembersData.filter(row => row && row.length > 2 && row[2]?.trim() === squadName);
             const currentMemberCount = membersInSquad.length + 1;
-            const max_members_local = 10; // Hardcoded max members
+            const max_members_local = 10;
             if (currentMemberCount >= max_members_local) {
                 await interaction.editReply({ content: `Cannot accept: Squad **${squadName}** is full (${currentMemberCount}/${max_members_local}).`, ephemeral: true });
                 if (trackingMessage) await trackingMessage.edit(`Invite from <@${commandUserID}> to <@${invitedMemberId}> for squad **${squadName}** failed: Squad Full.`).catch(console.error);
                 try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Squad Full' }); } catch (apiError) { console.error("API Error updating invite status to 'Squad Full':", apiError.message); }
-                const components = new ActionRowBuilder().addComponents( // Re-add buttons here
+                const components = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
                     new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger).setDisabled(true)
                 );
@@ -697,25 +685,23 @@ const handleInviteButton = async (interaction, action) => {
                 return;
             }
 
-            // --- Process Acceptance ---
             await interaction.editReply({ content: `You have accepted the invite to join **${squadName}** (${squadType})!` });
             if (trackingMessage) await trackingMessage.edit(`<@${member.id}> accepted invite from <@${commandUserID}> to join **${squadName}** (${squadType}).`).catch(console.error);
             try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Accepted' }); } catch (apiError) { console.error("API Error updating invite status to 'Accepted':", apiError.message); }
 
-            // --- Update Google Sheets ---
             let userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > AD_ID && row[AD_ID] === invitedMemberId);
             const defaultEventSquad = 'N/A'; const defaultOpenSquad = 'FALSE'; const defaultIsLeader = 'No'; let existingPreference = 'TRUE';
             let eventSquadNameToAssign = null; const leaderRow = squadLeadersData.find(row => row && row.length > SL_SQUAD_NAME && row[SL_SQUAD_NAME] === squadName);
             if (leaderRow) { const leaderEventSquad = leaderRow[SL_EVENT_SQUAD]; if (leaderEventSquad && leaderEventSquad !== 'N/A') { eventSquadNameToAssign = leaderEventSquad; } }
 
-            if (userInAllDataIndex !== -1) { /* ... Update existing All Data row ... */
+            if (userInAllDataIndex !== -1) {
                 const sheetRowIndex = userInAllDataIndex + 2;
                 const existingRow = allDataHeaderless[userInAllDataIndex];
                 if (existingRow.length > AD_PREFERENCE && (existingRow[AD_PREFERENCE] === 'TRUE' || existingRow[AD_PREFERENCE] === 'FALSE')) { existingPreference = existingRow[AD_PREFERENCE]; }
                 const updatedRowData = [member.user.username, member.id, squadName, squadType, eventSquadNameToAssign || defaultEventSquad, defaultOpenSquad, defaultIsLeader, existingPreference];
                 while (updatedRowData.length < 8) { updatedRowData.push(''); }
                 await sheets.spreadsheets.values.update({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: `All Data!A${sheetRowIndex}:H${sheetRowIndex}`, valueInputOption: 'RAW', resource: { values: [updatedRowData] } }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
-            } else { /* ... Append new All Data row ... */
+            } else {
                 const newRowData = [member.user.username, member.id, squadName, squadType, eventSquadNameToAssign || defaultEventSquad, defaultOpenSquad, defaultIsLeader, existingPreference];
                 while (newRowData.length < 8) { newRowData.push(''); }
                 await sheets.spreadsheets.values.append({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'All Data!A1', valueInputOption: 'RAW', resource: { values: [newRowData] } }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
@@ -726,43 +712,35 @@ const handleInviteButton = async (interaction, action) => {
             await sheets.spreadsheets.values.append({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Members!A1', valueInputOption: 'RAW', resource: { values: [newSquadMemberRow] } }).catch(err => { throw new Error(`Failed to append to Squad Members sheet: ${err.message}`); });
 
 
-            // --- Update Nickname ---
-            try { await member.setNickname(`[${squadName}] ${member.user.username}`); } catch (error) { /* ... handle nickname error ... */
+            try { await member.setNickname(`[${squadName}] ${member.user.username}`); } catch (error) {
                 if (error.code === 50013) { console.log(`Missing permissions to set nickname for ${member.user.tag}.`); } else { console.error(`Could not change nickname for ${member.user.tag}:`, error.message); }
             }
 
-            // --- ADD MASCOT ROLE IF APPLICABLE ---
             let assignedMascotRoleName = null;
             if (eventSquadNameToAssign) {
-                const mascotInfo = mascotSquads_local.find(m => m.name === eventSquadNameToAssign); // Use local mascot array
+                const mascotInfo = mascotSquads_local.find(m => m.name === eventSquadNameToAssign);
                 if (mascotInfo) { try { const roleToAdd = await guild.roles.fetch(mascotInfo.roleId); if (roleToAdd) { await member.roles.add(roleToAdd); assignedMascotRoleName = roleToAdd.name; console.log(`Added mascot role '${assignedMascotRoleName}' to ${member.user.tag}`); } else { console.warn(`Mascot role ID ${mascotInfo.roleId} (${mascotInfo.name}) not found.`); await interaction.followUp({ content: `Warning: Joined squad, but couldn't find mascot role (${mascotInfo.name}).`, ephemeral: true }).catch(()=>{}); } } catch (roleError) { console.error(`Failed to add mascot role ${mascotInfo.name}: ${roleError.message}`); await interaction.followUp({ content: `Warning: Joined squad, but couldn't assign mascot role (${mascotInfo.name}).`, ephemeral: true }).catch(()=>{}); } } else { console.warn(`No role mapping for event squad: ${eventSquadNameToAssign}`); }
             }
 
-            // --- Update Invite Message ---
             const acceptanceEmbed = new EmbedBuilder(inviteMessage.embeds[0]?.data || {}).setTitle('Invite Accepted!').setDescription(`**${member.user.username}** has accepted the invite to join **${squadName}**!`).setColor(0x00ff00);
-            // Re-add buttons
             const acceptedComponents = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accepted').setStyle(ButtonStyle.Success).setDisabled(true),
                 new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger).setDisabled(true)
             );
             await inviteMessage.edit({ embeds: [acceptanceEmbed], components: [acceptedComponents] }).catch(console.error);
 
-            // --- Notify Inviter ---
             let inviterDmDescription = `Your invite to **${member.user.username}** for squad **${squadName}** has been accepted!`;
             if (assignedMascotRoleName) { inviterDmDescription += `\nThey were assigned the **${assignedMascotRoleName}** role.` }
             const dmEmbed = new EmbedBuilder().setTitle('Invite Accepted').setDescription(inviterDmDescription).setColor(0x00ff00);
             await commandUser.send({ embeds: [dmEmbed] }).catch(err => { console.log(`Failed to DM command user ${commandUserID}: ${err.message}`); });
 
-            // --- Final API Cleanup ---
             try { await axios.delete(`http://localhost:3000/api/invite/${interaction.message.id}`); } catch (apiError) { console.error("API Error deleting invite:", apiError.message); }
 
         } else if (action === 'reject') {
-            // --- Handle 'Reject' Action ---
             await interaction.editReply({ content: 'You have rejected the invite.', ephemeral: true });
             if (trackingMessage) await trackingMessage.edit(`<@${invitedMemberId}> rejected invite from <@${commandUserID}> for **${squadName}**.`).catch(console.error);
             try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Rejected' }); } catch (apiError) { console.error("API Error updating status to 'Rejected':", apiError.message); }
             const rejectionEmbed = new EmbedBuilder(inviteMessage.embeds[0]?.data || {}).setTitle('Invite Rejected').setDescription(`Invite rejected by ${interaction.user.username}.`).setColor(0xff0000);
-            // Re-add buttons
             const rejectedComponents = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
                 new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Rejected').setStyle(ButtonStyle.Danger).setDisabled(true)
@@ -777,12 +755,11 @@ const handleInviteButton = async (interaction, action) => {
 
     } catch (error) {
         console.error('Error handling invite button interaction:', error);
-        // --- Error Logging and Reply ---
         await interaction.editReply({ content: 'An error occurred while processing the invite interaction.', ephemeral: true }).catch(console.error);
         try {
             const client = interaction.client; if (!client) return;
-            const errorGuild = await client.guilds.fetch('1233740086839869501').catch(() => null); if (!errorGuild) return; // Hardcoded ID
-            const errorChannel = await errorGuild.channels.fetch('1233853458092658749').catch(() => null); if (!errorChannel) return; // Hardcoded ID
+            const errorGuild = await client.guilds.fetch('1233740086839869501').catch(() => null); if (!errorGuild) return;
+            const errorChannel = await errorGuild.channels.fetch('1233853458092658749').catch(() => null); if (!errorChannel) return;
             const errorEmbed = new EmbedBuilder().setTitle('Invite Button Interaction Error').setDescription(`**User:** ${interaction.user.tag} (${interaction.user.id})\n**Action:** ${action}\n**Msg ID:** ${interaction.message.id}\n**Error:** ${error.message}`).setColor(0xff0000).setTimestamp();
             await errorChannel.send({ embeds: [errorEmbed] });
         } catch (logError) { console.error('Failed to log button interaction error:', logError); }
@@ -790,33 +767,28 @@ const handleInviteButton = async (interaction, action) => {
 };
 
 const handleApplicationButton = async (interaction, action, client) => {
-    // action will be 'accept' or 'deny' based on button custom ID logic
     try {
         await interaction.deferReply({ ephemeral: true });
 
         const messageUrl = interaction.message.url;
 
-        // --- Get Application Data from API ---
         let applicationData;
         try {
             const applicationResponse = await axios.get(`http://localhost:3000/api/squad-application?url=${encodeURIComponent(messageUrl)}`);
-            // Assuming API returns an array, find the specific one. If it returns single object on success, adjust this.
             const applications = applicationResponse.data;
             applicationData = Array.isArray(applications) ? applications.find(app => app.message_url === messageUrl) : applications;
 
             if (!applicationData) {
                 throw new Error(`No application data found in API for URL: ${messageUrl}`);
             }
-            // Check if already processed
             if (applicationData.status && applicationData.status !== 'Pending') {
                 await interaction.editReply({ content: `This application has already been ${applicationData.status.toLowerCase()}.`, ephemeral: true });
                 return;
             }
-            // Attempt to parse member_object safely
             if (typeof applicationData.member_object === 'string') {
                 applicationData.member_object_parsed = JSON.parse(applicationData.member_object);
             } else if (typeof applicationData.member_object === 'object' && applicationData.member_object !== null) {
-                applicationData.member_object_parsed = applicationData.member_object; // Assume already an object
+                applicationData.member_object_parsed = applicationData.member_object;
             } else {
                 throw new Error('Invalid or missing member_object in API data.');
             }
@@ -827,9 +799,8 @@ const handleApplicationButton = async (interaction, action, client) => {
             return;
         }
 
-        // --- Extract Data and Fetch Discord Objects ---
         const { user_id: applicantUserId, member_squad_name: squadName, squad_type: squadType } = applicationData;
-        const memberObject = applicationData.member_object_parsed; // Use parsed object
+        const memberObject = applicationData.member_object_parsed;
         const applicantUsername = memberObject.username || 'Unknown User';
 
 
@@ -854,7 +825,6 @@ const handleApplicationButton = async (interaction, action, client) => {
             return;
         }
 
-        // Fetch necessary roles
         const squadLeaderRole = guild.roles.cache.get('1218468103382499400');
         const competitiveRole = guild.roles.cache.get('1288918946258489354');
         const contentRole = guild.roles.cache.get('1290803054140199003');
@@ -865,34 +835,28 @@ const handleApplicationButton = async (interaction, action, client) => {
         }
 
 
-        // --- Google Sheets Interaction ---
         const auth = authorize();
         const sheets = google.sheets({ version: 'v4', auth });
 
-        // Check if user is already a leader (only needed for accept action)
         let isAlreadyLeader = false;
         if (action === 'accept') {
             try {
                 const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                    // *** HARDCODED ID & UPDATED RANGE ***
                     spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
-                    range: 'Squad Leaders!A:F' // Read full range
+                    range: 'Squad Leaders!A:F'
                 });
-                const squadLeaders = (squadLeadersResponse.data.values || []).slice(1); // Skip header
-                // Check ID in Column B (index 1)
+                const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
                 isAlreadyLeader = squadLeaders.some(row => row && row.length > 1 && row[1] === applicantUserId);
             } catch (sheetError) {
                 console.error("Error checking Squad Leaders sheet:", sheetError);
-                throw new Error("Failed to check existing squad leaders."); // Let main catch handle reply
+                throw new Error("Failed to check existing squad leaders.");
             }
         }
 
 
-        // --- Process Action ---
         if (action === 'accept') {
-            // Deny if already a leader
             if (isAlreadyLeader) {
-                await user.send({ /* ... Denied DM ... */
+                await user.send({
                     embeds: [new EmbedBuilder().setTitle('Squad Registration Denied').setDescription('We noticed you submitted multiple applications. This one has been denied as you already own a squad.').setColor(0xFF0000)]
                 }).catch(() => console.log(`Failed to send 'already leader' denial DM to ${applicantUsername}`));
 
@@ -903,38 +867,31 @@ const handleApplicationButton = async (interaction, action, client) => {
                 await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
 
                 await updateApplicationStatus(sheets, messageUrl, 'Denied', applicantUsername, applicantUserId, squadName, squadType);
-                await deleteApplicationDataByMessageUrl(messageUrl); // Clean up API
+                await deleteApplicationDataByMessageUrl(messageUrl);
 
                 await interaction.editReply({ content: 'This user already owns a squad. The application has been automatically denied.', ephemeral: true });
                 return;
             }
 
-            // --- Accept Logic ---
             let currentDate = new Date();
             let dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
 
-            // 1. Append to Squad Leaders sheet
-            // *** UPDATED VALUES ARRAY (A-F) ***
             const newLeaderRow = [
-                applicantUsername,      // A - Username
-                applicantUserId,        // B - ID
-                squadName,              // C - Squad Name
-                'N/A',                  // D - Event Squad (Default N/A)
-                'FALSE',                // E - Open Squad (Default FALSE)
-                dateString              // F - Squad Made Date
+                applicantUsername,
+                applicantUserId,
+                squadName,
+                'N/A',
+                'FALSE',
+                dateString
             ];
             await sheets.spreadsheets.values.append({
-                // *** HARDCODED ID & APPEND RANGE ***
                 spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
-                range: 'Squad Leaders!A1', // Append after table start A1
-                // *** VALUE INPUT OPTION ***
+                range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
                 resource: { values: [newLeaderRow] }
             }).catch(err => { throw new Error(`Failed to append to Squad Leaders sheet: ${err.message}`); });
 
 
-            // 2. Update or Append All Data sheet
-            // *** UPDATED GET RANGE ***
             const allDataResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
                 range: 'All Data!A:H'
@@ -944,60 +901,54 @@ const handleApplicationButton = async (interaction, action, client) => {
             const allDataHeaderless = allData.slice(1);
             userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > 1 && row[1] === applicantUserId);
 
-            if (userInAllDataIndex !== -1) { // User exists, update row
+            if (userInAllDataIndex !== -1) {
                 const sheetRowIndex = userInAllDataIndex + 2;
-                // *** UPDATED UPDATE RANGE (C:G) & VALUES ARRAY ***
-                // C=Squad, D=Type, E=Event, F=Open, G=IsLeader
                 const valuesToUpdate = [
-                    squadName,               // C
-                    squadType || 'N/A',      // D
-                    'N/A',                   // E (Default Event)
-                    'FALSE',                 // F (Default Open)
-                    'Yes'                    // G (Is Leader)
+                    squadName,
+                    squadType || 'N/A',
+                    'N/A',
+                    'FALSE',
+                    'Yes'
                 ];
                 await sheets.spreadsheets.values.update({
                     spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
-                    range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`, // Target C to G
+                    range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
                     valueInputOption: 'RAW',
                     resource: { values: [valuesToUpdate] }
                 }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
 
-            } else { // User doesn't exist, append new row
-                // *** UPDATED VALUES ARRAY (A-H) ***
+            } else {
                 const newAllDataRow = [
-                    applicantUsername,      // A - Username
-                    applicantUserId,        // B - ID
-                    squadName,              // C - Squad Name
-                    squadType || 'N/A',     // D - Squad Type
-                    'N/A',                  // E - Event Squad (Default)
-                    'FALSE',                // F - Open Squad (Default)
-                    'Yes',                  // G - Is Leader
-                    'TRUE'                  // H - Preference (Default TRUE for new leaders)
+                    applicantUsername,
+                    applicantUserId,
+                    squadName,
+                    squadType || 'N/A',
+                    'N/A',
+                    'FALSE',
+                    'Yes',
+                    'TRUE'
                 ];
                 await sheets.spreadsheets.values.append({
                     spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
-                    range: 'All Data!A1', // Append after table start A1
+                    range: 'All Data!A1',
                     valueInputOption: 'RAW',
                     resource: { values: [newAllDataRow] }
                 }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
             }
 
-            // 3. Add Roles
             try {
                 await member.roles.add(squadLeaderRole);
                 if (squadType === 'Competitive') await member.roles.add(competitiveRole);
                 if (squadType === 'Content') await member.roles.add(contentRole);
             } catch (roleError) {
                 console.warn(`Failed to add roles to ${applicantUsername} (${applicantUserId}): ${roleError.message}`);
-                // Inform admin in reply?
                 await interaction.followUp({ content: `Warning: Could not add all required roles to ${member.user.tag}. Please check permissions and assign manually.`, ephemeral: true });
             }
 
-            // 4. Set Nickname
             try {
                 await member.setNickname(`[${squadName}] ${applicantUsername}`);
             } catch (nickError) {
-                if (nickError.code === 50013) { // Missing permissions
+                if (nickError.code === 50013) {
                     console.warn(`Missing permissions to set nickname for ${applicantUsername}`);
                     await interaction.followUp({ content: `Warning: Could not set nickname for ${member.user.tag} due to permissions.`, ephemeral: true });
                 } else {
@@ -1005,18 +956,15 @@ const handleApplicationButton = async (interaction, action, client) => {
                 }
             }
 
-            // 5. Send DM to Applicant
             try {
-                await user.send({ /* ... Accepted DM ... */
+                await user.send({
                     embeds: [new EmbedBuilder().setTitle('Squad Registration Accepted!').setDescription(`Your application for squad **${squadName}** (${squadType || 'N/A'}) has been accepted!`).setColor(0x00FF00)]
                 });
             } catch (dmError) {
                 console.warn(`Failed to send acceptance DM to ${applicantUsername}: ${dmError.message}`);
-                // Maybe follow up in channel?
                 await interaction.followUp({ content: `Accepted application for ${member.user.tag}, but could not send them a DM notification.`, ephemeral: true });
             }
 
-            // 6. Edit Original Application Message
             const acceptanceEmbed = new EmbedBuilder()
                 .setTitle('Squad Registration Accepted')
                 .setDescription(`**${applicantUsername}**'s application for **${squadName}** (${squadType || 'N/A'}) was accepted by <@${interaction.user.id}>.`)
@@ -1024,23 +972,18 @@ const handleApplicationButton = async (interaction, action, client) => {
                 .setTimestamp();
             await interaction.message.edit({ embeds: [acceptanceEmbed], components: [] }).catch(console.error);
 
-            // 7. Update Sheet Status & Cleanup API
             await updateApplicationStatus(sheets, messageUrl, 'Accepted', applicantUsername, applicantUserId, squadName, squadType);
             await deleteApplicationDataByMessageUrl(messageUrl);
 
-            // 8. Reply to Admin
             await interaction.editReply({ content: '✅ Squad registration accepted and processed.', ephemeral: true });
 
         } else if (action === 'deny') {
-            // --- Deny Logic ---
             const genericDenyReason = "Your squad registration application was not approved at this time. You may re-apply later if circumstances change.";
 
-            // 1. Send DM to Applicant
-            await user.send({ /* ... Denied DM ... */
+            await user.send({
                 embeds: [new EmbedBuilder().setTitle('Squad Registration Denied').setDescription(genericDenyReason).setColor(0xFF0000)]
             }).catch(() => console.log(`Failed to send denial DM to ${applicantUsername}`));
 
-            // 2. Edit Original Application Message
             const denialEmbed = new EmbedBuilder()
                 .setTitle('Squad Registration Denied')
                 .setDescription(`**${applicantUsername}**'s application for **${squadName}** was denied by <@${interaction.user.id}>.`)
@@ -1048,17 +991,14 @@ const handleApplicationButton = async (interaction, action, client) => {
                 .setTimestamp();
             await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
 
-            // 3. Update Sheet Status & Cleanup API
             await updateApplicationStatus(sheets, messageUrl, 'Denied', applicantUsername, applicantUserId, squadName, squadType);
             await deleteApplicationDataByMessageUrl(messageUrl);
 
-            // 4. Reply to Admin
             await interaction.editReply({ content: '❌ Squad registration denied.', ephemeral: true });
         }
 
     } catch (error) {
         console.error('Error in handleApplicationButton:', error);
-        // Log detailed error
         try {
             const errorGuild = await client.guilds.fetch(LOGGING_GUILD_ID);
             const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
@@ -1071,7 +1011,6 @@ const handleApplicationButton = async (interaction, action, client) => {
         } catch (logError) {
             console.error('Failed to log application button error:', logError);
         }
-        // Reply to admin if possible
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: `An error occurred: ${error.message || 'Please try again.'}`, ephemeral: true }).catch(console.error);
         } else {
@@ -1081,113 +1020,88 @@ const handleApplicationButton = async (interaction, action, client) => {
 };
 
 
-// --- Helper: Update Application Status in Sheet ---
 const updateApplicationStatus = async (sheets, applicationMessageUrl, status, memberName, memberId, squadName, squadType) => {
     try {
-        // Applications sheet range A:F is correct
         const applicationsResponse = await sheets.spreadsheets.values.get({
-            // *** HARDCODED ID ***
             spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
             range: 'Applications!A:F'
         });
 
         const applications = applicationsResponse.data.values || [];
-        // Find row by URL in Column E (index 4) - Correct index
         let applicationIndex = -1;
-        const headerlessApplications = applications.slice(1); // Search data rows only
+        const headerlessApplications = applications.slice(1);
         applicationIndex = headerlessApplications.findIndex(row => row && row.length > 4 && row[4] === applicationMessageUrl);
 
         if (applicationIndex !== -1) {
-            const sheetRowIndex = applicationIndex + 2; // +1 for 0-based, +1 for header
-            // Update Status in Column F (index 5) - Correct index
+            const sheetRowIndex = applicationIndex + 2;
             await sheets.spreadsheets.values.update({
                 spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
-                range: `Applications!F${sheetRowIndex}`, // Target only column F
-                // *** VALUE INPUT OPTION ***
+                range: `Applications!F${sheetRowIndex}`,
                 valueInputOption: 'RAW',
                 resource: { values: [[status]] }
             });
             console.log(`Updated application status to ${status} for URL ${applicationMessageUrl}`);
         } else {
-            // Row not found, maybe append as a record? Or just log error?
-            // Appending here might duplicate if the find just failed. Log instead.
             console.error(`Could not find application row with URL ${applicationMessageUrl} to update status to ${status}.`);
-            // Optionally append if that's desired behavior:
-            // await sheets.spreadsheets.values.append({ ... resource: { values: [[memberName, ... status]] } ... });
         }
     } catch (error) {
         console.error('Error updating application status in sheet:', error.message);
-        // Don't throw here, allow main handler to continue if possible, but log it.
     }
 };
 
 
-// --- Helper: Delete Application Data from API ---
-// No changes needed for this function based on sheets
 const deleteApplicationDataByMessageUrl = async (applicationMessageUrl) => {
     try {
         const response = await axios.delete(`http://localhost:3000/api/squad-application?url=${encodeURIComponent(applicationMessageUrl)}`);
         console.log('Application data successfully deleted from API:', response.data);
-        return response.data; // Return data if needed
+        return response.data;
     } catch (error) {
         console.error('Error deleting application data from API:', error.message);
-        // Don't throw, just log, as this might not be critical if sheet update worked.
-        return null; // Indicate failure
+        return null;
     }
 };
 
-const handlePagination1 = async (customId, interaction) => { // Removed customId param, get it from interaction
+const handlePagination1 = async (customId, interaction) => {
     try {
-        // Use deferUpdate() for button clicks that just update the message
         await interaction.deferUpdate();
+        console.log(`[Pagination] Received ${customId} on interaction ${interaction.id}`);
 
-        const customId = interaction.customId; // Get customId from the interaction object
-        const originalInteractionId = interaction.message.interaction?.id; // Get the ID of the originating command interaction
+        const customId = interaction.customId;
+        const originalInteractionId = interaction.message.interaction?.id;
+        console.log(`[Pagination] originalInteractionId=${originalInteractionId}`);
 
-        // Check if the original interaction ID exists
         if (!originalInteractionId) {
             console.error("Could not retrieve original interaction ID from message.");
-            // Optionally edit reply, but deferUpdate means we can't send a new message easily
-            // await interaction.followUp({ content: "Could not find original command data.", ephemeral: true });
-            return; // Stop processing if we can't link back
+            return;
         }
 
-        // Retrieve the stored data using the original interaction ID
-        const commandState = interaction.client.commandData?.[originalInteractionId];
+        const commandState = interaction.client.squadsPagination.get(originalInteractionId);        console.log(`[Pagination] commandState for ${originalInteractionId}:`, commandState);
 
-        // Check if data exists for this interaction
         if (!commandState) {
             console.error(`No commandData found for original interaction ID: ${originalInteractionId}`);
-            // Edit the message to indicate the state is lost
             await interaction.editReply({ content: "Sorry, I can't find the data for this list anymore. Please run the command again.", embeds: [], components: [] });
             return;
         }
 
         const { squadList, totalPages, currentPage } = commandState;
-        let newPage = currentPage; // Default to current page
+        let newPage = currentPage;
 
-        // Determine new page based on the button clicked
-        // *** UPDATED CUSTOM IDS ***
-        if (customId === 'squads_next') { // Match ID from /squads command
+        if (customId === 'squads_next') {
             newPage = currentPage + 1;
-        } else if (customId === 'squads_prev') { // Match ID from /squads command
+        } else if (customId === 'squads_prev') {
             newPage = currentPage - 1;
         } else {
-            // Log if an unexpected custom ID is received for this handler
             console.warn(`Received unexpected customId in handlePagination1: ${customId}`);
-            return; // Don't process unknown IDs
+            return;
         }
 
-        // Basic validation, though buttons should be disabled appropriately
         if (newPage < 1 || newPage > totalPages) {
             console.warn(`Pagination attempt outside bounds: newPage=${newPage}, totalPages=${totalPages}`);
-            return; // Do nothing if trying to go out of bounds
+            return;
         }
 
-        // Update the current page in the stored state
-        interaction.client.commandData[originalInteractionId].currentPage = newPage;
+        interaction.client.squadsPagination.get(originalInteractionId).currentPage = newPage;
 
-        // --- Generate Embed (No changes needed in logic) ---
         const generateEmbed = (page) => {
             const start = (page - 1) * ITEMS_PER_PAGE;
             const end = start + ITEMS_PER_PAGE;
@@ -1200,18 +1114,15 @@ const handlePagination1 = async (customId, interaction) => { // Removed customId
                 .setTimestamp();
         };
 
-        // --- Generate Buttons (Update Custom IDs) ---
         const generateButtons = (page) => {
             return new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        // *** UPDATED CUSTOM ID ***
                         .setCustomId('squads_prev')
                         .setLabel('Previous')
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(page === 1),
                     new ButtonBuilder()
-                        // *** UPDATED CUSTOM ID ***
                         .setCustomId('squads_next')
                         .setLabel('Next')
                         .setStyle(ButtonStyle.Primary)
@@ -1219,15 +1130,12 @@ const handlePagination1 = async (customId, interaction) => { // Removed customId
                 );
         }
 
-        // Edit the original reply with the new embed and button states
         await interaction.editReply({ embeds: [generateEmbed(newPage)], components: [generateButtons(newPage)] });
 
     } catch (error) {
         console.error('Error handling pagination:', error);
 
-        // Log detailed error to specific channel
         try {
-            // Check if client is available
             if (!interaction.client) throw new Error("Interaction client is not available.");
 
             const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
@@ -1239,15 +1147,13 @@ const handlePagination1 = async (customId, interaction) => { // Removed customId
             const errorEmbed = new EmbedBuilder()
                 .setTitle('Pagination Error')
                 .setDescription(`An error occurred while processing pagination:\n**Error:** ${error.message}\n**Interaction Custom ID:** ${interaction.customId}\n**Original Command ID:** ${interaction.message.interaction?.id}`)
-                .setColor(0xFF0000) // Red
+                .setColor(0xFF0000)
                 .setTimestamp();
             await errorChannel.send({ embeds: [errorEmbed] });
         } catch (logError) {
             console.error('Failed to log pagination error:', logError);
         }
 
-        // Attempt to inform the user via followUp since deferUpdate was used
-        // Note: followUp might fail if the interaction token expired.
         try {
             await interaction.followUp({
                 content: 'An error occurred while changing pages. Please try running the command again.',
@@ -1260,59 +1166,50 @@ const handlePagination1 = async (customId, interaction) => { // Removed customId
 };
 
 async function getSquadData(squadName) {
-    const auth = authorize(); // Use consistent auth function
+    const auth = authorize();
     const sheets = google.sheets({ version: 'v4', auth });
-    const normalizedSquadName = squadName.toUpperCase(); // Normalize for comparison
+    const normalizedSquadName = squadName.toUpperCase();
 
-    // Helper to fetch and filter data, now returns raw rows
     async function fetchFilteredRows(range, filterCondition) {
         try {
             const response = await sheets.spreadsheets.values.get({
                 spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: range, // Use the provided full range
+                range: range,
             });
             const allRows = response.data.values || [];
-            const dataRows = allRows.slice(1); // Skip header row
-            return dataRows.filter(filterCondition); // Return matching rows
+            const dataRows = allRows.slice(1);
+            return dataRows.filter(filterCondition);
         } catch (error) {
             console.error(`Error fetching data from Sheets range ${range}:`, error);
-            // Throw a specific error to be caught by the caller
             throw new Error(`Failed to fetch data for range ${range}.`);
         }
     }
 
     try {
-        // 1. Fetch and find the leader first to confirm squad existence
-        // *** UPDATED RANGE & FILTER ***
         const leaderFilter = row => row && row.length > 2 && row[2]?.toUpperCase() === normalizedSquadName;
-        const matchingLeaders = await fetchFilteredRows('Squad Leaders!A:F', leaderFilter); // Read A:F
+        const matchingLeaders = await fetchFilteredRows('Squad Leaders!A:F', leaderFilter);
 
         if (matchingLeaders.length === 0) {
             throw new Error(`No squad found with the name "${squadName}".`);
         }
         if (matchingLeaders.length > 1) {
             console.warn(`Multiple leaders found for squad "${squadName}". Using the first one found.`);
-            // This indicates a data integrity issue but proceed with the first match.
         }
         const leaderRow = matchingLeaders[0];
-        // *** CORRECT INDEX FOR ID *** (Still index 1)
         const leaderId = leaderRow[1]?.trim();
         const formattedLeader = leaderId ? `<@${leaderId}>` : 'Leader ID Not Found';
 
-        // 2. Fetch members for the confirmed squad
-        // *** UPDATED RANGE & FILTER ***
         const memberFilter = row => row && row.length > 2 && row[2]?.toUpperCase() === normalizedSquadName;
-        const matchingMembers = await fetchFilteredRows('Squad Members!A:E', memberFilter); // Read A:E
+        const matchingMembers = await fetchFilteredRows('Squad Members!A:E', memberFilter);
 
         let formattedMembers = 'No members found.';
         if (matchingMembers.length > 0) {
             formattedMembers = matchingMembers
-                // *** CORRECT INDEX FOR ID *** (Still index 1)
-                .map(row => row[1]?.trim()) // Get ID from column B
-                .filter(id => id) // Filter out empty IDs
-                .map(id => `- <@${id}>`) // Format
+                .map(row => row[1]?.trim())
+                .filter(id => id)
+                .map(id => `- <@${id}>`)
                 .join('\n');
-            if (!formattedMembers) formattedMembers = 'No valid member IDs found.'; // Handle cases where IDs might be empty strings
+            if (!formattedMembers) formattedMembers = 'No valid member IDs found.';
         }
 
         return {
@@ -1321,18 +1218,14 @@ async function getSquadData(squadName) {
         };
 
     } catch (error) {
-        // Log the specific error and re-throw it for the interaction handler
         console.error(`Error in getSquadData for "${squadName}": ${error.message}`);
-        throw error; // Re-throw the original or a new error
+        throw error;
     }
 }
 
-// --- Interaction Handler (No changes needed here) ---
 const hanldeviewRoster = async (interaction) => {
-    // Extract squad name (This logic remains the same, depends on embed format)
     let squadName;
     try {
-        // Added optional chaining and nullish coalescing for safety
         squadName = interaction.message.embeds[0]?.description?.match(/squad \*\*(.*?)\*\*/)?.[1];
         if (!squadName) {
             throw new Error("Could not extract squad name from the message embed.");
@@ -1345,25 +1238,21 @@ const hanldeviewRoster = async (interaction) => {
 
 
     try {
-        // Call the updated getSquadData function
         const { squadMembers, squadLeader } = await getSquadData(squadName);
-
-        // Reply with the roster (This part remains the same)
         await interaction.reply({
             ephemeral: true,
             embeds: [{
                 color: 0x0099ff,
                 title: `Roster for ${squadName}`,
                 fields: [
-                    { name: 'Squad Leader', value: squadLeader || 'Not specified' }, // Use default text if empty
-                    { name: 'Squad Members', value: squadMembers || 'None' }, // Use default text if empty
+                    { name: 'Squad Leader', value: squadLeader || 'Not specified' },
+                    { name: 'Squad Members', value: squadMembers || 'None' },
                 ],
-                timestamp: new Date().toISOString() // Add timestamp
+                timestamp: new Date().toISOString()
             }],
         });
     } catch (error) {
         console.error(`Error fetching roster for ${squadName}:`, error);
-        // Send the specific error message from getSquadData or a generic one
         await interaction.reply({
             content: `Error fetching roster: ${error.message || 'Please try again later.'}`,
             ephemeral: true
@@ -1804,7 +1693,6 @@ const handleLfgSystem1ViewParticipants = async (interaction) => {
 
 
 const handleApplyBaseLeagueModal = async (interaction) => {
-    // Defer the reply to acknowledge the interaction and give extra time for processing.
     await interaction.deferReply({ ephemeral: true });
     
     const leagueName = interaction.fields.getTextInputValue('league-name');
@@ -2503,7 +2391,7 @@ const handleNext2 = async (interaction) => {
                 .setThumbnail(userAvatar)
                 .setColor('#00000f')
                 .addFields(
-                    { name: '📈 Score', value: "Temporarily Hidden", inline: true },
+                    { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
                     { name: '📅 Season Week Posted', value: `<t:${post.weekDate}:D>`, inline: true },
                     { name: '⏰ Date Posted', value: post.timestamp.toString(), inline: true },
@@ -2606,7 +2494,7 @@ const handlePrev2 = async (interaction) => {
                 .setThumbnail(userAvatar)
                 .setColor('#00000f')
                 .addFields(
-                    { name: '📈 Score', value: "Temporarily Hidden", inline: true },
+                    { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
                     { name: '📅 Season Week Posted', value: `<t:${post.weekDate}:D>`, inline: true },
                     { name: '⏰ Date Posted', value: post.timestamp.toString(), inline: true },

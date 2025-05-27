@@ -1,24 +1,22 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { google } = require('googleapis');
-const axios = require('axios'); // Used for local API
+const axios = require('axios');
 const credentials = require('../resources/secret.json');
 
-// --- Constants ---
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const LOGGING_GUILD_ID = '1233740086839869501';
-const LOGGING_CHANNEL_ID = '1233853415952748645'; // Action logging channel
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749'; // Error logging channel
-const MAX_SQUAD_MEMBERS = 10; // Including the leader
-const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000; // 48 hours
+const LOGGING_CHANNEL_ID = '1233853415952748645';
+const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
+const MAX_SQUAD_MEMBERS = 10;
+const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 
-// --- Authorization Function ---
 function authorize() {
     const { client_email, private_key } = credentials;
     const auth = new google.auth.JWT(
         client_email,
         null,
         private_key,
-        ['https://www.googleapis.com/auth/spreadsheets'] // Read/Write needed
+        ['https://www.googleapis.com/auth/spreadsheets']
     );
     return auth;
 }
@@ -61,7 +59,6 @@ module.exports = {
         const sheets = google.sheets({ version: 'v4', auth });
 
         try {
-            // --- Fetch All Required Sheet Data Concurrently ---
             const [allDataResponse, squadMembersResponse, squadLeadersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A:E' }),
@@ -75,8 +72,6 @@ module.exports = {
             const squadMembers = (squadMembersResponse.data.values || []).slice(1);
             const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
 
-            // --- Perform Checks ---
-            // 1. Check if inviter is a squad leader
             const inviterLeaderRow = squadLeaders.find(row => row && row.length > 1 && row[1] === commandUserID);
             const inviterAllDataRow = allData.find(row => row && row.length > 1 && row[1] === commandUserID);
             const isInviterMarkedLeader = inviterAllDataRow && inviterAllDataRow.length > 6 && inviterAllDataRow[6] === 'Yes';
@@ -84,9 +79,8 @@ module.exports = {
                 await interaction.editReply({ content: "You must be a squad leader to invite members.", ephemeral: true });
                 return;
             }
-            // Determine squad name and type
             const squadName = inviterLeaderRow ? inviterLeaderRow[2]?.trim() : inviterAllDataRow[2]?.trim();
-            const finalSquadType = inviterAllDataRow ? inviterAllDataRow[3]?.trim() : null; // Get type from All Data
+            const finalSquadType = inviterAllDataRow ? inviterAllDataRow[3]?.trim() : null;
             if (!squadName || squadName === 'N/A') {
                 await interaction.editReply({ content: "Could not determine your squad name.", ephemeral: true }); return;
             }
@@ -94,7 +88,6 @@ module.exports = {
                 await interaction.editReply({ content: "Could not determine your squad type.", ephemeral: true }); return;
             }
 
-            // 2. Check squad member count
             const membersInSquad = squadMembers.filter(row => row && row.length > 2 && row[2]?.trim() === squadName);
             const currentMemberCount = membersInSquad.length + 1;
             if (currentMemberCount >= MAX_SQUAD_MEMBERS) {
@@ -102,14 +95,12 @@ module.exports = {
                 return;
             }
 
-            // 3. Check if invitee is already a squad leader
             const inviteeIsLeader = squadLeaders.find(row => row && row.length > 1 && row[1] === targetUserId);
             if (inviteeIsLeader) {
                 await interaction.editReply({ content: `<@${targetUserId}> is already a squad leader.`, ephemeral: true });
                 return;
             }
 
-            // 4. Check if invitee is already in a squad (as member)
             const inviteeInSquad = squadMembers.find(row => row && row.length > 1 && row[1] === targetUserId);
             if (inviteeInSquad) {
                 const existingSquad = inviteeInSquad[2] || 'another squad';
@@ -117,14 +108,12 @@ module.exports = {
                 return;
             }
 
-            // 5. Check invitee's preference (Opt-out status)
             const inviteeAllDataRow = allData.find(row => row && row.length > 1 && row[1] === targetUserId);
             if (inviteeAllDataRow && inviteeAllDataRow.length > 7 && inviteeAllDataRow[7] === 'FALSE') {
                 await interaction.editReply({ content: `<@${targetUserId}> has opted out of receiving squad invitations.`, ephemeral: true });
                 return;
             }
 
-            // --- All checks passed, attempt to send invite DM ---
 
             const now = new Date();
             const futureTime = new Date(now.getTime() + INVITE_EXPIRY_MS);
@@ -139,30 +128,22 @@ module.exports = {
 
             let inviteMessage;
             try {
-                // *** ATTEMPT TO SEND DM ***
                 inviteMessage = await targetUser.send({ embeds: [inviteEmbed] });
 
             } catch (dmError) {
-                // *** CATCH DM ERROR AND INFORM INVITER ***
-                if (dmError.code === 50007) { // DiscordAPIError: Cannot send messages to this user
+                if (dmError.code === 50007) {
                     console.log(`Cannot send DM to ${targetUserTag} (${targetUserId}) - DMs likely disabled.`);
-                    // Edit the reply to the *inviter*
                     await interaction.editReply({
                         content: `❌ Could not send an invite DM to <@${targetUserId}>. They might have DMs disabled or have blocked the bot.`,
                         ephemeral: true
                     });
                 } else {
-                    // For other errors sending the DM, log it and throw a generic error
                     console.error(`Failed to send invite DM to ${targetUserId}:`, dmError);
-                    // Let the main catch block handle replying to the inviter
                     throw new Error('Failed to send the invite DM due to an unexpected error.');
                 }
-                return; // Stop execution if DM could not be sent
+                return;
             }
 
-            // --- DM Sent Successfully - Continue with buttons, logging, API, etc. ---
-
-            // Add buttons to the DM
             const row = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder().setCustomId(`invite_accept_${inviteMessage.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success),
@@ -172,7 +153,6 @@ module.exports = {
                 console.error(`Failed to add buttons to invite DM ${inviteMessage.id}: ${editErr.message}`);
             });
 
-            // Log Invite Action
             let trackingMessage;
             try {
                 const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
@@ -184,7 +164,6 @@ module.exports = {
                 console.error(`Failed to send invite log message: ${logError.message}`);
             }
 
-            // Post to Local API
             try {
                 const postData = {
                     command_user_id: commandUserID,
@@ -201,8 +180,7 @@ module.exports = {
                 console.error(`Failed to post invite data to local API: ${apiError.message}`);
             }
 
-            // Schedule Invite Expiry
-            setTimeout(async () => { /* ... expiry logic ... */
+            setTimeout(async () => {
                 try {
                     const response = await axios.get(`http://localhost:3000/api/invite/${inviteMessage.id}`);
                     const currentInviteData = response.data;
@@ -217,29 +195,26 @@ module.exports = {
                         }
                         await axios.delete(`http://localhost:3000/api/invite/${inviteMessage.id}`);
                     }
-                } catch (error) { /* ... handle expiry error ... */
+                } catch (error) {
                     if (error.response && error.response.status === 404) { console.log(`Invite ${inviteMessage.id} likely already processed or deleted before expiry.`); }
                     else { console.error(`Error during invite expiry check for ${inviteMessage.id}:`, error.message); }
                 }
             }, INVITE_EXPIRY_MS);
 
-            // Final Reply to Inviter (Success)
             await interaction.editReply({ content: `✅ Invite successfully sent to <@${targetUserId}> for squad **${squadName}**!`, ephemeral: true });
 
         } catch (error) {
-            // Catch errors from sheet fetching or other unexpected issues
             console.error(`Error during /invite-to-squad for ${commandUserTag}:`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOG_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder() /* ... error log embed ... */
+                const errorEmbed = new EmbedBuilder()
                     .setTitle('Invite Command Error')
                     .setDescription(`**User:** ${commandUserTag} (${commandUserID})\n**Invitee:** ${targetUserTag} (${targetUserId})\n**Error:** ${error.message}`)
                     .setColor('#FF0000')
                     .setTimestamp();
                 await errorChannel.send({ embeds: [errorEmbed] });
             } catch (logError) { console.error('Failed to log invite command error:', logError); }
-            // Reply to user
             await interaction.editReply({
                 content: `An error occurred: ${error.message || 'Please try again later.'}`,
                 ephemeral: true

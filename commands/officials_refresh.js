@@ -87,8 +87,6 @@ module.exports = {
                 range: `${newTabName}!D9:Q27`,
             });
 
-            const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
             const dateValues = [];
             for (let i = 0; i < 7; i++) {
                 const currentDate = startOfNextWeek.clone().add(i, 'days').format('dddd MM/DD');

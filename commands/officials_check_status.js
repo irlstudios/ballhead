@@ -65,6 +65,10 @@ module.exports = {
                 : 'No grading information found.';
 
             const statsInfo = stats.find(row => row[0]?.toLowerCase() === discordName);
+            if (!gradeInfo && !statsInfo) {
+                await interaction.reply('No grading or requirement information found for you.');
+                return;
+            }
             const requirementMet = statsInfo ? statsInfo[currentWeekIndex] || 'N/A' : 'N/A';
             const average = statsInfo ? statsInfo[currentWeekIndex + 1] || 'N/A' : 'N/A';
 
