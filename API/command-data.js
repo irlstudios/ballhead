@@ -12,7 +12,6 @@ async function logCommandUsage(interaction) {
     };
 
     try {
-        await axios.post('https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/commands', commandData);
         console.log('Metrics logged successfully.');
         mixpanel.track( 'Command Used', {
             user_id:   String(commandData.user_id),
