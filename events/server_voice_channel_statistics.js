@@ -10,7 +10,7 @@ module.exports = {
         ) {
             mixpanel.track('Stage Join', {
                 stage_id: String(newState.channelId),
-                user_id: String(newState.member.id),
+                distinct_id: String(newState.member.id),
                 date: new Date().toISOString(),
             });
         }

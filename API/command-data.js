@@ -5,7 +5,7 @@ const mixpanel  = Mixpanel.init(process.env.MIXPANEL_PROJECT_TOKEN);
 async function logCommandUsage(interaction) {
     const commandData = {
         command_name: interaction.commandName,
-        user_id: interaction.user.id,
+        distinct_id: interaction.user.id,
         channel_id: interaction.channelId,
         server_id: interaction.guildId,
         timestamp: new Date()
@@ -14,7 +14,7 @@ async function logCommandUsage(interaction) {
     try {
         console.log('Metrics logged successfully.');
         mixpanel.track( 'Command Used', {
-            user_id:   String(commandData.user_id),
+            distinct_id:   String(commandData.user_id),
             command_name:  String(commandData.command_name),
             channel_id:    String(commandData.channel_id),
             server_id:     String(commandData.server_id),
