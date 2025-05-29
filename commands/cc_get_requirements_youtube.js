@@ -19,7 +19,7 @@ const sheets = google.sheets({ version: 'v4', auth: authorize() });
 const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
 
 const rangeYouTubeApp = 'YouTube!A:D';
-const rangeYTData = 'YT NF Data!O:AP';
+const rangeYTData = 'YT NF Data!P:AQ';
 
 async function getUserData(discordId) {
     try {
