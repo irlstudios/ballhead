@@ -392,12 +392,34 @@ module.exports = {
                 return interaction.reply({ content: 'No user specified.', ephemeral: true });
             }
             case 'list': {
-                // Placeholder for list implementation
-                return interaction.reply({ content: 'Listing of all rooms is not implemented.', ephemeral: true });
+                if (!interaction.member.roles.cache.has(MOD_ROLE_ID)) {
+                    return interaction.reply({ content: 'Only moderators can use this command.', ephemeral: true });
+                }
+                const { rows } = await pool.query('SELECT channel_id, host_id FROM vc_hosts');
+                const channels = rows
+                    .map(({ channel_id }) => interaction.guild.channels.cache.get(channel_id))
+                    .filter(ch => ch);
+                if (!channels.length) {
+                    return interaction.reply({ content: 'No managed rooms found.', ephemeral: true });
+                }
+                const list = channels.map(ch => `• ${ch.name} (<#${ch.id}>)`).join('\n');
+                return interaction.reply({ content: `Managed rooms:\n${list}`, ephemeral: true });
             }
             case 'clean': {
-                // Placeholder for clean implementation
-                return interaction.reply({ content: 'Cleanup of orphaned rooms is not implemented.', ephemeral: true });
+                if (!interaction.member.roles.cache.has(MOD_ROLE_ID)) {
+                    return interaction.reply({ content: 'Only moderators can use this command.', ephemeral: true });
+                }
+                const { rows } = await pool.query('SELECT channel_id FROM vc_hosts');
+                let deleted = 0;
+                for (const { channel_id } of rows) {
+                    const ch = interaction.guild.channels.cache.get(channel_id);
+                    if (!ch || ch.members.size === 0) {
+                        if (ch) await ch.delete();
+                        await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel_id]);
+                        deleted++;
+                    }
+                }
+                return interaction.reply({ content: `Cleanup complete. Deleted ${deleted} orphaned room(s).`, ephemeral: true });
             }
         }
     }
