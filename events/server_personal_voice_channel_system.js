@@ -80,7 +80,12 @@ module.exports = {
         if (oldState.channelId && oldState.channelId !== newState.channelId) {
             const guild = oldState.guild;
             const channel = guild.channels.cache.get(oldState.channelId);
-            if (channel && client.vcHosts.has(channel.id) && channel.members.size === 0) {
+            const hostId = client.vcHosts.get(channel.id);
+            if (channel && oldState.member.id === hostId) {
+                await channel.delete();
+                client.vcHosts.delete(channel.id);
+                await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
+            } else if (channel && client.vcHosts.has(channel.id) && channel.members.size === 0) {
                 await channel.delete();
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
