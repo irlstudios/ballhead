@@ -400,5 +400,5 @@ module.exports = {
                 return interaction.reply({ content: 'Cleanup of orphaned rooms is not implemented.', ephemeral: true });
             }
         }
-    },
+    }
 };
