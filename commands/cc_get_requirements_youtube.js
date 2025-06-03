@@ -1,84 +1,52 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../resources/secret.json');
-const moment = require('moment');
+const { SlashCommandBuilder } = require('@discordjs/builders')
+const { EmbedBuilder } = require('discord.js')
+const { google } = require('googleapis')
+const credentials = require('../resources/secret.json')
+const moment = require('moment')
 
 function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-            ['https://www.googleapis.com/auth/spreadsheets']
-    );
-    return auth;
+    const { client_email, private_key } = credentials
+    return new google.auth.JWT(client_email, null, private_key, ['https://www.googleapis.com/auth/spreadsheets'])
 }
 
-const sheets = google.sheets({ version: 'v4', auth: authorize() });
-const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
-
-const rangeYouTubeApp = 'YouTube!A:D';
-const rangeYTData = 'YT NF Data!P:AQ';
+const sheets = google.sheets({ version: 'v4', auth: authorize() })
+const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk'
+const rangeApp = 'YouTube!A:O'
+const rangeData = 'YT NF Data!L:AP'
 
 async function getUserData(discordId) {
     try {
-        console.log(`[YT getUserData] Fetching data from Google Sheets for user ID: ${discordId}`);
+        const [resApp, resData] = await Promise.all([
+            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: rangeApp }),
+            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: rangeData })
+        ])
+        const rowsApp = resApp.data.values || []
+        const rowsData = resData.data.values || []
 
-        const [resYouTubeApp, resYTData] = await Promise.all([
-            sheets.spreadsheets.values.get({
-                spreadsheetId: sheetId,
-                range: rangeYouTubeApp,
-            }),
-            sheets.spreadsheets.values.get({
-                spreadsheetId: sheetId,
-                range: rangeYTData,
-            })
-        ]);
-
-        const rowsYouTubeApp = resYouTubeApp.data.values || [];
-        const rowsYTData = resYTData.data.values || [];
-        console.log(`[YT getUserData] Data fetched: ${rowsYouTubeApp.length} rows in ${rangeYouTubeApp}, ${rowsYTData.length} rows in ${rangeYTData}.`);
-
-        let userApplicationRow = null;
-        for (const row of rowsYouTubeApp) {
-            if (row && row.length > 2 && row[2] === discordId) {
-                userApplicationRow = row;
-                console.log(`[YT getUserData] Found application row for ${discordId} in ${rangeYouTubeApp} sheet.`);
-                break;
+        let appRow = null
+        for (const row of rowsApp) {
+            if (row && row.length > 2 && row[2]?.trim() === discordId) {
+                appRow = row
+                break
             }
         }
+        if (!appRow) return null
 
-        if (!userApplicationRow) {
-            console.log(`[YT getUserData] No application row found for user ID ${discordId} in ${rangeYouTubeApp} sheet.`);
-            return null;
-        }
-
-        let userPerformanceRow = null;
-        const discordIdIndexRelative = 1;
-        for (let i = 2; i < rowsYTData.length; i++) {
-            const row = rowsYTData[i];
-            if (row && row.length > discordIdIndexRelative && row[discordIdIndexRelative] === discordId) {
-                userPerformanceRow = row;
-                console.log(`[YT getUserData] Found performance data row for ${discordId} at sheet row index ${i} in ${rangeYTData} sheet.`);
-                break;
+        let dataRow = null
+        for (const row of rowsData) {
+            if (row && row.length > 1 && row[1]?.trim() === discordId) {
+                dataRow = row
+                break
             }
         }
-
-        if (!userPerformanceRow) {
-            console.log(`[YT getUserData] No performance data row found for user ID ${discordId} in ${rangeYTData} sheet (rows 3+).`);
-        }
-
-        return { userApplicationRow, userPerformanceRow };
-    } catch (error)
-    {
-        console.error(`[YT getUserData] Error fetching user data from Google Sheets (Range: ${rangeYTData}):`, error);
-        return null;
+        return { appRow, dataRow }
+    } catch {
+        return null
     }
 }
 
-function getNextMonday() {
-    return moment().day(8);
+function nextMonday() {
+    return moment().day(8)
 }
 
 module.exports = {
@@ -86,120 +54,89 @@ module.exports = {
         .setName('check-youtube-account')
         .setDescription('Checks your YouTube application status and 3-week requirement data.'),
     async execute(interaction) {
-        const commandName = '/check-youtube-account';
-        console.log(`[${commandName}] Invoked by ${interaction.user.tag} (${interaction.user.id})`);
-
         try {
-            await interaction.deferReply({ ephemeral: true });
-            console.log(`[${commandName}] Reply deferred.`);
-
-            const userId = interaction.user.id;
-            const userData = await getUserData(userId);
-
-            if (!userData || !userData.userApplicationRow) {
-                await interaction.editReply({
-                    content: `It looks like you haven't applied for the YouTube CC program yet, or we couldn't find your application record in the \`${rangeYouTubeApp}\` sheet.`,
-                    ephemeral: true
-                });
-                console.log(`[${commandName}] User ${userId} has not applied or application record not found in ${rangeYouTubeApp}.`);
-                return;
+            await interaction.deferReply({ ephemeral: true })
+            const uid = interaction.user.id
+            const info = await getUserData(uid)
+            if (!info || !info.appRow) {
+                await interaction.editReply({ content: 'It looks like you haven\'t applied for the YouTube CC program yet, or we couldn\'t find your application record.', ephemeral: true })
+                return
+            }
+            const { appRow, dataRow } = info
+            const appDateStr = appRow[3]
+            if (!appDateStr) {
+                await interaction.editReply({ content: 'We found your application, but the application date is missing in our records. Please contact support.', ephemeral: true })
+                return
+            }
+            const appDate = moment(appDateStr.trim(), 'M/D/YYYY', true)
+            if (!appDate.isValid()) {
+                await interaction.editReply({ content: `We found your application, but the date stored ('${appDateStr}'). Please note that we begin pulling new form data every Sunday, and platform check data is updated on Mondays. If you believe there’s an issue with your submission, please contact support.`, ephemeral: true })
+                return
+            }
+            if (!dataRow) {
+                const ts = `<t:${nextMonday().unix()}:F>`
+                await interaction.editReply({ content: `We found your application submitted on **${appDate.format('MMMM Do, YYYY')}**. Your performance data hasn't been processed yet. Please check back around ${ts}.`, ephemeral: true })
+                return
             }
 
-            const { userApplicationRow, userPerformanceRow } = userData;
+            const req = { posts: 2, likes: 15 }
 
-            const applicationDateStr = userApplicationRow[3];
-            if (!applicationDateStr) {
-                console.error(`[${commandName}] Application date missing or empty in cell D for user ${userId} in ${rangeYouTubeApp} sheet row:`, userApplicationRow);
-                await interaction.editReply({ content: `We found your application, but the application date cell (Column D) appears to be empty in our records (\`${rangeYouTubeApp}\` sheet). Please contact support.`, ephemeral: true });
-                return;
+            const followers = dataRow[5] || 'N/A'
+
+            const w1 = {
+                posts: parseInt(dataRow[6], 10) || 0,
+                likes: parseInt(dataRow[8], 10) || 0,
+                quality: dataRow[9] || 'N/A'
+            }
+            const w2 = {
+                posts: parseInt(dataRow[13], 10) || 0,
+                likes: parseInt(dataRow[15], 10) || 0,
+                quality: dataRow[16] || 'N/A'
+            }
+            const w3 = {
+                posts: parseInt(dataRow[20], 10) || 0,
+                likes: parseInt(dataRow[22], 10) || 0,
+                quality: dataRow[23] || 'N/A'
             }
 
-            const trimmedDateStr = applicationDateStr.trim();
-            const applicationDate = moment(trimmedDateStr, 'M/D/YYYY', true);
-            if (!applicationDate.isValid()) {
-                console.error(`[${commandName}] Invalid application date format for user ${userId} in ${rangeYouTubeApp} (Col D). Original: '${applicationDateStr}', Trimmed: '${trimmedDateStr}'. Expected M/D/YYYY.`);
-                await interaction.editReply({
-                    content: `We found your application, but the date stored ('${applicationDateStr}'). Please note that we begin pulling new form data every Sunday, and platform check data is updated on Mondays. If you believe there's an issue with your submission, please contact support to verify the sheet data.`,
-                    ephemeral: true
-                });
-                return;
-            }
+            const check = w => ({ ...w, metP: w.posts >= req.posts, metL: w.likes >= req.likes })
 
-            const nextCheckDate = getNextMonday();
-            const discordFormattedTimestamp = `<t:${nextCheckDate.unix()}:F}`;
+            const week1 = check(w1)
+            const week2 = check(w2)
+            const week3 = check(w3)
 
-            if (!userPerformanceRow) {
-                const applicationDateString = applicationDate.format('MMMM Do, YYYY');
-                const response = `We found your application submitted on **${applicationDateString}**. Your performance data wasn't found in the \`${rangeYTData}\` tracking sheet (rows 3+). Data is typically updated weekly. Please check back around ${discordFormattedTimestamp}.`;
-                await interaction.editReply({ content: response, ephemeral: true });
-                console.log(`[${commandName}] User ${userId} applied on ${applicationDate.format('YYYY-MM-DD')}, but data not found in ${rangeYTData} sheet (rows 3+). Advised to check back ${discordFormattedTimestamp}.`);
-                return;
-            }
-
-            console.log(`[${commandName}] Found application and performance data for user ${userId}. Preparing stats embed from ${rangeYTData}.`);
-
-            const requirements = {
-                posts: 2,
-                likes: 15
-            };
-            const postsLabel = "Videos";
-            const likesLabel = "Avg Views/Likes";
-
-            const checkRequirements = (postsStr, likesStr) => {
-                const posts = parseInt(postsStr, 10) || 0;
-                const likes = parseInt(likesStr, 10) || 0;
-                const metPosts = posts >= requirements.posts;
-                const metLikes = likes >= requirements.likes;
-                return { posts, likes, metPosts, metLikes };
-            };
-
-            const subscribersStr = userPerformanceRow[5] || 'N/A';
-            const week1 = checkRequirements(userPerformanceRow[6], userPerformanceRow[8]);
-            const week2 = checkRequirements(userPerformanceRow[12], userPerformanceRow[14]);
-            const week3 = checkRequirements(userPerformanceRow[18], userPerformanceRow[20]);
-
-            const generateRequirementMessage = (weekLabel, weekData) => {
-                let message = `**${weekLabel}:**\n` +
-                    `${postsLabel}: \`${weekData.posts}\` | ${likesLabel}: \`${weekData.likes}\`\n`;
-                if (!weekData.metPosts || !weekData.metLikes) {
-                    message += '**Missing:** ';
-                    const missing = [];
-                    if (!weekData.metPosts) missing.push(`Need ≥ ${requirements.posts} ${postsLabel}`);
-                    if (!weekData.metLikes) missing.push(`Need ≥ ${requirements.likes} ${likesLabel}`);
-                    message += missing.join('; ');
-                    message += '\n';
+            const fmt = (label, w) => {
+                let m = `**${label}:**\nVideos: \`${w.posts}\` | Avg Views/Likes: \`${w.likes}\` | Avg Quality: \`${w.quality}\`\n`
+                if (!w.metP || !w.metL) {
+                    const miss = []
+                    if (!w.metP) miss.push(`Need ≥ ${req.posts} videos`)
+                    if (!w.metL) miss.push(`Need ≥ ${req.likes} avg views/likes`)
+                    m += '**Missing:** ' + miss.join('; ') + '\n'
                 } else {
-                    message += '**Requirements Met** ✅\n';
+                    m += '**Requirements Met** ✅\n'
                 }
-                return message;
-            };
+                return m
+            }
 
             const embed = new EmbedBuilder()
                 .setTitle('📊 Your YouTube 3-Week Stats')
                 .setColor('#FF0000')
                 .setDescription(
-                    `**Subscribers:** ${subscribersStr}\n\n` +
-                    generateRequirementMessage('3 weeks ago', week1) + '\n' +
-                    generateRequirementMessage('2 weeks ago', week2) + '\n' +
-                    generateRequirementMessage('Last week', week3)
+                    `**Subscribers:** ${followers}\n\n` +
+                    fmt('3 weeks ago', week1) + '\n' +
+                    fmt('2 weeks ago', week2) + '\n' +
+                    fmt('Last week', week3)
                 )
                 .setTimestamp()
-                .setFooter({ text: 'YouTube CC Requirements Check' });
+                .setFooter({ text: 'YouTube CC Requirements Check' })
 
-            await interaction.editReply({ embeds: [embed], ephemeral: false });
-            console.log(`[${commandName}] Successfully sent stats embed to user ${userId}.`);
-
-        } catch (error) {
-            console.error(`[${commandName}] Error executing command for user ${interaction.user.tag}:`, error);
-            try {
-                if (!interaction.replied && !interaction.deferred) {
-                    await interaction.reply({ content: 'An unexpected error occurred while processing your request.', ephemeral: true });
-                } else {
-                    await interaction.editReply({ content: 'An unexpected error occurred while processing your request.', ephemeral: true });
-                }
-            } catch (followUpError) {
-                console.error(`[${commandName}] Error sending error message to user:`, followUpError);
+            await interaction.editReply({ embeds: [embed], ephemeral: false })
+        } catch {
+            if (!interaction.replied && !interaction.deferred) {
+                await interaction.reply({ content: 'An unexpected error occurred while processing your request.', ephemeral: true })
+            } else {
+                await interaction.editReply({ content: 'An unexpected error occurred while processing your request.', ephemeral: true })
             }
         }
-    },
-};
+    }
+}
