@@ -1,6 +1,5 @@
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
-const axios = require('axios');
 require('dotenv').config({ path: './resources/.env' });
 
 const client = new Client({
@@ -98,29 +97,6 @@ if (!token) {
 
 client.login(token).then(() => {
     console.log('Bot logged in successfully.')
-
-    axios.get('http://localhost:3000/api-response-time')
-        .then(response => {
-            let responseTime;
-            if (typeof response.data === 'string') {
-                console.log('API Server is up. Full response:', response.data);
-                const match = response.data.match(/Response Time: (\d+\.\d+) ms/);
-                if (match) {
-                    responseTime = match[1];
-                }
-            } else if (response.data && response.data.responseTime) {
-                console.log('API Server is up. Full response:', response.data);
-                responseTime = response.data.responseTime;
-            }
-            if (responseTime !== undefined) {
-                console.log('API Server is up. Response time:', responseTime);
-            } else {
-                console.log('API Server is up. Response time is not available in the expected format.');
-            }
-        })
-        .catch(error => {
-            console.error('Could not connect to the API Server:', error.message);
-        });
 }).catch(error => {
     console.error('Failed to login:', error);
     process.exit(1);

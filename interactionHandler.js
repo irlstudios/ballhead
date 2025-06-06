@@ -1,7 +1,7 @@
 'use strict';
 require('dotenv').config({ path: './resources/.env' });
 const logCommandUsage = require('./API/command-data');
-const axios = require('axios');
+const { fetchInviteById, updateInviteStatus, deleteInvite, fetchSquadApplicationByMessageUrl, deleteSquadApplicationById } = require('./db');
 const credentials = require('./resources/secret.json');
 
 const { ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection } = require('discord.js');
@@ -613,11 +613,11 @@ const handleInviteButton = async (interaction, action) => {
 
         let inviteData;
         try {
-            const response = await axios.get(`http://localhost:3000/api/invite/${interaction.message.id}`);
-            inviteData = response.data;
+            inviteData = await fetchInviteById(interaction.message.id)
+            if (!inviteData) throw new Error('404')
         } catch (apiError) {
-            if (apiError.response?.status === 404) { await interaction.editReply({ content: 'This invite seems to have expired or is invalid.' }); }
-            else { console.error('Error fetching invite data from API:', apiError.message); await interaction.editReply({ content: 'Could not verify the invite status.' }); }
+            if (apiError.message === '404') { await interaction.editReply({ content: 'This invite seems to have expired or is invalid.' }) }
+            else { console.error('Error fetching invite data:', apiError.message); await interaction.editReply({ content: 'Could not verify the invite status.' }) }
             return;
         }
         if (!inviteData) { await interaction.editReply({ content: 'The invite is no longer available.' }); return; }
@@ -675,7 +675,7 @@ const handleInviteButton = async (interaction, action) => {
             if (currentMemberCount >= max_members_local) {
                 await interaction.editReply({ content: `Cannot accept: Squad **${squadName}** is full (${currentMemberCount}/${max_members_local}).`, ephemeral: true });
                 if (trackingMessage) await trackingMessage.edit(`Invite from <@${commandUserID}> to <@${invitedMemberId}> for squad **${squadName}** failed: Squad Full.`).catch(console.error);
-                try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Squad Full' }); } catch (apiError) { console.error("API Error updating invite status to 'Squad Full':", apiError.message); }
+                try { await updateInviteStatus(interaction.message.id, 'Squad Full') } catch (apiError) { console.error("API Error updating invite status to 'Squad Full':", apiError.message) }
                 const components = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
                     new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger).setDisabled(true)
@@ -687,7 +687,7 @@ const handleInviteButton = async (interaction, action) => {
 
             await interaction.editReply({ content: `You have accepted the invite to join **${squadName}** (${squadType})!` });
             if (trackingMessage) await trackingMessage.edit(`<@${member.id}> accepted invite from <@${commandUserID}> to join **${squadName}** (${squadType}).`).catch(console.error);
-            try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Accepted' }); } catch (apiError) { console.error("API Error updating invite status to 'Accepted':", apiError.message); }
+            try { await updateInviteStatus(interaction.message.id, 'Accepted') } catch (apiError) { console.error("API Error updating invite status to 'Accepted':", apiError.message) }
 
             let userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > AD_ID && row[AD_ID] === invitedMemberId);
             const defaultEventSquad = 'N/A'; const defaultOpenSquad = 'FALSE'; const defaultIsLeader = 'No'; let existingPreference = 'TRUE';
@@ -734,12 +734,12 @@ const handleInviteButton = async (interaction, action) => {
             const dmEmbed = new EmbedBuilder().setTitle('Invite Accepted').setDescription(inviterDmDescription).setColor(0x00ff00);
             await commandUser.send({ embeds: [dmEmbed] }).catch(err => { console.log(`Failed to DM command user ${commandUserID}: ${err.message}`); });
 
-            try { await axios.delete(`http://localhost:3000/api/invite/${interaction.message.id}`); } catch (apiError) { console.error("API Error deleting invite:", apiError.message); }
+            try { await deleteInvite(interaction.message.id) } catch (apiError) { console.error("API Error deleting invite:", apiError.message) }
 
         } else if (action === 'reject') {
             await interaction.editReply({ content: 'You have rejected the invite.', ephemeral: true });
             if (trackingMessage) await trackingMessage.edit(`<@${invitedMemberId}> rejected invite from <@${commandUserID}> for **${squadName}**.`).catch(console.error);
-            try { await axios.put(`http://localhost:3000/api/invite/${interaction.message.id}/status`, { invite_status: 'Rejected' }); } catch (apiError) { console.error("API Error updating status to 'Rejected':", apiError.message); }
+            try { await updateInviteStatus(interaction.message.id, 'Rejected') } catch (apiError) { console.error("API Error updating status to 'Rejected':", apiError.message) }
             const rejectionEmbed = new EmbedBuilder(inviteMessage.embeds[0]?.data || {}).setTitle('Invite Rejected').setDescription(`Invite rejected by ${interaction.user.username}.`).setColor(0xff0000);
             const rejectedComponents = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
@@ -748,7 +748,7 @@ const handleInviteButton = async (interaction, action) => {
             await inviteMessage.edit({ embeds: [rejectionEmbed], components: [rejectedComponents] }).catch(console.error);
             const dmEmbed = new EmbedBuilder().setTitle('Invite Rejected').setDescription(`Your invite to **${interaction.user.username}** for **${squadName}** was rejected.`).setColor(0xff0000);
             await commandUser.send({ embeds: [dmEmbed] }).catch(err => { console.log(`Failed to DM command user about rejection: ${err.message}`); });
-            try { await axios.delete(`http://localhost:3000/api/invite/${interaction.message.id}`); } catch (apiError) { console.error("API Error deleting rejected invite:", apiError.message); }
+            try { await deleteInvite(interaction.message.id) } catch (apiError) { console.error("API Error deleting rejected invite:", apiError.message) }
         } else {
             await interaction.editReply({ content: 'Unknown action specified.', ephemeral: true });
         }
@@ -774,9 +774,7 @@ const handleApplicationButton = async (interaction, action, client) => {
 
         let applicationData;
         try {
-            const applicationResponse = await axios.get(`http://localhost:3000/api/squad-application?url=${encodeURIComponent(messageUrl)}`);
-            const applications = applicationResponse.data;
-            applicationData = Array.isArray(applications) ? applications.find(app => app.message_url === messageUrl) : applications;
+            applicationData = await fetchSquadApplicationByMessageUrl(messageUrl);
 
             if (!applicationData) {
                 throw new Error(`No application data found in API for URL: ${messageUrl}`);
@@ -794,7 +792,7 @@ const handleApplicationButton = async (interaction, action, client) => {
             }
 
         } catch (apiError) {
-            console.error('Error fetching or parsing application data from API:', apiError);
+            console.error('Error fetching or parsing application data:', apiError);
             await interaction.editReply({ content: 'Could not retrieve application details. It might have expired or there was an API error.', ephemeral: true });
             return;
         }
@@ -1052,11 +1050,12 @@ const updateApplicationStatus = async (sheets, applicationMessageUrl, status, me
 
 const deleteApplicationDataByMessageUrl = async (applicationMessageUrl) => {
     try {
-        const response = await axios.delete(`http://localhost:3000/api/squad-application?url=${encodeURIComponent(applicationMessageUrl)}`);
-        console.log('Application data successfully deleted from API:', response.data);
-        return response.data;
+        const app = await fetchSquadApplicationByMessageUrl(applicationMessageUrl)
+        if (!app) return null
+        const result = await deleteSquadApplicationById(app.id)
+        return result
     } catch (error) {
-        console.error('Error deleting application data from API:', error.message);
+        console.error('Error deleting application data:', error.message);
         return null;
     }
 };
@@ -1694,7 +1693,7 @@ const handleLfgSystem1ViewParticipants = async (interaction) => {
 
 const handleApplyBaseLeagueModal = async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
-    
+
     const leagueName = interaction.fields.getTextInputValue('league-name');
     const discordInvite = interaction.fields.getTextInputValue('discord-invite');
 
@@ -1805,9 +1804,9 @@ const handleApplyBaseLeagueModal = async (interaction) => {
         }
 
         await pgClient.query(
-            `INSERT INTO "Active Leagues" 
-            (owner_id, owner_discord_name, league_name, server_name, server_id, member_count, server_owner_id, league_type, league_status, approval_date, is_sponsored, league_invite, server_icon, server_banner, vanity_url, server_description, server_features, owner_profile_picture) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, 'Base', 'Active', NOW(), false, $8, $9, $10, $11, $12, $13, $14)`,
+            `INSERT INTO "Active Leagues"
+             (owner_id, owner_discord_name, league_name, server_name, server_id, member_count, server_owner_id, league_type, league_status, approval_date, is_sponsored, league_invite, server_icon, server_banner, vanity_url, server_description, server_features, owner_profile_picture)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, 'Base', 'Active', NOW(), false, $8, $9, $10, $11, $12, $13, $14)`,
             [
                 user.id,
                 user.username,
@@ -1941,19 +1940,19 @@ const handleApproveLeague = async (interaction) => {
 
         if (leagueRes.rows.length > 0) {
             await pgClient.query(
-                `UPDATE "Active Leagues" SET 
-                league_type = $1, 
-                approval_date = NOW(), 
-                server_id = $2, 
-                server_name = $3, 
-                member_count = $4, 
-                server_icon = $5, 
-                server_banner = $6, 
-                vanity_url = $7, 
-                server_description = $8, 
-                server_features = $9, 
-                owner_profile_picture = $10
-                WHERE owner_id = $11 AND league_name = $12`,
+                `UPDATE "Active Leagues" SET
+                                             league_type = $1,
+                                             approval_date = NOW(),
+                                             server_id = $2,
+                                             server_name = $3,
+                                             member_count = $4,
+                                             server_icon = $5,
+                                             server_banner = $6,
+                                             vanity_url = $7,
+                                             server_description = $8,
+                                             server_features = $9,
+                                             owner_profile_picture = $10
+                 WHERE owner_id = $11 AND league_name = $12`,
                 [
                     application.applied_league_level,
                     serverData.serverId,
@@ -1972,9 +1971,9 @@ const handleApproveLeague = async (interaction) => {
             console.log('Updated existing league with new data.');
         } else {
             await pgClient.query(
-                `INSERT INTO "Active Leagues" 
-                (owner_id, owner_discord_name, league_name, league_type, league_status, approval_date, is_sponsored, league_invite, server_id, server_name, member_count, server_icon, server_banner, vanity_url, server_description, server_features, owner_profile_picture) 
-                VALUES ($1, $2, $3, $4, 'Active', NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+                `INSERT INTO "Active Leagues"
+                 (owner_id, owner_discord_name, league_name, league_type, league_status, approval_date, is_sponsored, league_invite, server_id, server_name, member_count, server_icon, server_banner, vanity_url, server_description, server_features, owner_profile_picture)
+                 VALUES ($1, $2, $3, $4, 'Active', NOW(), $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
                 [
 
                     application.applicant_discord_name,

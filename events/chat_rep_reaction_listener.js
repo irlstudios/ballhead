@@ -1,5 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
-const axios = require('axios');
+const { updateUserReputation } = require('../db');
 
 module.exports = {
     name: 'messageReactionAdd',
@@ -33,9 +33,7 @@ module.exports = {
         const messageContent = reaction.message.content || '*No content*';
 
         try {
-            await axios.post('http://localhost:3000/api/reputation', {
-                user_id: messageAuthor.id,
-            });
+            await updateUserReputation(messageAuthor.id)
 
             const dmEmbed = new EmbedBuilder()
                 .setColor(0x00ff00)
@@ -64,7 +62,7 @@ module.exports = {
                 await repChannel.send({ embeds: [embed] });
             }
         } catch (error) {
-            console.error('Error updating reputation via API:', error);
+            console.error('Error updating reputation:', error);
         }
     },
 };

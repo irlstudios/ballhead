@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { google } = require('googleapis');
-const axios = require('axios');
+const { insertInvite, fetchInviteById, deleteInvite } = require('../db');
 const credentials = require('../resources/secret.json');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
@@ -173,17 +173,16 @@ module.exports = {
                     tracking_message_id: trackingMessage ? trackingMessage.id : null,
                     squad_type: finalSquadType,
                     invite_status: 'Pending'
-                };
-                await axios.post('http://localhost:3000/api/invite', postData);
-                console.log(`Posted invite data to local API for DM ${inviteMessage.id}`);
+                }
+                await insertInvite(postData.command_user_id, postData.invited_member_id, postData.squad_name, postData.message_id, postData.tracking_message_id, postData.squad_type)
+                console.log(`Posted invite data for DM ${inviteMessage.id}`)
             } catch (apiError) {
-                console.error(`Failed to post invite data to local API: ${apiError.message}`);
+                console.error(`Failed to post invite data: ${apiError.message}`)
             }
 
             setTimeout(async () => {
                 try {
-                    const response = await axios.get(`http://localhost:3000/api/invite/${inviteMessage.id}`);
-                    const currentInviteData = response.data;
+                    const currentInviteData = await fetchInviteById(inviteMessage.id)
                     if (currentInviteData && currentInviteData.invite_status === 'Pending') {
                         console.log(`Invite ${inviteMessage.id} expired.`);
                         const expiredEmbed = new EmbedBuilder(inviteMessage.embeds[0]?.data || {}) /* ... modify embed ... */
@@ -193,10 +192,10 @@ module.exports = {
                         if (trackingMessage) {
                             await trackingMessage.edit(`❌ Invite Expired: Invite from **${commandUserTag}** (<@${commandUserID}>) to **${targetUserTag}** (<@${targetUserId}>) for squad **${squadName}**.`).catch(editErr => console.warn(`Could not edit expired tracking message ${trackingMessage.id}: ${editErr.message}`));
                         }
-                        await axios.delete(`http://localhost:3000/api/invite/${inviteMessage.id}`);
+                        await deleteInvite(inviteMessage.id)
                     }
                 } catch (error) {
-                    if (error.response && error.response.status === 404) { console.log(`Invite ${inviteMessage.id} likely already processed or deleted before expiry.`); }
+                    if (error.message && error.message.includes('404')) { console.log(`Invite ${inviteMessage.id} likely already processed or deleted before expiry.`); }
                     else { console.error(`Error during invite expiry check for ${inviteMessage.id}:`, error.message); }
                 }
             }, INVITE_EXPIRY_MS);
