@@ -60,7 +60,7 @@ module.exports = {
   name: 'ready',
   execute (client) {
     schedule(
-        '* * * * *',
+        '0 0 * * 2',
         async () => {
           await updateRoles(client)
         },
