@@ -89,15 +89,3 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-const token = process.env.TOKEN;
-if (!token) {
-    console.error('Bot token is missing. Please add your bot token to the .env file.');
-    process.exit(1);
-}
-
-client.login(token).then(() => {
-    console.log('Bot logged in successfully.')
-}).catch(error => {
-    console.error('Failed to login:', error);
-    process.exit(1);
-});
