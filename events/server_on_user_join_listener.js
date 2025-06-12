@@ -55,8 +55,8 @@ if (!global.onboardingReminderLoopStarted) {
         try {
             const { rows } = await pool.query(
                 `DELETE FROM onboarding_reminders
-         WHERE send_at <= NOW() AND sent = false
-         RETURNING user_id, reminder_key`
+                 WHERE send_at <= NOW() AND sent = false
+                 RETURNING user_id, reminder_key`
             );
 
             for (const ticket of rows) {
