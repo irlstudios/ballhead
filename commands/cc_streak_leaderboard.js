@@ -142,7 +142,7 @@ module.exports = {
                 .setColor('#0099ff')
                 .setImage('attachment://cc-leaderboard.png')
                 .setTimestamp()
-                .setFooter({text: 'Active CC Streaks', iconURL: 'https://ballhead.app/Assets/logo.png'});
+                .setFooter({text: 'Active CC Streaks', iconURL: 'https://cdn.ballhead.app/web_assets/logo.png'});
 
             await interaction.editReply({embeds: [leaderboardEmbed], files: [attachment]});
 

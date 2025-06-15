@@ -73,7 +73,7 @@ module.exports = {
             await browser.close();
         } catch (error) {
             console.error('Error checking TikTok account:', error);
-            return interaction.editReply({content: 'Error checking TikTok account. Please try again later. Or try applying here : https://ballhead.app/applications/gym-class/content-creators/content-creator-application-login'});
+            return interaction.editReply({content: 'Error checking TikTok account. Please try again later. Or try applying here : https://ballhead.app/apply'});
         }
 
         if (!accountExists) {
