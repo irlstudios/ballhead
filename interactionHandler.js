@@ -9,6 +9,7 @@ const { google } = require('googleapis');
 const { createModal } = require('./modals/modalFactory');
 const { Client } = require('pg');
 const BALLHEAD_GUILD_ID = '1233740086839869501';
+const axios = require('axios');
 
 const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
 const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
