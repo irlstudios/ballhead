@@ -10,6 +10,7 @@ const clientConfig = {
 };
 
 const pool = new Pool(clientConfig);
+const ONBOARDING_WINDOW_HOURS = 48;
 let botClient = null;
 module.exports = {
     name: Events.GuildMemberUpdate,
@@ -18,6 +19,14 @@ module.exports = {
         const nowCompleted = newMember.flags.has(GuildMemberFlagsBitField.Flags.CompletedOnboarding);
 
         if (!previouslyCompleted && nowCompleted) {
+            const joinedWithinWindow = (Date.now() - newMember.joinedTimestamp) <= ONBOARDING_WINDOW_HOURS * 3600000;
+            if (!joinedWithinWindow) return;
+            const { rowCount: alreadyOnboarded } = await pool.query(
+                'SELECT 1 FROM onboarding_reminders WHERE user_id = $1 AND reminder_key = $2 LIMIT 1',
+                [newMember.id, 'hour_1']
+            );
+            if (alreadyOnboarded > 0) return;
+
             const member = newMember;
             if (!botClient) botClient = member.client;
 
@@ -37,7 +46,7 @@ module.exports = {
             try {
                 await member.send({ embeds: [welcomeEmbed] });
                 await pool.query(
-                    'INSERT INTO onboarding_reminders (user_id, reminder_key, send_at, sent) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\', false)',
+                    'INSERT INTO onboarding_reminders (user_id, reminder_key, send_at, sent) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\', false) ON CONFLICT (user_id, reminder_key) DO NOTHING',
                     [member.id, 'hour_1']
                 ).catch(console.error);
             } catch (error) {
