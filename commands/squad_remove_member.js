@@ -73,8 +73,8 @@ module.exports = {
             return;
         }
 
-        const client = await authorize().getClient();
-        const sheets = google.sheets({ version: 'v4', auth: client });
+        const client = authorize;
+        const sheets = google.sheets({ version: 'v4', auth: client() });
 
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
