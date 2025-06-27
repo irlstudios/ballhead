@@ -73,7 +73,7 @@ module.exports = {
             return;
         }
 
-        const client = await authorize.getClient();
+        const client = await authorize().getClient();
         const sheets = google.sheets({ version: 'v4', auth: client });
 
         try {
