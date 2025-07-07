@@ -64,9 +64,9 @@ module.exports = {
 
     if (!userRow) {
       if (user.id === interaction.user.id) {
-        return interaction.editReply({ content: `You haven't signed up yet. Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7`, ephemeral: true });
+        return interaction.editReply({ content: `You haven't signed up yet. Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7`, flags: 64 });
       } else {
-        return interaction.editReply({ content: `${user.username} hasn't signed up yet.`, ephemeral: true });
+        return interaction.editReply({ content: `${user.username} hasn't signed up yet.`, flags: 64 });
       }
     }
 
