@@ -26,7 +26,7 @@ module.exports = {
         .setDescription('The user to look up')
         .setRequired(false)),
   async execute(interaction) {
-    await interaction.deferReply();
+    await interaction.deferReply({flags: 64});
 
     const user = interaction.options.getUser('user') || interaction.user;
     const discordId = user.id;
