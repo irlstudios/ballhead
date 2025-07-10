@@ -337,7 +337,6 @@ module.exports = {
                 .setTitle('HOME RUN DERBY WEEKLY LEADERBOARD')
                 .setColor('#FFD700')
                 .setImage('attachment://hrd_leaderboard.png')
-                .setFooter({ text: 'Updated weekly • Keep swinging for the fences!' })
                 .setTimestamp();
             await interaction.editReply({ embeds: [embed], files: [attachment] });
         } catch (error) {
