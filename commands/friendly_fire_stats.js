@@ -63,6 +63,20 @@ module.exports = {
     const userRow = dataRows.find(row => row[discordIdIndex] === discordId);
 
     if (!userRow) {
+      // Check the "Discord IDs" tab for pending signups
+      const idSheet = await sheets.spreadsheets.values.get({
+        spreadsheetId: sheetId,
+        range: `'Discord IDs'!A:C`,
+      });
+      const idRows = idSheet.data.values || [];
+      const idIndex = 1;
+      const pendingEntry = idRows.find(row => row[idIndex] === discordId);
+      if (pendingEntry) {
+        return interaction.editReply({
+          content: `Your stats haven't been paired with your discord id yet, but we have received your sign up submission`,
+          flags: 64,
+        });
+      }
       if (user.id === interaction.user.id) {
         return interaction.editReply({ content: `You haven't signed up yet. Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7`, flags: 64 });
       } else {
