@@ -79,7 +79,7 @@ module.exports = {
   name: 'ready',
   execute (client) {
     schedule(
-      '* * * * *',
+      '0 0 * * 2',
       async () => {
         console.log('Running rank task')
         const { changes, invalidIds } = await updateRoles(client)
