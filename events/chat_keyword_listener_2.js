@@ -1,57 +1,11 @@
-// todo, need to integrate this in with the dashboard, or find a better way to do this so we dont have to hard code
-// post links and phrases.
-
 let lastNotificationTime = 0;
-const postLinks = [
-    'https://discord.com/channels/752216589792706621/1280594012696215664',
-    'https://discord.com/channels/752216589792706621/1280621561887592600',
-    'https://discord.com/channels/752216589792706621/1280589466939162664',
-    'https://discord.com/channels/752216589792706621/1280583913726545955',
-    'https://discord.com/channels/752216589792706621/1234430326105706546',
-    'https://discord.com/channels/752216589792706621/1263589687344365649',
-    'https://discord.com/channels/752216589792706621/1277999380527317108',
-    'https://discord.com/channels/752216589792706621/1280477803179016274',
-    'https://discord.com/channels/752216589792706621/1280316866098888794',
-    'https://discord.com/channels/752216589792706621/1219141502014455989',
-    'https://discord.com/channels/752216589792706621/1280291437518389310',
-    'https://discord.com/channels/752216589792706621/1209818581978718239',
-    'https://discord.com/channels/752216589792706621/1279876509057945671',
-    'https://discord.com/channels/752216589792706621/1195121259369988126',
-    'https://discord.com/channels/752216589792706621/1223775800256495706',
-    'https://discord.com/channels/752216589792706621/1234244813088358460',
-    'https://discord.com/channels/752216589792706621/1237415036192952384',
-    'https://discord.com/channels/752216589792706621/1164000716642332692',
-    'https://discord.com/channels/752216589792706621/1279575926849536093',
-    'https://discord.com/channels/752216589792706621/1273056720381280327',
-    'https://discord.com/channels/752216589792706621/1277909298995007519',
-    'https://discord.com/channels/752216589792706621/1279152380927279195',
-    'https://discord.com/channels/752216589792706621/1278895692063969363',
-    'https://discord.com/channels/752216589792706621/1277784086035038208',
-    'https://discord.com/channels/752216589792706621/1278500092998975610',
-    'https://discord.com/channels/752216589792706621/1161755582743728178',
-    'https://discord.com/channels/752216589792706621/1190582173825245194',
-    'https://discord.com/channels/752216589792706621/1233677513109278782',
-    'https://discord.com/channels/752216589792706621/1278778062380470474',
-    'https://discord.com/channels/752216589792706621/1271576764094615693',
-    'https://discord.com/channels/752216589792706621/1276809361582194739',
-    'https://discord.com/channels/752216589792706621/1277100056763306024',
-    'https://discord.com/channels/752216589792706621/1228745028134895646',
-    'https://discord.com/channels/752216589792706621/1277029380249489600',
-    'https://discord.com/channels/752216589792706621/1276933359687303279',
-    'https://discord.com/channels/752216589792706621/1276817899436376104',
-    'https://discord.com/channels/752216589792706621/1276626174470258761',
-    'https://discord.com/channels/752216589792706621/1275901878953181205',
-    'https://discord.com/channels/752216589792706621/1280269688709976136',
-    'https://discord.com/channels/752216589792706621/1150931927688298547',
-    'https://discord.com/channels/752216589792706621/1276237328980901938',
-    'https://discord.com/channels/752216589792706621/1210986902321242212',
-    'https://discord.com/channels/752216589792706621/1275590399611900015',
-    'https://discord.com/channels/752216589792706621/1275961665032032307',
-    'https://discord.com/channels/752216589792706621/1274484980743147581',
-    'https://discord.com/channels/752216589792706621/1273162360143745056',
-    'https://discord.com/channels/752216589792706621/1272720476862419006',
-    'https://discord.com/channels/752216589792706621/1272695065780686869'
-];
+const forumChannelId = '1149459026304827442';
+let forumChannel;
+let guildId;
+let threadsCache = [];
+let threadsCacheTimestamp = 0;
+const cacheDuration = 600000;
+const threadsLimit = 20;
 
 const randomPostMessages = [
     "Would you buy this??",
@@ -705,11 +659,41 @@ const randomPostMessages = [
     "Any concerns about its potential for collaboration?"
 ];
 
+async function getRandomForumPostLink(client) {
+    if (!forumChannel) {
+        forumChannel = await client.channels.fetch(forumChannelId);
+        guildId = forumChannel.guild.id;
+    }
+    const now = Date.now();
+    if (now - threadsCacheTimestamp > cacheDuration || !threadsCache.length) {
+        const [activeThreads, archivedThreads] = await Promise.all([
+            forumChannel.threads.fetchActive(),
+            forumChannel.threads.fetchArchived()
+        ]);
+        threadsCache = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
+        if (threadsCache.length > threadsLimit) {
+            for (let i = threadsCache.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [threadsCache[i], threadsCache[j]] = [threadsCache[j], threadsCache[i]];
+            }
+            threadsCache = threadsCache.slice(0, threadsLimit);
+        }
+        threadsCacheTimestamp = now;
+    }
+    if (!threadsCache.length) {
+        return null;
+    }
+    const randomThread = threadsCache[Math.floor(Math.random() * threadsCache.length)];
+    return `https://discord.com/channels/${guildId}/${randomThread.id}`;
+}
+
 module.exports = {
     name: 'messageCreate',
     once: false,
     async execute(message, client) {
         const deadChatPhrases = [
+            'this chat is dead',
+            'this chat is so dead',
             'Chats dead',
             'This chat is dead',
             'why is chat so dead',
@@ -784,8 +768,10 @@ module.exports = {
 
         if (deadChatPhrases.some(phrase => message.content.toLowerCase().includes(phrase)) && !message.author.bot) {
             try {
-                const randomPostIndex = Math.floor(Math.random() * postLinks.length);
-                const randomPostLink = postLinks[randomPostIndex];
+                const randomPostLink = await getRandomForumPostLink(client);
+                if (!randomPostLink) {
+                    return;
+                }
                 const randomMessageIndex = Math.floor(Math.random() * randomPostMessages.length);
                 const randomPostMessage = randomPostMessages[randomMessageIndex];
 
