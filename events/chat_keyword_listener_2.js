@@ -672,17 +672,29 @@ async function getRandomForumPostLink(client) {
             forumChannel.threads.fetchArchived()
         ]);
         const mergedThreads = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
-        const sample = mergedThreads.slice(0, sampleSize);
+        const oneWeekMs   = 7  * 24 * 60 * 60 * 1000;
+        const fourWeeksMs = 28 * 24 * 60 * 60 * 1000;
+
+        // keep only threads 1‑4 weeks old
+        const filtered = mergedThreads.filter(t => {
+            const age = now - t.createdTimestamp;
+            return age >= oneWeekMs && age <= fourWeeksMs;
+        });
+
+        const sample = filtered.slice(0, sampleSize);
+
         const threadData = await Promise.all(sample.map(async t => {
             let reactionsTotal = 0;
             try {
                 const starter = await t.fetchStarterMessage();
                 reactionsTotal = starter ? starter.reactions.cache.reduce((a, r) => a + r.count, 0) : 0;
-            } catch (err) {
-            }
-            const ageHours = (now - t.createdTimestamp) / 3600000;
-            const recencyWeight = 1 / (ageHours + 1);
-            const weight = (reactionsTotal + 1) * recencyWeight;
+            } catch (_) {}
+
+            const ageDays       = (now - t.createdTimestamp) / 86400000;           // 7 – 28
+            const recencyScore  = 28 - ageDays + 1;                                 // 22 → 1
+            const reactionFactor = reactionsTotal > 0 ? 50 + reactionsTotal : 1;    // big boost if any reactions
+            const weight        = recencyScore * reactionFactor;
+
             return { thread: t, weight };
         }));
         threadData.sort((a, b) => b.weight - a.weight);
@@ -711,7 +723,6 @@ module.exports = {
     once: false,
     async execute(message, client) {
         const deadChatPhrases = [
-            'test',
             'this chat is dead',
             'this chat is so dead',
             'Chats dead',
