@@ -1,5 +1,6 @@
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { Pool } = require('pg');
+const BLACKLIST_USER_IDS = new Set(['1148718250553786452']);
 
 const clientConfig = {
     host: process.env.DB_HOST,
@@ -26,6 +27,16 @@ module.exports = {
         const VC_BLACK_LIST_ID = '1125497495678615582';
         const ADMIN_ID = '781397829808553994';
 
+        if (oldState.channelId !== specificVCID && newState.channelId === specificVCID && BLACKLIST_USER_IDS.has(newState.member.id)) {
+            await newState.setChannel(null);
+            return;
+        }
+
+        if (newState.channelId && client.vcHosts && client.vcHosts.has(newState.channelId) && BLACKLIST_USER_IDS.has(newState.member.id)) {
+            await newState.setChannel(null);
+            return;
+        }
+
         if (oldState.channelId !== specificVCID && newState.channelId === specificVCID) {
             const guild = newState.guild;
             const newChannel = await guild.channels.create({
@@ -34,7 +45,7 @@ module.exports = {
                 parent: newState.channel.parent,
                 permissionOverwrites: [
                     {
-                        id: guild.roles.everyone,
+                        id: guild.roles.everyone.id,
                         allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak],
                         deny: [PermissionFlagsBits.Stream, PermissionFlagsBits.UseEmbeddedActivities, PermissionFlagsBits.SendMessages, PermissionFlagsBits.UseSoundboard, PermissionFlagsBits.UseExternalSounds]
                     },
@@ -71,6 +82,21 @@ module.exports = {
                     }
                 ]
             });
+            for (const id of BLACKLIST_USER_IDS) {
+                const member = await newChannel.guild.members.fetch(id).catch(() => null);
+                if (!member) continue;
+                try {
+                    await newChannel.permissionOverwrites.edit(member, {
+                        Connect: false,
+                        Speak: false,
+                        Stream: false,
+                        UseEmbeddedActivities: false,
+                        SendMessages: false
+                    });
+                } catch (error) {
+                    if (error?.code !== 10003) throw error;
+                }
+            }
 
             await newState.setChannel(newChannel);
             client.vcHosts.set(newChannel.id, newState.member.id);
@@ -80,13 +106,30 @@ module.exports = {
         if (oldState.channelId && oldState.channelId !== newState.channelId) {
             const guild = oldState.guild;
             const channel = guild.channels.cache.get(oldState.channelId);
-            const hostId = client.vcHosts.get(channel.id);
-            if (channel && oldState.member.id === hostId) {
-                await channel.delete();
+            const hostId = channel ? client.vcHosts.get(channel.id) : undefined;
+
+            if (!channel) {
+                if (client.vcHosts.has(oldState.channelId)) {
+                    client.vcHosts.delete(oldState.channelId);
+                    await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [oldState.channelId]);
+                }
+                return;
+            }
+
+            const safeDelete = async (ch) => {
+                try {
+                    await ch.delete();
+                } catch (error) {
+                    if (error?.code !== 10003) throw error;
+                }
+            };
+
+            if (oldState.member.id === hostId) {
+                await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
-            } else if (channel && client.vcHosts.has(channel.id) && channel.members.size === 0) {
-                await channel.delete();
+            } else if (client.vcHosts.has(channel.id) && channel.members.size === 0) {
+                await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
             }

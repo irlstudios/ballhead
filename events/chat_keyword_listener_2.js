@@ -1,7 +1,7 @@
-const axios = require('axios');
+// todo, need to integrate this in with the dashboard, or find a better way to do this so we dont have to hard code
+// post links and phrases.
 
 let lastNotificationTime = 0;
-
 const postLinks = [
     'https://discord.com/channels/752216589792706621/1280594012696215664',
     'https://discord.com/channels/752216589792706621/1280621561887592600',
@@ -802,22 +802,8 @@ module.exports = {
                         await notificationChannel.send(`<@&805833778064130104> <@&909227142808756264> <@&939634611909185646> the **Dead Chat** event listener has been triggered in ${message.channel} feel free to drop in and start a convo with the community!`);
                     }
                 }
-
-                const logData = {
-                    command_name: "ReviveChat",
-                    user_id: message.author.id,
-                    channel_id: message.channelId,
-                    server_id: message.guildId,
-                    timestamp: new Date(),
-                };
-
-                await axios.post('https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/commands', logData)
-                    .catch(err => {
-                        console.error('Failed to send data:', err);
-                    });
-
             } catch (error) {
-                console.error(`Could not send message: ${error}`);
+                // we ignore unless debugging
             }
         }
     }

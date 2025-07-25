@@ -1,13 +1,4 @@
 const axios = require('axios');
-const { pool } = require('pg');
-
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-};  
 
 const lfgPhrases = [
     "I want someone to play",
@@ -144,21 +135,8 @@ module.exports = {
                     const randomPostIndex = Math.floor(Math.random() * lfgPosts.length);
                     const lfgPostLink = lfgPosts[randomPostIndex];
                     await message.channel.send(`Hey <@${message.author.id}>! It looks like someone is currently looking for a group ${lfgPostLink}! Why not hop in and join them?`);
-
-                    const logData = {
-                        command_name: "LFGSuggestion",
-                        user_id: message.author.id,
-                        channel_id: message.channelId,
-                        server_id: message.guildId,
-                        timestamp: new Date(),
-                    };
-
-                    await axios.post('https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/commands', logData)
-                        .catch(err => {
-                            console.error('Failed to send data:', err);
-                        });
                 } else {
-                    console.log("No active LFG posts available, no message sent.");
+                    // we ignore unless debugging
                 }
 
             } catch (error) {

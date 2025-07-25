@@ -1,5 +1,3 @@
-const { insertCommandUsage } = require('../db');
-
 module.exports = {
     name: 'messageCreate',
     once: false,
@@ -18,18 +16,6 @@ module.exports = {
             const response = `Hey ${message.author}, if you're struggling to get likes on your videos, the Developers and the rest of the community can help! Post your video in https://discord.com/channels/752216589792706621/1186758799814570084 and we can give you some feedback on how you can get more likes and make your videos the best they can be.`;
 
             await message.channel.send(response);
-
-            const logData = {
-                command_name: "Channel Promotion",
-                user_id: message.author.id,
-                channel_id: message.channelId,
-                server_id: message.guildId,
-                timestamp: new Date().toISOString()
-            }
-
-            insertCommandUsage(logData.command_name, logData.user_id, logData.channel_id, logData.server_id, logData.timestamp)
-                .then(() => console.log('Logged successfully.'))
-                .catch(err => console.error('Failed to send data:', err))
         }
     }
 };
