@@ -1,11 +1,10 @@
 const { Events } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const { trackMetrics } = require('../API/announcement-reaction-data');
 
 module.exports = {
     name: Events.MessageReactionAdd,
-    async execute(reaction, user, client) {
+    async execute(reaction, user) {
         const channelIDs = ['764593469746315286', '807765316813324319',];
         const roleID = '1284910121004040404';
         const messageAgeLimit = 7 * 24 * 60 * 60 * 1000;
@@ -28,14 +27,7 @@ module.exports = {
 
         try {
             await member.roles.add(role);
-            console.log(`Role ${role.name} assigned to ${member.user.tag} for reacting to a recent message.`);
-
-            await trackMetrics({
-                userID: user.id,
-                channelID: reaction.message.channel.id,
-                messageID: reaction.message.id,
-                timestamp: currentTimestamp,
-            });
+            console.log(`Role ${role.name} assigned to ${member.user.tag} for reacting to a recent message.`);s
 
             const roleRemoveTimeout = setTimeout(async () => {
                 try {

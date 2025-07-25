@@ -6,6 +6,7 @@ let threadsCache = [];
 let threadsCacheTimestamp = 0;
 const cacheDuration = 600000;
 const threadsLimit = 20;
+const sampleSize = 100;
 
 const randomPostMessages = [
     "Would you buy this??",
@@ -670,21 +671,39 @@ async function getRandomForumPostLink(client) {
             forumChannel.threads.fetchActive(),
             forumChannel.threads.fetchArchived()
         ]);
-        threadsCache = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
-        if (threadsCache.length > threadsLimit) {
-            for (let i = threadsCache.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [threadsCache[i], threadsCache[j]] = [threadsCache[j], threadsCache[i]];
+        const mergedThreads = [...activeThreads.threads.values(), ...archivedThreads.threads.values()];
+        const sample = mergedThreads.slice(0, sampleSize);
+        const threadData = await Promise.all(sample.map(async t => {
+            let reactionsTotal = 0;
+            try {
+                const starter = await t.fetchStarterMessage();
+                reactionsTotal = starter ? starter.reactions.cache.reduce((a, r) => a + r.count, 0) : 0;
+            } catch (err) {
             }
-            threadsCache = threadsCache.slice(0, threadsLimit);
-        }
+            const ageHours = (now - t.createdTimestamp) / 3600000;
+            const recencyWeight = 1 / (ageHours + 1);
+            const weight = (reactionsTotal + 1) * recencyWeight;
+            return { thread: t, weight };
+        }));
+        threadData.sort((a, b) => b.weight - a.weight);
+        threadsCache = threadData.slice(0, threadsLimit);
         threadsCacheTimestamp = now;
     }
     if (!threadsCache.length) {
         return null;
     }
-    const randomThread = threadsCache[Math.floor(Math.random() * threadsCache.length)];
-    return `https://discord.com/channels/${guildId}/${randomThread.id}`;
+    const totalWeight = threadsCache.reduce((s, td) => s + td.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let selected = threadsCache[0].thread;
+    for (const td of threadsCache) {
+        if (rand < td.weight) {
+            selected = td.thread;
+            break;
+        }
+        rand -= td.weight;
+    }
+    const link = `https://discord.com/channels/${guildId}/${selected.id}`;
+    return link;
 }
 
 module.exports = {
@@ -692,6 +711,7 @@ module.exports = {
     once: false,
     async execute(message, client) {
         const deadChatPhrases = [
+            'test',
             'this chat is dead',
             'this chat is so dead',
             'Chats dead',
@@ -765,8 +785,7 @@ module.exports = {
             'chat really dead'
         ];
 
-
-        if (deadChatPhrases.some(phrase => message.content.toLowerCase().includes(phrase)) && !message.author.bot) {
+        if (deadChatPhrases.some(phrase => message.content.toLowerCase().includes(phrase.toLowerCase())) && !message.author.bot) {
             try {
                 const randomPostLink = await getRandomForumPostLink(client);
                 if (!randomPostLink) {
@@ -789,7 +808,6 @@ module.exports = {
                     }
                 }
             } catch (error) {
-                // we ignore unless debugging
             }
         }
     }
