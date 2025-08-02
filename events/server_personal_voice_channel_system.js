@@ -1,6 +1,6 @@
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { Pool } = require('pg');
-const BLACKLIST_USER_IDS = new Set(['1148718250553786452','851856330972725270', '1005951742338412626']);
+const BLACKLIST_USER_IDS = new Set(['1148718250553786452']);
 
 const clientConfig = {
     host: process.env.DB_HOST,
