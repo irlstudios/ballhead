@@ -1,5 +1,16 @@
 const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { Pool } = require('pg');
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const retryAction = async (action, check, retries = 3, delayMs = 500) => {
+    for (let i = 0; i < retries; i++) {
+        await action();
+        if (await check()) {
+            return;
+        }
+        await delay(delayMs);
+    }
+    throw new Error('Action failed after retries');
+};
 const BLACKLIST_USER_IDS = new Set(['']);
 
 const clientConfig = {
@@ -98,7 +109,13 @@ module.exports = {
                 }
             }
 
-            await newState.setChannel(newChannel);
+            await retryAction(
+                () => newState.setChannel(newChannel),
+                async () => newState.member.voice.channelId === newChannel.id,
+                3,
+                500
+            );
+            await delay(200);
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query('INSERT INTO vc_hosts(channel_id, host_id) VALUES($1, $2)', [newChannel.id, newState.member.id]);
         }
@@ -118,7 +135,19 @@ module.exports = {
 
             const safeDelete = async (ch) => {
                 try {
-                    await ch.delete();
+                    await retryAction(
+                        () => ch.delete(),
+                        async () => {
+                            try {
+                                await ch.guild.channels.fetch(ch.id);
+                                return false;
+                            } catch {
+                                return true;
+                            }
+                        },
+                        3,
+                        500
+                    );
                 } catch (error) {
                     if (error?.code !== 10003) throw error;
                 }
