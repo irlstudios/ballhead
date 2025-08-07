@@ -11,7 +11,7 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     }
     throw new Error('Action failed after retries');
 };
-const BLACKLIST_USER_IDS = new Set(['1148718250553786452']);
+const BLACKLIST_USER_IDS = new Set(['']);
 
 const clientConfig = {
     host: process.env.DB_HOST,
