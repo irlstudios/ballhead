@@ -97,7 +97,7 @@ module.exports = {
                 const member = await newChannel.guild.members.fetch(id).catch(() => null);
                 if (!member) continue;
                 try {
-                    await newChannel.permissionOverwrites.edit(id, {
+                    await newChannel.permissionOverwrites.edit(member, {
                         Connect: false,
                         Speak: false,
                         Stream: false,
