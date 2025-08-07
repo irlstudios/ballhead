@@ -117,7 +117,13 @@ module.exports = {
             );
             await delay(200);
             client.vcHosts.set(newChannel.id, newState.member.id);
-            await pool.query('INSERT INTO vc_hosts(channel_id, host_id) VALUES($1, $2)', [newChannel.id, newState.member.id]);
+            await pool.query(
+              `INSERT INTO vc_hosts(channel_id, host_id, created_at)
+               VALUES($1, $2, now())
+               ON CONFLICT (channel_id)
+                 DO UPDATE SET host_id = EXCLUDED.host_id, created_at = now()`,
+              [newChannel.id, newState.member.id]
+            );
         }
 
         if (oldState.channelId && oldState.channelId !== newState.channelId) {
