@@ -421,6 +421,9 @@ module.exports = {
                 let deleted = 0;
                 const targets = interaction.guild.channels.cache.filter(ch => ch.parentId === VC_CATEGORY_ID && ch.type === ChannelType.GuildVoice && !IGNORE_CHANNEL_IDS.has(ch.id) && ch.members.size === 0);
                 for (const [, ch] of targets) {
+                    if (!ch.deletable) {
+                        continue;
+                    }
                     await ch.delete();
                     await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [ch.id]);
                     deleted++;
