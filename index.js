@@ -65,16 +65,6 @@ try {
     console.error('Error reading event files:', error);
 }
 
-const reportBugCommand = client.commands.get('report-bug');
-if (reportBugCommand?.data?.options?.[0]) {
-    const commandNames = client.commands.map(cmd => cmd.data.name);
-    const choices = commandNames.slice(0, 24).map(name => ({ name, value: name }));
-    if (commandNames.length > 24) {
-        choices.push({ name: 'other', value: 'other' });
-    }
-    reportBugCommand.data.options[0].choices = choices;
-}
-
 const interactionHandler = require('./interactionHandler');
 client.on('interactionCreate', async (interaction) => {
     try {
