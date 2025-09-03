@@ -21,6 +21,7 @@ const clientConfig = {
     ssl: { rejectUnauthorized: false },
 };
 const pool = new Pool(clientConfig);
+const COOLDOWN_MS = Number(process.env.VC_CREATE_COOLDOWN_SECONDS || '60') * 1000;
 
 module.exports = {
     name: 'voiceStateUpdate',
@@ -31,6 +32,9 @@ module.exports = {
             for (const row of res.rows) {
                 client.vcHosts.set(row.channel_id, row.host_id);
             }
+        }
+        if (!client.vcCooldowns) {
+            client.vcCooldowns = new Map();
         }
 
         const specificVCID = '1321321682891178074';
@@ -49,6 +53,14 @@ module.exports = {
         }
 
         if (oldState.channelId !== specificVCID && newState.channelId === specificVCID) {
+            const now = Date.now();
+            const last = client.vcCooldowns.get(newState.member.id) || 0;
+            if (now - last < COOLDOWN_MS) {
+                const remaining = Math.ceil((COOLDOWN_MS - (now - last)) / 1000);
+                await newState.member.send(`You are on cooldown for creating a voice channel. Please wait ${remaining}s and try again.`).catch(() => {});
+                await newState.setChannel(null);
+                return;
+            }
             const guild = newState.guild;
             const newChannel = await guild.channels.create({
                 name: `${newState.member.displayName}'s Room`,
@@ -116,6 +128,7 @@ module.exports = {
                 500
             );
             await delay(200);
+            client.vcCooldowns.set(newState.member.id, Date.now());
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query(
               `INSERT INTO vc_hosts(channel_id, host_id, created_at)

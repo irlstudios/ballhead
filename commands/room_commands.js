@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
 const { Pool } = require('pg');
 const clientConfig = {
     host: process.env.DB_HOST,
@@ -409,17 +409,23 @@ module.exports = {
                 if (!interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                     return interaction.reply({ content: 'Only moderators can use this command.', ephemeral: true });
                 }
-                const { rows } = await pool.query('SELECT channel_id FROM vc_hosts');
+                const VC_CATEGORY_ID = '752216589792706623';
+                const IGNORE_CHANNEL_IDS = new Set([
+                    '1322247458897793054',
+                    '1321321286299025418',
+                    '1274148177754194054',
+                    '1095472333256405143',
+                    '1321321682891178074',
+                    '1368393500470542449'
+                ]);
                 let deleted = 0;
-                for (const { channel_id } of rows) {
-                    const ch = interaction.guild.channels.cache.get(channel_id);
-                    if (!ch || ch.members.size === 0) {
-                        if (ch) await ch.delete();
-                        await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel_id]);
-                        deleted++;
-                    }
+                const targets = interaction.guild.channels.cache.filter(ch => ch.parentId === VC_CATEGORY_ID && ch.type === ChannelType.GuildVoice && !IGNORE_CHANNEL_IDS.has(ch.id) && ch.members.size === 0);
+                for (const [, ch] of targets) {
+                    await ch.delete();
+                    await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [ch.id]);
+                    deleted++;
                 }
-                return interaction.reply({ content: `Cleanup complete. Deleted ${deleted} orphaned room(s).`, ephemeral: true });
+                return interaction.reply({ content: `Cleanup complete. Deleted ${deleted} empty room(s) in the category.`, ephemeral: true });
             }
         }
     }
