@@ -36,6 +36,9 @@ module.exports = {
         if (!client.vcCooldowns) {
             client.vcCooldowns = new Map();
         }
+        if (!client.vcCreated) {
+            client.vcCreated = new Set();
+        }
 
         const specificVCID = '1321321682891178074';
         const MOD_ROLE_ID = '805833778064130104';
@@ -105,6 +108,7 @@ module.exports = {
                     }
                 ]
             });
+            client.vcCreated.add(newChannel.id);
             for (const id of BLACKLIST_USER_IDS) {
                 const member = await newChannel.guild.members.fetch(id).catch(() => null);
                 if (!member) continue;
@@ -121,13 +125,24 @@ module.exports = {
                 }
             }
 
-            await retryAction(
-                () => newState.setChannel(newChannel),
-                async () => newState.member.voice.channelId === newChannel.id,
-                3,
-                500
-            );
+            try {
+                await retryAction(
+                    () => newState.setChannel(newChannel),
+                    async () => newState.member.voice.channelId === newChannel.id,
+                    3,
+                    500
+                );
+            } catch (e) {
+                await newChannel.delete().catch(() => {});
+                client.vcCreated.delete(newChannel.id);
+                return;
+            }
             await delay(200);
+            if (newState.member.voice.channelId !== newChannel.id) {
+                await newChannel.delete().catch(() => {});
+                client.vcCreated.delete(newChannel.id);
+                return;
+            }
             client.vcCooldowns.set(newState.member.id, Date.now());
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query(
@@ -176,9 +191,11 @@ module.exports = {
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
-            } else if (client.vcHosts.has(channel.id) && channel.members.size === 0) {
+                if (client.vcCreated) client.vcCreated.delete(channel.id);
+            } else if ((client.vcHosts.has(channel.id) || (client.vcCreated && client.vcCreated.has(channel.id))) && channel.members.size === 0) {
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
+                if (client.vcCreated) client.vcCreated.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
             }
         }
