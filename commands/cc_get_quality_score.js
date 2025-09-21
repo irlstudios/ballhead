@@ -21,11 +21,11 @@ async function getSheetData() {
     const sheets = google.sheets({ version: 'v4', auth: authorize() });
     const postsResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: '1Ze84DPzXsdaGAsg_t5MJMbmvGJlF1Q03R-uJ-OdpfU0',
-        range: 'Season 15 Posts',
+        range: 'Season 16 Posts',
     });
     const postsRows = postsResponse.data.values;
     if (!postsRows || postsRows.length === 0) {
-        throw new Error('No data found in Season 15 Posts sheet.');
+        throw new Error('No data found in Season 16 Posts Posts sheet.');
     }
 ``
 
