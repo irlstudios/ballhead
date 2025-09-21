@@ -28,12 +28,12 @@ async function getSheetData() {
 
     const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
-        range: 'Season 13 Posts',
+        range: 'Season 16 Posts',
     });
 
     const data = response.data.values || [];
     if (data.length === 0) {
-        throw new Error('No data found in Season 13 Posts sheet.');
+        throw new Error('No data found in Season 16 Posts sheet.');
     }
 
     const headers = data[0];
