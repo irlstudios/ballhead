@@ -79,11 +79,22 @@ module.exports = {
   name: 'ready',
   execute (client) {
     schedule(
-      '0 0 * * 2',
+      '* * * * *',
       async () => {
         console.log('Running rank task')
-        const { changes, invalidIds } = await updateRoles(client)
-        if (!changes.length && !invalidIds.length) return
+        let result
+        try {
+          result = await updateRoles(client)
+        } catch (e) {
+          console.log('Rank task error during updateRoles()', e)
+          return
+        }
+        const { changes = [], invalidIds = [] } = result || {}
+        if (!changes.length && !invalidIds.length) {
+          console.log('Rank task: no changes detected; no rank updates made')
+          return
+        }
+        console.log(`Rank task: ${changes.length} change(s); ${invalidIds.length} invalid id(s)`)        
         const lines = changes.map(c => `<@${c.id}>, ${EMOJIS[c.old] || ''} --> ${EMOJIS[c.now]}`)
         if (invalidIds.length) {
           lines.push('', 'Invalid Discord IDs:', invalidIds.join(', '))
