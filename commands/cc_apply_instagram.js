@@ -83,15 +83,18 @@ module.exports = {
         }
 
         const sheets = google.sheets({version: 'v4', auth: authorize()});
-        const timestamp = new Date().toLocaleString('en-US', {hour12: true});
+        const pad = (n) => String(n).padStart(2, '0');
+        const now = new Date();
+        const timestamp = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+        const cleanUsername = instagramUsername.replace(/^@+/, '');
         const values = [
-            ['Reels', instagramUsername, interaction.user.id, timestamp]
+            ['Reels', cleanUsername, interaction.user.id, timestamp]
         ];
 
         try {
             await sheets.spreadsheets.values.append({
                 spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
-                range: 'Reels!A:D',
+                range: "'CC Applications'!A:D",
                 valueInputOption: 'RAW',
                 resource: {values}
             });
