@@ -5,3 +5,4 @@ Discord Bot Tokens.txt
 resources/.env
 resources/secret.json
 .DS_Store
+AGENTS.MD
