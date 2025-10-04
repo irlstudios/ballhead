@@ -56,6 +56,8 @@ module.exports = {
         .setDescription('Checks your Instagram application status and 3‑week requirement data.'),
     async execute(interaction) {
         try {
+            await interaction.reply({ content: 'The program is currently undergoing changes and cannot display any data at the moment. Please check back soon.', ephemeral: true })
+            return
             await interaction.deferReply({ ephemeral: true })
             const userId = interaction.user.id
             const userData = await getUserData(userId)

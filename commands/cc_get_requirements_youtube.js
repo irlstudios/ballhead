@@ -55,6 +55,8 @@ module.exports = {
         .setDescription('Checks your YouTube application status and 3-week requirement data.'),
     async execute(interaction) {
         try {
+            await interaction.reply({ content: 'The program is currently undergoing changes and cannot display any data at the moment. Please check back soon.', ephemeral: true })
+            return
             await interaction.deferReply({ ephemeral: true })
             const uid = interaction.user.id
             const info = await getUserData(uid)
