@@ -27,7 +27,7 @@ async function getSheetData() {
     if (!postsRows || postsRows.length === 0) {
         throw new Error('No data found in Season 16 Posts Posts sheet.');
     }
-``
+
 
     const weeksResponse = await sheets.spreadsheets.values.get({
         spreadsheetId: '1Ze84DPzXsdaGAsg_t5MJMbmvGJlF1Q03R-uJ-OdpfU0',
@@ -169,6 +169,8 @@ module.exports = {
 
     async execute(interaction) {
         try {
+            await interaction.reply({ content: 'The program is currently undergoing changes and cannot display any data at the moment. Please check back soon.', ephemeral: true });
+            return;
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const userId = targetUser.id;
             const userName = targetUser.username;
