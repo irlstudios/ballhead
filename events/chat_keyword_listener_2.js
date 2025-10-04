@@ -807,17 +807,6 @@ module.exports = {
 
                 await message.channel.send(`What do you think about this post?: ${randomPostLink} ${randomPostMessage}`);
 
-                const currentTime = Date.now();
-                const fifteenMinutes = 15 * 60 * 1000;
-
-                if (currentTime - lastNotificationTime > fifteenMinutes) {
-                    lastNotificationTime = currentTime;
-
-                    const notificationChannel = client.channels.cache.get('1275560125322498069');
-                    if (notificationChannel) {
-                        await notificationChannel.send(`<@&805833778064130104> <@&909227142808756264> <@&939634611909185646> the **Dead Chat** event listener has been triggered in ${message.channel} feel free to drop in and start a convo with the community!`);
-                    }
-                }
             } catch (error) {
             }
         }
