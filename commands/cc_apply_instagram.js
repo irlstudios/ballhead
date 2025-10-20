@@ -85,7 +85,8 @@ module.exports = {
         const sheets = google.sheets({version: 'v4', auth: authorize()});
         const pad = (n) => String(n).padStart(2, '0');
         const now = new Date();
-        const timestamp = `${now.getUTCFullYear()}-${pad(now.getUTCMonth() + 1)}-${pad(now.getUTCDate())} ${pad(now.getUTCHours())}:${pad(now.getUTCMinutes())}:${pad(now.getUTCSeconds())}`;
+        const yy = String(now.getUTCFullYear()).slice(-2);
+        const timestamp = `${pad(now.getUTCMonth() + 1)}/${pad(now.getUTCDate())}/${yy}`;
         const cleanUsername = instagramUsername.replace(/^@+/, '');
         const values = [
             ['Reels', cleanUsername, interaction.user.id, timestamp]
