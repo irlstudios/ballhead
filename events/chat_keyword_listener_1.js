@@ -1,4 +1,4 @@
-const {ChannelType} = require("discord-api-types/v10");
+const {ChannelType} = require('discord-api-types/v10');
 module.exports = {
     name: 'messageCreate',
     once: false,
@@ -9,11 +9,7 @@ module.exports = {
             if (message.channel.type === ChannelType.DM) return;
             if (message.channel.id === '1397239932833103894') return;
             const randomEmoji = sportsEmojis[Math.floor(Math.random() * sportsEmojis.length)];
-            try {
-                await message.react(randomEmoji);
-            } catch (error) {
-                // we ignore unless debugging.
-            }
+            await message.react(randomEmoji);
         }
     }
 };

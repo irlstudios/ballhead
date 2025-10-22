@@ -132,7 +132,7 @@ module.exports = {
                     3,
                     500
                 );
-            } catch (e) {
+            } catch {
                 await newChannel.delete().catch(() => {});
                 client.vcCreated.delete(newChannel.id);
                 return;
@@ -146,11 +146,11 @@ module.exports = {
             client.vcCooldowns.set(newState.member.id, Date.now());
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query(
-              `INSERT INTO vc_hosts(channel_id, host_id, created_at)
+                `INSERT INTO vc_hosts(channel_id, host_id, created_at)
                VALUES($1, $2, now())
                ON CONFLICT (channel_id)
                  DO UPDATE SET host_id = EXCLUDED.host_id, created_at = now()`,
-              [newChannel.id, newState.member.id]
+                [newChannel.id, newState.member.id]
             );
         }
 

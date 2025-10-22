@@ -27,9 +27,9 @@ module.exports = {
 
         try {
             await member.roles.add(role);
-            console.log(`Role ${role.name} assigned to ${member.user.tag} for reacting to a recent message.`);s
+            console.log(`Role ${role.name} assigned to ${member.user.tag} for reacting to a recent message.`);
 
-            const roleRemoveTimeout = setTimeout(async () => {
+            setTimeout(async () => {
                 try {
                     await member.roles.remove(role);
                     console.log(`Role ${role.name} removed from ${member.user.tag} after 24 hours.`);
