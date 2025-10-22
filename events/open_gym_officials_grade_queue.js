@@ -21,31 +21,25 @@ function authorize() {
 async function fetchUngradedVideoCount() {
     const auth = authorize();
     const sheets = google.sheets({ version: 'v4', auth });
+    const response = await sheets.spreadsheets.values.get({
+        spreadsheetId: SHEET_ID,
+        range: `${SHEET_TAB_NAME}!A:J`,
+    });
 
-    try {
-        const response = await sheets.spreadsheets.values.get({
-            spreadsheetId: SHEET_ID,
-            range: `${SHEET_TAB_NAME}!A:J`,
-        });
+    const rows = response.data.values;
 
-        const rows = response.data.values;
-
-        if (!rows || rows.length === 0) {
-            return 0;
-        }
-
-        const dataRows = rows.slice(1);
-
-        const ungradedVideos = dataRows.filter(row => {
-            const score = row[9]?.trim();
-            return !score || isNaN(Number(score));
-        });
-
-        return ungradedVideos.length;
-    } catch (error) {
-        console.error('Error fetching ungraded video count:', error);
-        throw error;
+    if (!rows || rows.length === 0) {
+        return 0;
     }
+
+    const dataRows = rows.slice(1);
+
+    const ungradedVideos = dataRows.filter(row => {
+        const score = row[9]?.trim();
+        return !score || isNaN(Number(score));
+    });
+
+    return ungradedVideos.length;
 }
 
 async function postUngradedVideoCount(client) {
@@ -64,7 +58,12 @@ async function postUngradedVideoCount(client) {
                 .setColor(0x00FF00)
                 .setTimestamp();
 
-            await channel.send({ embeds: [embed] });
+            await channel.send({embeds: [embed]});
+        }
+
+        if (ungradedCount < 100) {
+            let alert = 'Hey <@&> please ensure to catch up on posts that are missing grades';
+            await channel.send(alert);
         }
     } catch (error) {
         console.error('Error posting ungraded video count:', error);

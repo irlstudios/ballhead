@@ -1,14 +1,14 @@
 module.exports = {
     name: 'messageCreate',
     once: false,
-    async execute(message, client) {
+    async execute(message) {
         if (message.author.bot) return;
 
         const phrases = [
-            "can u like my vid", "can you like my vid", "can you guys like my videos",
-            "can you guys go like", "i need more likes", "i need likes",
-            "can you follow and like", "can you all like", "please like my video",
-            "help me get likes", "support my channel"
+            'can u like my vid', 'can you like my vid', 'can you guys like my videos',
+            'can you guys go like', 'i need more likes', 'i need likes',
+            'can you follow and like', 'can you all like', 'please like my video',
+            'help me get likes', 'support my channel'
         ];
 
         const messageContentLower = message.content.toLowerCase();
