@@ -79,7 +79,7 @@ module.exports = {
   name: 'ready',
   execute (client) {
     schedule(
-      '0 0 * * 2',
+      '0 0 * * 3k',
       async () => {
         console.log('Running rank task')
         let result
