@@ -1,5 +1,6 @@
 const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js');
 const fs = require('fs');
+const path = require('path');
 require('dotenv').config({ path: './resources/.env' });
 
 const client = new Client({
@@ -28,11 +29,22 @@ const client = new Client({
 client.commands = new Collection();
 client.cooldowns = new Collection();
 
+const getCommandFiles = (dir) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries.flatMap((entry) => {
+        const entryPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+            return getCommandFiles(entryPath);
+        }
+        return entry.isFile() && entry.name.endsWith('.js') ? [entryPath] : [];
+    });
+};
+
 try {
-    const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
+    const commandFiles = getCommandFiles(path.join(__dirname, 'commands'));
     for (const file of commandFiles) {
         try {
-            const command = require(`./commands/${file}`);
+            const command = require(file);
             if (!command?.data?.name) {
                 console.error(`Error loading ${file}: 'data' or 'name' property is missing or invalid.`);
                 continue;
@@ -70,9 +82,6 @@ client.on('interactionCreate', async (interaction) => {
     try {
         console.log('[Global Interaction] type:', interaction.type, 'customId:', interaction.customId);
         console.log('[Global Interaction] Button pressed:', interaction.customId);
-        if (['squads_prev','squads_next'].includes(interaction.customId)) {
-            return handlePagination1(interaction.customId, interaction);
-        }
         await interactionHandler(interaction, client);
     } catch (error) {
         console.error('Error handling interaction:', error);
@@ -86,7 +95,7 @@ if (!token) {
 }
 
 client.login(token).then(() => {
-    console.log('Bot logged in successfully.')
+    console.log('Bot logged in successfully.');
 }).catch(error => {
     console.error('Failed to login:', error);
     process.exit(1);

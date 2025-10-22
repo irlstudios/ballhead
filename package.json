@@ -1,7 +1,12 @@
 {
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
   "dependencies": {
     "@discordjs/builders": "^1.9.0",
     "@discordjs/rest": "^2.4.0",
+    "@eslint/js": "^9.38.0",
     "axios": "^1.7.7",
     "canvas": "^2.11.2",
     "discord-api-types": "^0.37.100",
@@ -21,5 +26,8 @@
     "puppeteer": "^23.3.0",
     "undici": "^7.15.0",
     "winston": "^3.15.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.38.0"
   }
 }

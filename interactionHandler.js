@@ -13,14 +13,10 @@ const axios = require('axios');
 
 const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
 const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
-const sheets= google.sheets({ version: 'v4', auth: authorize() });
-const DISCORD_BOT_TOKEN = process.env.TOKEN
-const SEASON_YEAR = 2025
-
-const SQUAD_APPLICATIONS_CHANNEL_ID = '1218466649695457331';
-const GYMCLASSVR_GUILD_ID = '752216589792706621';
-const BOT_ACTIVITIES_CHANNEL_ID = '1233854185276051516';
-const BOT_ACTIONS_CHANNEL_ID = '1233853415952748645';
+const DISCORD_BOT_TOKEN = process.env.TOKEN;
+const LOGGING_GUILD_ID = '1233740086839869501';
+const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
+const ITEMS_PER_PAGE = 10;
 
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
@@ -42,6 +38,18 @@ function authorize() {
         ['https://www.googleapis.com/auth/spreadsheets']
     );
     return auth;
+}
+
+function parseWeek(value) {
+    if (!value) {
+        return null;
+    }
+    const match = value.toString().match(/(\d+)/);
+    if (!match) {
+        return null;
+    }
+    const number = parseInt(match[1], 10);
+    return Number.isNaN(number) ? null : number;
 }
 
 const interactionHandler = async (interaction, client) => {
@@ -68,9 +76,9 @@ const interactionHandler = async (interaction, client) => {
                 ephemeral: true
             }).catch((err) => {
                 if (err.code === 10062) {
-                    console.error("Interaction expired and cannot be replied to.");
+                    console.error('Interaction expired and cannot be replied to.');
                 } else {
-                    console.error("Failed to reply to interaction:", err);
+                    console.error('Failed to reply to interaction:', err);
                 }
             });
         }
@@ -129,9 +137,9 @@ const handleCommand = async (interaction, client) => {
                 content: 'We encountered an error while processing the command. If this issue persists, please contact support.',
             }).catch((err) => {
                 if (err.code === 10062) {
-                    console.error("Interaction expired and cannot be edited.");
+                    console.error('Interaction expired and cannot be edited.');
                 } else {
-                    console.error("Failed to edit reply:", err);
+                    console.error('Failed to edit reply:', err);
                 }
             });
         } else {
@@ -140,9 +148,9 @@ const handleCommand = async (interaction, client) => {
                 ephemeral: true,
             }).catch((err) => {
                 if (err.code === 10062) {
-                    console.error("Interaction expired and cannot be replied to.");
+                    console.error('Interaction expired and cannot be replied to.');
                 } else {
-                    console.error("Failed to reply to an interaction:", err);
+                    console.error('Failed to reply to an interaction:', err);
                 }
             });
         }
@@ -156,12 +164,12 @@ const handleSelectMenu = async (interaction) => {
         if (modal) {
             await interaction.showModal(modal);
         } else {
-            await interaction.reply({ content: "We encounter an error occurred while processing your modal submission. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.", ephemeral: true });
+            await interaction.reply({ content: 'We encounter an error occurred while processing your modal submission. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.', ephemeral: true });
         }
     }
 };
 
-const handleModalSubmit = async (interaction, client) => {
+const handleModalSubmit = async (interaction) => {
     const [action, customId] = interaction.customId.split(':');
 
     if (action === 'report-bug') {
@@ -256,15 +264,15 @@ const handleBugReport = async (interaction, client, customId) => {
         .setTitle('Bug Report')
         .setDescription(`Bug was reported for the command \`${commandName}\``)
         .addFields(
-            {name: ["Reported By"], value: `<@${interaction.user.id}>`},
-            {name: ["Error Received"], value: errorReceived},
-            {name: ["Steps to Reproduce"], value: steps || 'Not provided'}
+            {name: ['Reported By'], value: `<@${interaction.user.id}>`},
+            {name: ['Error Received'], value: errorReceived},
+            {name: ['Steps to Reproduce'], value: steps || 'Not provided'}
         )
         .setColor(0xFF0000);
-}
+};
 
 const handleOfficialsApplicationSubmission = async (interaction) => {
-    console.log(`Running handleOfficialsApplicationSubmission`);
+    console.log('Running handleOfficialsApplicationSubmission');
 
     try {
         const discordId = interaction.user.id;
@@ -272,7 +280,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
 
         const pgClient = new Client(clientConfig);
         await pgClient.connect();
-        console.log(`Connected to PostgreSQL`);
+        console.log('Connected to PostgreSQL');
 
         const existingApplication = await pgClient.query(
             'SELECT * FROM official_applications WHERE discord_id = $1',
@@ -295,7 +303,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
             member = await interaction.guild.members.fetch(discordId);
             console.log(`Fetched guild member: ${member.user.tag}`);
         } catch (error) {
-            console.error(`Error fetching guild member:`, error);
+            console.error('Error fetching guild member:', error);
             await interaction.reply({ content: 'Failed to fetch your member data.', ephemeral: true });
             await pgClient.end();
             return;
@@ -311,7 +319,6 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         }
 
         const sheetID = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
-        const sheetTabName = 'Application';
         const sheets = google.sheets({ version: 'v4', auth: authorize() });
 
         let agreedToRules, understandsConsequences, inGameUsername;
@@ -330,7 +337,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         const now = new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' });
         const applicationsChannel = interaction.guild.channels.cache.get('1284290923819175976');
         if (!applicationsChannel) {
-            console.error(`Channel with ID '1284290923819175976' not found.`);
+            console.error('Channel with ID \'1284290923819175976\' not found.');
             await interaction.reply({ content: 'There was an issue submitting your application.', ephemeral: true });
             await pgClient.end();
             return;
@@ -359,7 +366,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         const actionRow = new ActionRowBuilder().addComponents(approveButton, rejectButton);
 
         const applicationMessage = await applicationsChannel.send({ embeds: [applicationEmbed], components: [actionRow] });
-        console.log(`Application message sent successfully with buttons`);
+        console.log('Application message sent successfully with buttons');
 
         const applicationUrl = applicationMessage.url;
         await pgClient.query(
@@ -367,7 +374,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
              VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
             [discordId, member.user.tag, inGameUsername, agreedToRules, understandsConsequences, applicationUrl]
         );
-        console.log(`Application logged to database`);
+        console.log('Application logged to database');
 
         try {
             await sheets.spreadsheets.values.append({
@@ -385,7 +392,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
 
         await interaction.reply({ content: 'Thank you for submitting your application!', ephemeral: true });
         await pgClient.end();
-        console.log(`Database connection closed`);
+        console.log('Database connection closed');
     } catch (error) {
         console.error('Unexpected error in handleOfficialsApplicationSubmission:', error);
     }
@@ -425,14 +432,13 @@ const handleGenerateTemplateModal = async (interaction) => {
 
 const handleInviteButton = async (interaction, action) => {
     const mascotSquads_local = [
-        { name: "Duck Squad", roleId: "1359614680615620608" },
-        { name: "Pumpkin Squad", roleId: "1361466564292907060" },
-        { name: "Snowman Squad", roleId: "1361466801443180584" },
-        { name: "Gorilla Squad", roleId: "1361466637261471961" },
-        { name: "Bee Squad", roleId: "1361466746149666956" },
-        { name: "Alligator Squad", roleId: "1361466697059664043" },
+        { name: 'Duck Squad', roleId: '1359614680615620608' },
+        { name: 'Pumpkin Squad', roleId: '1361466564292907060' },
+        { name: 'Snowman Squad', roleId: '1361466801443180584' },
+        { name: 'Gorilla Squad', roleId: '1361466637261471961' },
+        { name: 'Bee Squad', roleId: '1361466746149666956' },
+        { name: 'Alligator Squad', roleId: '1361466697059664043' },
     ];
-    const SL_ID = 1;
     const SL_SQUAD_NAME = 2;
     const SL_EVENT_SQUAD = 3;
     const AD_ID = 1;
@@ -443,11 +449,11 @@ const handleInviteButton = async (interaction, action) => {
 
         let inviteData;
         try {
-            inviteData = await fetchInviteById(interaction.message.id)
-            if (!inviteData) throw new Error('404')
+            inviteData = await fetchInviteById(interaction.message.id);
+            if (!inviteData) throw new Error('404');
         } catch (apiError) {
-            if (apiError.message === '404') { await interaction.editReply({ content: 'This invite seems to have expired or is invalid.' }) }
-            else { console.error('Error fetching invite data:', apiError.message); await interaction.editReply({ content: 'Could not verify the invite status.' }) }
+            if (apiError.message === '404') { await interaction.editReply({ content: 'This invite seems to have expired or is invalid.' }); }
+            else { console.error('Error fetching invite data:', apiError.message); await interaction.editReply({ content: 'Could not verify the invite status.' }); }
             return;
         }
         if (!inviteData) { await interaction.editReply({ content: 'The invite is no longer available.' }); return; }
@@ -492,7 +498,7 @@ const handleInviteButton = async (interaction, action) => {
                 sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Members!A:E' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'All Data!A:H' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Leaders!A:F' })
-            ]).catch(err => { throw new Error("Failed to retrieve sheet data for processing invite.") });
+            ]).catch(() => { throw new Error('Failed to retrieve sheet data for processing invite.'); });
 
             const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
             const allData = (allDataResponse.data.values || []);
@@ -505,7 +511,7 @@ const handleInviteButton = async (interaction, action) => {
             if (currentMemberCount >= max_members_local) {
                 await interaction.editReply({ content: `Cannot accept: Squad **${squadName}** is full (${currentMemberCount}/${max_members_local}).`, ephemeral: true });
                 if (trackingMessage) await trackingMessage.edit(`Invite from <@${commandUserID}> to <@${invitedMemberId}> for squad **${squadName}** failed: Squad Full.`).catch(console.error);
-                try { await updateInviteStatus(interaction.message.id, 'Squad Full') } catch (apiError) { console.error("API Error updating invite status to 'Squad Full':", apiError.message) }
+                try { await updateInviteStatus(interaction.message.id, 'Squad Full'); } catch (apiError) { console.error('API Error updating invite status to \'Squad Full\':', apiError.message); }
                 const components = new ActionRowBuilder().addComponents(
                     new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
                     new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger).setDisabled(true)
@@ -517,7 +523,7 @@ const handleInviteButton = async (interaction, action) => {
 
             await interaction.editReply({ content: `You have accepted the invite to join **${squadName}** (${squadType})!` });
             if (trackingMessage) await trackingMessage.edit(`<@${member.id}> accepted invite from <@${commandUserID}> to join **${squadName}** (${squadType}).`).catch(console.error);
-            try { await updateInviteStatus(interaction.message.id, 'Accepted') } catch (apiError) { console.error("API Error updating invite status to 'Accepted':", apiError.message) }
+            try { await updateInviteStatus(interaction.message.id, 'Accepted'); } catch (apiError) { console.error('API Error updating invite status to \'Accepted\':', apiError.message); }
 
             let userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > AD_ID && row[AD_ID] === invitedMemberId);
             const defaultEventSquad = 'N/A'; const defaultOpenSquad = 'FALSE'; const defaultIsLeader = 'No'; let existingPreference = 'TRUE';
@@ -560,16 +566,16 @@ const handleInviteButton = async (interaction, action) => {
             await inviteMessage.edit({ embeds: [acceptanceEmbed], components: [acceptedComponents] }).catch(console.error);
 
             let inviterDmDescription = `Your invite to **${member.user.username}** for squad **${squadName}** has been accepted!`;
-            if (assignedMascotRoleName) { inviterDmDescription += `\nThey were assigned the **${assignedMascotRoleName}** role.` }
+            if (assignedMascotRoleName) { inviterDmDescription += `\nThey were assigned the **${assignedMascotRoleName}** role.`; }
             const dmEmbed = new EmbedBuilder().setTitle('Invite Accepted').setDescription(inviterDmDescription).setColor(0x00ff00);
             await commandUser.send({ embeds: [dmEmbed] }).catch(err => { console.log(`Failed to DM command user ${commandUserID}: ${err.message}`); });
 
-            try { await deleteInvite(interaction.message.id) } catch (apiError) { console.error("API Error deleting invite:", apiError.message) }
+            try { await deleteInvite(interaction.message.id); } catch (apiError) { console.error('API Error deleting invite:', apiError.message); }
 
         } else if (action === 'reject') {
             await interaction.editReply({ content: 'You have rejected the invite.', ephemeral: true });
             if (trackingMessage) await trackingMessage.edit(`<@${invitedMemberId}> rejected invite from <@${commandUserID}> for **${squadName}**.`).catch(console.error);
-            try { await updateInviteStatus(interaction.message.id, 'Rejected') } catch (apiError) { console.error("API Error updating status to 'Rejected':", apiError.message) }
+            try { await updateInviteStatus(interaction.message.id, 'Rejected'); } catch (apiError) { console.error('API Error updating status to \'Rejected\':', apiError.message); }
             const rejectionEmbed = new EmbedBuilder(inviteMessage.embeds[0]?.data || {}).setTitle('Invite Rejected').setDescription(`Invite rejected by ${interaction.user.username}.`).setColor(0xff0000);
             const rejectedComponents = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
@@ -578,7 +584,7 @@ const handleInviteButton = async (interaction, action) => {
             await inviteMessage.edit({ embeds: [rejectionEmbed], components: [rejectedComponents] }).catch(console.error);
             const dmEmbed = new EmbedBuilder().setTitle('Invite Rejected').setDescription(`Your invite to **${interaction.user.username}** for **${squadName}** was rejected.`).setColor(0xff0000);
             await commandUser.send({ embeds: [dmEmbed] }).catch(err => { console.log(`Failed to DM command user about rejection: ${err.message}`); });
-            try { await deleteInvite(interaction.message.id) } catch (apiError) { console.error("API Error deleting rejected invite:", apiError.message) }
+            try { await deleteInvite(interaction.message.id); } catch (apiError) { console.error('API Error deleting rejected invite:', apiError.message); }
         } else {
             await interaction.editReply({ content: 'Unknown action specified.', ephemeral: true });
         }
@@ -657,7 +663,7 @@ const handleApplicationButton = async (interaction, action, client) => {
         const competitiveRole = guild.roles.cache.get('1288918946258489354');
         const contentRole = guild.roles.cache.get('1290803054140199003');
         if (!squadLeaderRole || !competitiveRole || !contentRole) {
-            console.error("One or more required leader roles not found!");
+            console.error('One or more required leader roles not found!');
             await interaction.editReply({ content: 'Configuration error: Cannot find required roles.', ephemeral: true });
             return;
         }
@@ -670,14 +676,14 @@ const handleApplicationButton = async (interaction, action, client) => {
         if (action === 'accept') {
             try {
                 const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                    spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                     range: 'Squad Leaders!A:F'
                 });
                 const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
                 isAlreadyLeader = squadLeaders.some(row => row && row.length > 1 && row[1] === applicantUserId);
             } catch (sheetError) {
-                console.error("Error checking Squad Leaders sheet:", sheetError);
-                throw new Error("Failed to check existing squad leaders.");
+                console.error('Error checking Squad Leaders sheet:', sheetError);
+                throw new Error('Failed to check existing squad leaders.');
             }
         }
 
@@ -694,7 +700,7 @@ const handleApplicationButton = async (interaction, action, client) => {
                     .setColor(0xFF0000);
                 await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
 
-                await updateApplicationStatus(sheets, messageUrl, 'Denied', applicantUsername, applicantUserId, squadName, squadType);
+                await updateApplicationStatus(sheets, messageUrl, 'Denied');
                 await deleteApplicationDataByMessageUrl(messageUrl);
 
                 await interaction.editReply({ content: 'This user already owns a squad. The application has been automatically denied.', ephemeral: true });
@@ -713,7 +719,7 @@ const handleApplicationButton = async (interaction, action, client) => {
                 dateString
             ];
             await sheets.spreadsheets.values.append({
-                spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                 range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
                 resource: { values: [newLeaderRow] }
@@ -721,7 +727,7 @@ const handleApplicationButton = async (interaction, action, client) => {
 
 
             const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                 range: 'All Data!A:H'
             });
             const allData = allDataResponse.data.values || [];
@@ -739,7 +745,7 @@ const handleApplicationButton = async (interaction, action, client) => {
                     'Yes'
                 ];
                 await sheets.spreadsheets.values.update({
-                    spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                     range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
                     valueInputOption: 'RAW',
                     resource: { values: [valuesToUpdate] }
@@ -757,7 +763,7 @@ const handleApplicationButton = async (interaction, action, client) => {
                     'TRUE'
                 ];
                 await sheets.spreadsheets.values.append({
-                    spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                     range: 'All Data!A1',
                     valueInputOption: 'RAW',
                     resource: { values: [newAllDataRow] }
@@ -800,13 +806,13 @@ const handleApplicationButton = async (interaction, action, client) => {
                 .setTimestamp();
             await interaction.message.edit({ embeds: [acceptanceEmbed], components: [] }).catch(console.error);
 
-            await updateApplicationStatus(sheets, messageUrl, 'Accepted', applicantUsername, applicantUserId, squadName, squadType);
+            await updateApplicationStatus(sheets, messageUrl, 'Accepted');
             await deleteApplicationDataByMessageUrl(messageUrl);
 
             await interaction.editReply({ content: '✅ Squad registration accepted and processed.', ephemeral: true });
 
         } else if (action === 'deny') {
-            const genericDenyReason = "Your squad registration application was not approved at this time. You may re-apply later if circumstances change.";
+            const genericDenyReason = 'Your squad registration application was not approved at this time. You may re-apply later if circumstances change.';
 
             await user.send({
                 embeds: [new EmbedBuilder().setTitle('Squad Registration Denied').setDescription(genericDenyReason).setColor(0xFF0000)]
@@ -819,7 +825,7 @@ const handleApplicationButton = async (interaction, action, client) => {
                 .setTimestamp();
             await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
 
-            await updateApplicationStatus(sheets, messageUrl, 'Denied', applicantUsername, applicantUserId, squadName, squadType);
+            await updateApplicationStatus(sheets, messageUrl, 'Denied');
             await deleteApplicationDataByMessageUrl(messageUrl);
 
             await interaction.editReply({ content: '❌ Squad registration denied.', ephemeral: true });
@@ -848,10 +854,10 @@ const handleApplicationButton = async (interaction, action, client) => {
 };
 
 
-const updateApplicationStatus = async (sheets, applicationMessageUrl, status, memberName, memberId, squadName, squadType) => {
+const updateApplicationStatus = async (sheets, applicationMessageUrl, status) => {
     try {
         const applicationsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+            spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
             range: 'Applications!A:F'
         });
 
@@ -863,7 +869,7 @@ const updateApplicationStatus = async (sheets, applicationMessageUrl, status, me
         if (applicationIndex !== -1) {
             const sheetRowIndex = applicationIndex + 2;
             await sheets.spreadsheets.values.update({
-                spreadsheetId: `1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k`,
+                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
                 range: `Applications!F${sheetRowIndex}`,
                 valueInputOption: 'RAW',
                 resource: { values: [[status]] }
@@ -880,47 +886,48 @@ const updateApplicationStatus = async (sheets, applicationMessageUrl, status, me
 
 const deleteApplicationDataByMessageUrl = async (applicationMessageUrl) => {
     try {
-        const app = await fetchSquadApplicationByMessageUrl(applicationMessageUrl)
-        if (!app) return null
-        const result = await deleteSquadApplicationById(app.id)
-        return result
+        const app = await fetchSquadApplicationByMessageUrl(applicationMessageUrl);
+        if (!app) return null;
+        const result = await deleteSquadApplicationById(app.id);
+        return result;
     } catch (error) {
         console.error('Error deleting application data:', error.message);
         return null;
     }
 };
 
-const handlePagination1 = async (customId, interaction) => {
+const handlePagination1 = async (interaction, customId) => {
     try {
         await interaction.deferUpdate();
         console.log(`[Pagination] Received ${customId} on interaction ${interaction.id}`);
 
-        const customId = interaction.customId;
+        const resolvedCustomId = customId ?? interaction.customId;
         const originalInteractionId = interaction.message.interaction?.id;
         console.log(`[Pagination] originalInteractionId=${originalInteractionId}`);
 
         if (!originalInteractionId) {
-            console.error("Could not retrieve original interaction ID from message.");
+            console.error('Could not retrieve original interaction ID from message.');
             return;
         }
 
-        const commandState = interaction.client.squadsPagination.get(originalInteractionId);        console.log(`[Pagination] commandState for ${originalInteractionId}:`, commandState);
+        const commandState = interaction.client.squadsPagination.get(originalInteractionId);
+        console.log(`[Pagination] commandState for ${originalInteractionId}:`, commandState);
 
         if (!commandState) {
             console.error(`No commandData found for original interaction ID: ${originalInteractionId}`);
-            await interaction.editReply({ content: "Sorry, I can't find the data for this list anymore. Please run the command again.", embeds: [], components: [] });
+            await interaction.editReply({ content: 'Sorry, I can\'t find the data for this list anymore. Please run the command again.', embeds: [], components: [] });
             return;
         }
 
         const { squadList, totalPages, currentPage } = commandState;
         let newPage = currentPage;
 
-        if (customId === 'squads_next') {
+        if (resolvedCustomId === 'squads_next') {
             newPage = currentPage + 1;
-        } else if (customId === 'squads_prev') {
+        } else if (resolvedCustomId === 'squads_prev') {
             newPage = currentPage - 1;
         } else {
-            console.warn(`Received unexpected customId in handlePagination1: ${customId}`);
+            console.warn(`Received unexpected customId in handlePagination1: ${resolvedCustomId}`);
             return;
         }
 
@@ -957,7 +964,7 @@ const handlePagination1 = async (customId, interaction) => {
                         .setStyle(ButtonStyle.Primary)
                         .setDisabled(page === totalPages)
                 );
-        }
+        };
 
         await interaction.editReply({ embeds: [generateEmbed(newPage)], components: [generateButtons(newPage)] });
 
@@ -965,7 +972,7 @@ const handlePagination1 = async (customId, interaction) => {
         console.error('Error handling pagination:', error);
 
         try {
-            if (!interaction.client) throw new Error("Interaction client is not available.");
+            if (!interaction.client) throw new Error('Interaction client is not available.');
 
             const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
             if (!errorGuild) throw new Error(`Could not fetch error guild: ${BALLHEAD_GUILD_ID}`);
@@ -989,7 +996,7 @@ const handlePagination1 = async (customId, interaction) => {
                 ephemeral: true
             });
         } catch (followUpError) {
-            console.error("Failed to send follow-up error message:", followUpError);
+            console.error('Failed to send follow-up error message:', followUpError);
         }
     }
 };
@@ -1008,7 +1015,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
 
         const row = new ActionRowBuilder().addComponents(qaButton);
 
-        const messageContent = `Hey! Your application for officials has been approved and you now have the Official Prospect Role! If you're unsure what to do, press the "Help" button below!`;
+        const messageContent = 'Hey! Your application for officials has been approved and you now have the Official Prospect Role! If you\'re unsure what to do, press the "Help" button below!';
 
         try {
             await user.send({
@@ -1028,7 +1035,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         const pgClient = new Client(clientConfig);
         await pgClient.connect();
         await pgClient.query(
-            `DELETE FROM official_applications WHERE discord_id = $1`,
+            'DELETE FROM official_applications WHERE discord_id = $1',
             [userId]
         );
         await pgClient.end();
@@ -1141,7 +1148,7 @@ const handleOfficialsApplicationReject = async (interaction) => {
         const user = await interaction.guild.members.fetch(userId);
 
         const nextStepsButton = new ButtonBuilder()
-            .setCustomId(`officialsQnaReject`)
+            .setCustomId('officialsQnaReject')
             .setLabel('Help!')
             .setStyle(ButtonStyle.Primary);
 
@@ -1167,7 +1174,7 @@ const handleOfficialsApplicationReject = async (interaction) => {
         const pgClient = new Client(clientConfig);
         await pgClient.connect();
         await pgClient.query(
-            `DELETE FROM official_applications WHERE discord_id = $1`,
+            'DELETE FROM official_applications WHERE discord_id = $1',
             [userId]
         );
         await pgClient.end();
@@ -1251,7 +1258,7 @@ const handleApplyBaseLeagueModal = async (interaction) => {
     await pgClient.connect();
 
     try {
-        const inviteCodeMatch = discordInvite.match(/discord(?:app)?\.com\/invite\/([^\/\s]+)/i) || discordInvite.match(/discord\.gg\/([^\/\s]+)/i);
+        const inviteCodeMatch = discordInvite.match(/discord(?:app)?\.com\/invite\/([^/\s]+)/i) || discordInvite.match(/discord\.gg\/([^/\s]+)/i);
         if (!inviteCodeMatch) {
             return interaction.editReply({
                 content: 'Invalid invite link format. Please provide a valid Discord invite link.'
@@ -1312,7 +1319,7 @@ const handleApplyBaseLeagueModal = async (interaction) => {
             : 'https://cdn.discordapp.com/embed/avatars/0.png';
 
         const existingServer = await pgClient.query(
-            `SELECT * FROM "Active Leagues" WHERE server_id = $1`,
+            'SELECT * FROM "Active Leagues" WHERE server_id = $1',
             [serverId]
         );
 
@@ -1323,7 +1330,7 @@ const handleApplyBaseLeagueModal = async (interaction) => {
         }
 
         const existingLeague = await pgClient.query(
-            `SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = 'Base'`,
+            'SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = \'Base\'',
             [user.id]
         );
 
@@ -1561,6 +1568,7 @@ const handleApproveLeague = async (interaction) => {
 
 const handleDenyLeagueModal = async (interaction) => {
     console.log('handleDenyLeagueModal called with customId:', interaction.customId);
+    let pgClient;
     try {
         const denialReason = interaction.fields.getTextInputValue('denial-reason');
         console.log('Denial reason:', denialReason);
@@ -1568,8 +1576,7 @@ const handleDenyLeagueModal = async (interaction) => {
         const [action, messageId] = interaction.customId.split(':');
         console.log('Action:', action, 'Message ID:', messageId);
 
-
-        const pgClient = new Client(clientConfig);
+        pgClient = new Client(clientConfig);
         await pgClient.connect();
 
         const res = await pgClient.query('SELECT * FROM "League Applications" WHERE application_message_id = $1', [messageId]);
@@ -1633,7 +1640,9 @@ You'll be contacted by a Community Developer to further explain what may be miss
             }
         }
     } finally {
-        await pgClient.end();
+        if (pgClient) {
+            await pgClient.end();
+        }
     }
 };
 
@@ -1666,7 +1675,7 @@ const handleNext2 = async (interaction) => {
             return interaction.followUp({ content: 'Pagination data not found or has expired.', ephemeral: true });
         }
 
-        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, weekDateMap } = paginationData;
+        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform } = paginationData;
         let { currentPage } = paginationData;
 
         currentPage += 1;
@@ -1679,30 +1688,45 @@ const handleNext2 = async (interaction) => {
         interaction.client.commandData.set(messageId, paginationData);
 
         let embed;
+        const color = embedColor || '#0099ff';
         if (currentPage === 1) {
             embed = new EmbedBuilder()
                 .setTitle(`${username}'s Quality Scores - Overview`)
                 .setThumbnail(userAvatar)
-                .setColor('#32CD32')
+                .setColor(color)
                 .addFields(
-                    { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true }
+                    { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true },
+                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true }
                 );
 
-            const weeklyFields = Object.entries(weeklyAverages).map(([week, score]) => {
-                const weekNumber = parseInt(week, 10);
-                let formattedDate = 'N/A';
-                if (weekDateMap[weekNumber]) {
-                    const [month, day] = weekDateMap[weekNumber].split('/').map(Number);
-                    const dateObj = new Date(Date.UTC(SEASON_YEAR, month - 1, day, 12, 0, 0));
-                    const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
-                    formattedDate = `<t:${unixTimestamp}:D>`;
-                }
-                return {
-                    name: `📅 Week ${weekNumber}`,
-                    value: `Date: ${formattedDate}\nAverage Score: ${score}`,
-                    inline: true,
-                };
-            });
+            if (platform) {
+                embed.addFields({ name: '🪪 Platform', value: platform, inline: true });
+            }
+
+            const weeklyFields = Object.entries(weeklyAverages)
+                .sort((a, b) => {
+                    const weekA = parseWeek(a[0]);
+                    const weekB = parseWeek(b[0]);
+                    if (weekA === null && weekB === null) {
+                        return 0;
+                    }
+                    if (weekA === null) {
+                        return 1;
+                    }
+                    if (weekB === null) {
+                        return -1;
+                    }
+                    return weekA - weekB;
+                })
+                .map(([week, score]) => {
+                    const parsedWeek = parseWeek(week);
+                    const label = parsedWeek === null ? week : parsedWeek;
+                    return {
+                        name: `📅 Week ${label}`,
+                        value: `Average Score: ${score}`,
+                        inline: true
+                    };
+                });
 
             if (weeklyFields.length > 0) {
                 embed.addFields(weeklyFields);
@@ -1720,12 +1744,14 @@ const handleNext2 = async (interaction) => {
             embed = new EmbedBuilder()
                 .setTitle(`${username}'s Quality Score - Post ${currentPage - 1} of ${totalPages - 1}`)
                 .setThumbnail(userAvatar)
-                .setColor('#00000f')
+                .setColor(color)
                 .addFields(
                     { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
-                    { name: '📅 Season Week Posted', value: `<t:${post.weekDate}:D>`, inline: true },
-                    { name: '⏰ Date Posted', value: post.timestamp.toString(), inline: true },
+                    { name: '👁️ Views', value: post.views.toString(), inline: true },
+                    { name: '📅 Season Week', value: post.week !== null ? `Week ${post.week}` : 'N/A', inline: true },
+                    { name: '🪪 Platform', value: post.platform || platform || 'N/A', inline: true },
+                    { name: '⏰ Post Date', value: post.postDateDisplay || 'N/A', inline: true },
                     { name: '🔗 URL', value: post.url, inline: false },
                     { name: '📝 Details', value: post.details, inline: false },
                 )
@@ -1769,7 +1795,7 @@ const handlePrev2 = async (interaction) => {
             return interaction.followUp({ content: 'Pagination data not found or has expired.', ephemeral: true });
         }
 
-        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, weekDateMap } = paginationData;
+        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform } = paginationData;
         let { currentPage } = paginationData;
 
         currentPage -= 1;
@@ -1782,30 +1808,45 @@ const handlePrev2 = async (interaction) => {
         interaction.client.commandData.set(messageId, paginationData);
 
         let embed;
+        const color = embedColor || '#0099ff';
         if (currentPage === 1) {
             embed = new EmbedBuilder()
                 .setTitle(`${username}'s Quality Scores - Overview`)
                 .setThumbnail(userAvatar)
-                .setColor('#32CD32')
+                .setColor(color)
                 .addFields(
-                    { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true }
+                    { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true },
+                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true }
                 );
 
-            const weeklyFields = Object.entries(weeklyAverages).map(([week, score]) => {
-                const weekNumber = parseInt(week, 10);
-                let formattedDate = 'N/A';
-                if (weekDateMap[weekNumber]) {
-                    const [month, day] = weekDateMap[weekNumber].split('/').map(Number);
-                    const dateObj = new Date(Date.UTC(SEASON_YEAR, month - 1, day, 12, 0, 0));
-                    const unixTimestamp = Math.floor(dateObj.getTime() / 1000);
-                    formattedDate = `<t:${unixTimestamp}:D>`;
-                }
-                return {
-                    name: `📅 Week ${weekNumber}`,
-                    value: `Date: ${formattedDate}\nAverage Score: ${score}`,
-                    inline: true,
-                };
-            });
+            if (platform) {
+                embed.addFields({ name: '🪪 Platform', value: platform, inline: true });
+            }
+
+            const weeklyFields = Object.entries(weeklyAverages)
+                .sort((a, b) => {
+                    const weekA = parseWeek(a[0]);
+                    const weekB = parseWeek(b[0]);
+                    if (weekA === null && weekB === null) {
+                        return 0;
+                    }
+                    if (weekA === null) {
+                        return 1;
+                    }
+                    if (weekB === null) {
+                        return -1;
+                    }
+                    return weekA - weekB;
+                })
+                .map(([week, score]) => {
+                    const parsedWeek = parseWeek(week);
+                    const label = parsedWeek === null ? week : parsedWeek;
+                    return {
+                        name: `📅 Week ${label}`,
+                        value: `Average Score: ${score}`,
+                        inline: true
+                    };
+                });
 
             if (weeklyFields.length > 0) {
                 embed.addFields(weeklyFields);
@@ -1823,12 +1864,14 @@ const handlePrev2 = async (interaction) => {
             embed = new EmbedBuilder()
                 .setTitle(`${username}'s Quality Score - Post ${currentPage - 1} of ${totalPages - 1}`)
                 .setThumbnail(userAvatar)
-                .setColor('#00000f')
+                .setColor(color)
                 .addFields(
                     { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
-                    { name: '📅 Season Week Posted', value: `<t:${post.weekDate}:D>`, inline: true },
-                    { name: '⏰ Date Posted', value: post.timestamp.toString(), inline: true },
+                    { name: '👁️ Views', value: post.views.toString(), inline: true },
+                    { name: '📅 Season Week', value: post.week !== null ? `Week ${post.week}` : 'N/A', inline: true },
+                    { name: '🪪 Platform', value: post.platform || platform || 'N/A', inline: true },
+                    { name: '⏰ Post Date', value: post.postDateDisplay || 'N/A', inline: true },
                     { name: '🔗 URL', value: post.url, inline: false },
                     { name: '📝 Details', value: post.details, inline: false },
                 )
@@ -1873,7 +1916,7 @@ const lfgRemoveFromOtherQueues = async (client, userId, targetQueueKey) => {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
     const res = await pgClient.query(
-        `SELECT thread_id, queue_key, queue_name, size, participants FROM lfg_queues WHERE $1 = ANY(participants) AND queue_key <> $2`,
+        'SELECT thread_id, queue_key, queue_name, size, participants FROM lfg_queues WHERE $1 = ANY(participants) AND queue_key <> $2',
         [userId, targetQueueKey]
     );
     for (const row of res.rows) {
@@ -1900,10 +1943,12 @@ const lfgRemoveFromOtherQueues = async (client, userId, targetQueueKey) => {
             if (thread && thread.isThread()) {
                 await lfgUpdateStarterMessage(thread, qDef, set);
             }
-        } catch {}
+        } catch (error) {
+            console.error('Failed to update LFG starter message during removal:', error);
+        }
     }
     await pgClient.end();
-}
+};
 
 const lfgGetQueueDefByKey = async (key) => {
     const pgClient = new Client(clientConfig);
@@ -2002,13 +2047,23 @@ const handleLfgButton = async (interaction) => {
                 await lfgUpsertRow(interaction.channel.id, queueDef, members, await lfgGetStatus(members, queueDef));
                 const client = interaction.client;
                 let fallback = null;
-                try { fallback = await client.channels.fetch('752216589792706624'); } catch {}
+                try {
+                    fallback = await client.channels.fetch('752216589792706624');
+                } catch (fetchError) {
+                    console.error('Failed to fetch fallback channel for queue notification:', fetchError);
+                }
                 for (const uid of picks) {
                     const others = picks.filter(id => id !== uid);
                     const gym = (queueDef.lobby_display_name && queueDef.lobby_display_name.trim().length > 0) ? queueDef.lobby_display_name : 'the gym';
                     const text = `Your ${queueDef.name} match is ready. Opponent(s): ${others.map(id => `<@${id}>`).join(' ')}. Head to ${gym} to play.`;
                     let delivered = false;
-                    try { const user = await client.users.fetch(uid); await user.send({ content: text }); delivered = true; } catch {}
+                    try {
+                        const user = await client.users.fetch(uid);
+                        await user.send({ content: text });
+                        delivered = true;
+                    } catch (dmError) {
+                        console.error('Failed to notify user about LFG queue update:', dmError);
+                    }
                     if (!delivered && fallback) { await fallback.send({ content: `<@${uid}> ${text}` }); }
                 }
                 if (picks.includes(interaction.user.id)) {
@@ -2048,9 +2103,11 @@ const handleLfgButton = async (interaction) => {
             } else {
                 await interaction.editReply({ content: 'An error occurred while processing this button.' });
             }
-        } catch {}
+        } catch (replyError) {
+            console.error('Failed to send error response for button interaction:', replyError);
+        }
     }
-}
+};
 
 const LFG_QUEUES = [
     { key: 'casual_1v1', name: 'Casual 1v1', size: 2, description: 'Casual 1v1 matches.' },
@@ -2078,7 +2135,7 @@ const lfgEnsureState = async (client, key) => {
     const s = new Set((res.rows[0]?.participants || []).map(x => x));
     client.lfgQueues.set(key, s);
     return s;
-}
+};
 
 const lfgBuildButtons = (key) => {
     return new ActionRowBuilder().addComponents(
@@ -2086,7 +2143,7 @@ const lfgBuildButtons = (key) => {
         new ButtonBuilder().setCustomId(`lfg:leave:${key}`).setLabel('Leave').setStyle(ButtonStyle.Secondary),
         new ButtonBuilder().setCustomId(`lfg:status:${key}`).setLabel('Status').setStyle(ButtonStyle.Primary)
     );
-}
+};
 
 const lfgBuildEmbed = (queue, members, imageName) => {
     const list = members.size ? [...members].map(id => `<@${id}>`).join(' \u2022 ') : 'None';
@@ -2099,13 +2156,13 @@ const lfgBuildEmbed = (queue, members, imageName) => {
         );
     if (imageName) e.setImage(`attachment://${imageName}`);
     return e;
-}
+};
 
 const fetchBuffer = async (url) => {
     const res = await request(url);
     const ab = await res.body.arrayBuffer();
     return Buffer.from(ab);
-}
+};
 
 const generateQueueImage = async (client, queue, members) => {
     const bgBuf = await fetchBuffer('https://cdn.ballhead.app/web_assets/FORCDN.jpg');
@@ -2155,14 +2212,14 @@ const generateQueueImage = async (client, queue, members) => {
     const buffer = canvas.toBuffer('image/png');
     const name = `${queue.key}.png`;
     return { attachment: buffer, name };
-}
+};
 
 const lfgUpdateStarterMessage = async (thread, queueDef, members) => {
     const starter = await thread.fetchStarterMessage().catch(() => null);
     if (!starter) return;
     const img = await generateQueueImage(thread.client, queueDef, members);
     await starter.edit({ files: [img], embeds: [lfgBuildEmbed(queueDef, members, img.name)], components: [lfgBuildButtons(queueDef.key)] });
-}
+};
 
 const lfgUpsertRow = async (threadId, queueDef, members, status) => {
     const pgClient = new Client(clientConfig);
@@ -2192,11 +2249,11 @@ const lfgUpsertRow = async (threadId, queueDef, members, status) => {
         [threadId, queueDef.key, queueDef.name, queueDef.size, status, participants]
     );
     await pgClient.end();
-}
+};
 
 const lfgGetStatus = async (members, queueDef) => {
     if (members.size >= queueDef.size) return 'ready';
     return 'waiting';
-}
+};
 
 module.exports = interactionHandler;

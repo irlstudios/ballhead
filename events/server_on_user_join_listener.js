@@ -35,7 +35,7 @@ module.exports = {
                 .setTitle('Welcome to Gym Class VR!')
                 .setDescription(
                     `Heya ${member.displayName}! :basketball: Congrats on finishing the onboarding into our server, were glad you've hit the ground running!\n\n` +
-                    `Lets keep the ball rolling! Take a look at some of these channels that will help you see what we're all about! :\n` +
+                    'Lets keep the ball rolling! Take a look at some of these channels that will help you see what we\'re all about! :\n' +
                     '- Visit **https://discord.com/channels/752216589792706621/1274849522731843676** to learn how to **verify your discord account** in‑game to unlock **discord bundle perks**. \n' +
                     '- Visit **https://discord.com/channels/752216589792706621/1382467390557917306** in the server for quick answers from our FAQ Team.\n' +
                     '- Visit **https://discord.com/channels/752216589792706621/1063547088836763799** in the server to view some resources and information we have posted for new users to view'
@@ -54,7 +54,7 @@ module.exports = {
             }
         }
     }
-}
+};
 
 if (!global.onboardingReminderLoopStarted) {
     global.onboardingReminderLoopStarted = true;
