@@ -16,47 +16,76 @@ function authorize() {
 const sheets = google.sheets({ version: 'v4', auth: authorize() });
 const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
 
-// Platform configurations
 const PLATFORMS = {
     tiktok: {
         name: 'TikTok',
         appRange: 'CC Applications!A:G',
         dataRange: 'TikTok Data!A:O',
-        activeCreatorsRange: 'Active Creators!A:K',  // Platform | Status | P Username | DD ID | P ID | P Link | Date Earned | Weighed QS | Total Points | Last Updated | Latest Post Date
-        paidCreatorsRange: 'Paid Creators!A:F',      // Status | Platform | P Username | DD ID | P Link | P ID
+        activeCreatorsRange: 'Active Creators!A:K',
+        paidCreatorsRange: 'Paid Creators!A:F',
         platformKey: 'Tiktok',
         requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
         color: '#00f2ea',
         emoji: '🎵',
-        weekColumnIndex: 14  // Col O: Season Week Posted
+        weekColumnIndex: 14
     },
     youtube: {
         name: 'YouTube',
         appRange: 'CC Applications!A:G',
-        dataRange: 'YouTube Data!A:P',  // YouTube has extra "Is Short?" column
-        activeCreatorsRange: 'Active Creators!A:K',  // Platform | Status | P Username | DD ID | P ID | P Link | Date Earned | Weighed QS | Total Points | Last Updated | Latest Post Date
-        paidCreatorsRange: 'Paid Creators!A:F',      // Status | Platform | P Username | DD ID | P Link | P ID
+        dataRange: 'YouTube Data!A:P',
+        activeCreatorsRange: 'Active Creators!A:K',
+        paidCreatorsRange: 'Paid Creators!A:F',
         platformKey: 'YouTube',
         requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
         color: '#FF0000',
         emoji: '🎬',
-        weekColumnIndex: 15  // Col P: Season Week Posted (YouTube has extra "Is Short?" column at O)
+        weekColumnIndex: 15
     },
     reels: {
         name: 'Instagram',
         appRange: 'CC Applications!A:G',
         dataRange: 'Reels Data!A:O',
-        activeCreatorsRange: 'Active Creators!A:K',  // Platform | Status | P Username | DD ID | P ID | P Link | Date Earned | Weighed QS | Total Points | Last Updated | Latest Post Date
-        paidCreatorsRange: 'Paid Creators!A:F',      // Status | Platform | P Username | DD ID | P Link | P ID
+        activeCreatorsRange: 'Active Creators!A:K',
+        paidCreatorsRange: 'Paid Creators!A:F',
         platformKey: 'Reels',
         requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
         color: '#E1306C',
         emoji: '📸',
-        weekColumnIndex: 14  // Col O: Season Week Posted
+        weekColumnIndex: 14
     }
 };
 
-// Phrases that trigger the CC progress check
+const DATE_FORMATS = ['M/D/YY', 'MM/DD/YY', 'M/D/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD', 'YYYY/MM/DD'];
+
+function parseSeasonWeek(value) {
+    if (!value) return null;
+    const match = value.toString().match(/(\d+)/);
+    if (!match) return null;
+    const number = parseInt(match[1], 10);
+    return Number.isNaN(number) ? null : number;
+}
+
+function parseSpreadsheetDate(value) {
+    if (!value) return null;
+    const trimmed = value.toString().trim();
+    if (!trimmed) return null;
+    let parsed = moment(trimmed, DATE_FORMATS, true);
+    if (!parsed.isValid()) {
+        parsed = moment(trimmed);
+    }
+    return parsed.isValid() ? parsed : null;
+}
+
+function describeRelativeWeek(timestamp) {
+    if (!timestamp) return null;
+    const reference = moment(timestamp).startOf('week');
+    const now = moment().startOf('week');
+    const diff = now.diff(reference, 'weeks');
+    if (diff <= 0) return 'This week';
+    if (diff === 1) return 'Last week';
+    return `${diff} weeks ago`;
+}
+
 const ccQuestionPhrases = [
     'why didnt i get cc',
     'why didnt i get content creator',
@@ -149,15 +178,13 @@ async function getPlatformData(platform, discordId) {
                    (platformId && postPlatformId === platformId);
         });
 
-        // Check if user is in Active Creators or Paid Creators (for this specific platform)
-        // Sheet format: Platform | Status | P Username | DD ID | P ID | P Link | Date Earned | Weighed QS | Total Points | Last Updated | Latest Post Date
         let activeCreatorRow = null;
         let paidCreatorRow = null;
 
         for (const row of activeRows) {
             if (row && row.length > 4) {
-                const rowPlatform = row[0]?.trim(); // Col A: Platform
-                const rowDiscordId = row[3]?.trim(); // Col D: DD ID
+                const rowPlatform = row[0]?.trim();
+                const rowDiscordId = row[3]?.trim();
                 if (rowPlatform?.toLowerCase() === config.platformKey.toLowerCase() &&
                     rowDiscordId === discordId) {
                     activeCreatorRow = row;
@@ -166,11 +193,10 @@ async function getPlatformData(platform, discordId) {
             }
         }
 
-        // Paid Creators sheet format: Status | Platform | P Username | DD ID | P Link | P ID
         for (const row of paidRows) {
             if (row && row.length > 3) {
-                const rowPlatform = row[1]?.trim(); // Col B: Platform
-                const rowDiscordId = row[3]?.trim(); // Col D: DD ID
+                const rowPlatform = row[1]?.trim();
+                const rowDiscordId = row[3]?.trim();
                 if (rowPlatform?.toLowerCase() === config.platformKey.toLowerCase() &&
                     rowDiscordId === discordId) {
                     paidCreatorRow = row;
@@ -193,13 +219,6 @@ async function getPlatformData(platform, discordId) {
     }
 }
 
-/**
- * Analyzes user posts and groups them by week to calculate points
- * Uses the actual week identifiers from the spreadsheet (Season Week Posted column)
- * @param {Array} userPosts - Array of post rows from platform data sheet
- * @param {Object} config - Platform configuration with weekColumnIndex
- * @returns {Object} Weekly stats including followers, points per week, and consecutive weeks met
- */
 function analyzeWeeklyProgress(userPosts, config) {
     if (!userPosts || userPosts.length === 0) {
         return {
@@ -207,27 +226,31 @@ function analyzeWeeklyProgress(userPosts, config) {
             weeklyStats: {},
             consecutiveWeeksMet: 0,
             totalValidPosts: 0,
-            allWeeks: []
+            allWeeks: [],
+            weekDetails: {}
         };
     }
 
     const followerCount = userPosts[0]?.[5] || 'N/A';
 
     const weeklyStats = {};
+    const weekDetails = {};
     let totalValidPosts = 0;
+    let encounterIndex = 0;
 
     const weekColIndex = config.weekColumnIndex || 14;
 
     for (const post of userPosts) {
         if (!post || post.length <= weekColIndex) continue;
 
-        const seasonWeek = post[weekColIndex]?.toString().trim(); // Season Week Posted (col varies by platform)
+        const seasonWeek = post[weekColIndex]?.toString().trim();
+        if (!seasonWeek || seasonWeek === 'TRUE' || seasonWeek === 'FALSE') continue;
+
         const pointsEarned = parseFloat(post[12]) || 0;
         const isValid = post[13]?.trim()?.toLowerCase() === 'true' || post[13]?.trim() === 'TRUE';
         const qualityScore = parseFloat(post[11]) || 0;
-
-        // Skip posts without a valid week number
-        if (!seasonWeek || seasonWeek === 'TRUE' || seasonWeek === 'FALSE') continue;
+        const postMoment = parseSpreadsheetDate(post[4]);
+        const timestamp = postMoment ? postMoment.valueOf() : null;
 
         if (!weeklyStats[seasonWeek]) {
             weeklyStats[seasonWeek] = {
@@ -235,34 +258,82 @@ function analyzeWeeklyProgress(userPosts, config) {
                 validPosts: 0,
                 totalPosts: 0,
                 avgQuality: 0,
-                qualitySum: 0
+                qualitySum: 0,
+                earliestTimestamp: timestamp,
+                latestTimestamp: timestamp,
+                encounterIndex,
+                parsedWeek: parseSeasonWeek(seasonWeek)
             };
+            encounterIndex++;
         }
 
-        weeklyStats[seasonWeek].totalPosts++;
+        const stats = weeklyStats[seasonWeek];
+
+        stats.totalPosts++;
+
+        if (timestamp !== null) {
+            if (stats.earliestTimestamp === null || timestamp < stats.earliestTimestamp) {
+                stats.earliestTimestamp = timestamp;
+            }
+            if (stats.latestTimestamp === null || timestamp > stats.latestTimestamp) {
+                stats.latestTimestamp = timestamp;
+            }
+        }
 
         if (isValid) {
-            weeklyStats[seasonWeek].totalPoints += pointsEarned;
-            weeklyStats[seasonWeek].validPosts++;
-            weeklyStats[seasonWeek].qualitySum += qualityScore;
+            stats.totalPoints += pointsEarned;
+            stats.validPosts++;
+            stats.qualitySum += qualityScore;
             totalValidPosts++;
         }
     }
 
-    for (const week in weeklyStats) {
-        const stats = weeklyStats[week];
+    const weekEntries = Object.keys(weeklyStats).map(weekKey => {
+        const stats = weeklyStats[weekKey];
         if (stats.validPosts > 0) {
             stats.avgQuality = (stats.qualitySum / stats.validPosts).toFixed(2);
+        } else {
+            stats.avgQuality = '0.00';
         }
-    }
+        const sortTimestamp = stats.latestTimestamp ?? stats.earliestTimestamp ?? null;
+        weekDetails[weekKey] = {
+            latestTimestamp: stats.latestTimestamp,
+            earliestTimestamp: stats.earliestTimestamp
+        };
+        return {
+            week: weekKey,
+            stats,
+            sortTimestamp,
+            parsedWeek: stats.parsedWeek,
+            encounterIndex: stats.encounterIndex
+        };
+    });
 
-    // Calculate consecutive weeks meeting requirements (8 points)
-    const allWeeks = Object.keys(weeklyStats).sort();
+    weekEntries.sort((a, b) => {
+        const aTs = a.sortTimestamp;
+        const bTs = b.sortTimestamp;
+        if (aTs !== null && bTs !== null && aTs !== bTs) {
+            return aTs - bTs;
+        }
+        if (aTs !== null && bTs === null) {
+            return -1;
+        }
+        if (aTs === null && bTs !== null) {
+            return 1;
+        }
+        const aWeek = a.parsedWeek;
+        const bWeek = b.parsedWeek;
+        if (aWeek !== null && bWeek !== null && aWeek !== bWeek) {
+            return aWeek - bWeek;
+        }
+        return a.encounterIndex - b.encounterIndex;
+    });
+
     let maxConsecutive = 0;
     let currentStreak = 0;
 
-    for (const week of allWeeks) {
-        if (weeklyStats[week].totalPoints >= 8) {
+    for (const entry of weekEntries) {
+        if (entry.stats.totalPoints >= 8) {
             currentStreak++;
             maxConsecutive = Math.max(maxConsecutive, currentStreak);
         } else {
@@ -270,19 +341,21 @@ function analyzeWeeklyProgress(userPosts, config) {
         }
     }
 
+    const allWeeks = weekEntries.map(entry => entry.week);
+
     return {
         followers: followerCount,
         weeklyStats,
         consecutiveWeeksMet: maxConsecutive,
         totalValidPosts,
-        allWeeks // All weeks that have data, sorted chronologically
+        allWeeks,
+        weekDetails
     };
 }
 
 function formatPlatformEmbed(platform, platformData) {
     const { appRow, userPosts, activeCreatorRow, paidCreatorRow, config } = platformData;
 
-    // Check if user is already a CC on this platform (Active or Paid)
     const isActiveCreator = activeCreatorRow !== null;
     const isPaidCreator = paidCreatorRow !== null;
 
@@ -306,7 +379,6 @@ function formatPlatformEmbed(platform, platformData) {
     }
 
     const trimmedDate = appDateStr.split(',')[0].trim();
-    // Try multiple date formats
     const dateFormats = ['M/D/YY', 'MM/DD/YY', 'M/D/YYYY', 'MM/DD/YYYY'];
     let appDate = moment(trimmedDate, dateFormats, true);
 
@@ -333,7 +405,6 @@ function formatPlatformEmbed(platform, platformData) {
 
     let statusLines = [];
 
-    // If no weeks have data yet
     if (Object.keys(progress.weeklyStats).length === 0) {
         return {
             name: `${config.emoji} ${config.name}`,
@@ -342,28 +413,28 @@ function formatPlatformEmbed(platform, platformData) {
         };
     }
 
-    // Get the 3 most recent weeks from actual data (not calculated)
     const allWeeksWithData = progress.allWeeks;
     const recentWeeks = allWeeksWithData.slice(-3);
+    const weekDetails = progress.weekDetails || {};
 
-    // Display the most recent weeks that have actual data
-    let weekLabels;
-    if (recentWeeks.length === 1) {
-        weekLabels = ['Current/Last week'];
-    } else if (recentWeeks.length === 2) {
-        weekLabels = ['2 weeks ago', 'Last week'];
-    } else {
-        weekLabels = ['3 weeks ago', '2 weeks ago', 'Last week'];
-    }
-
-    for (let i = 0; i < recentWeeks.length; i++) {
-        const weekKey = recentWeeks[i];
+    for (const weekKey of recentWeeks) {
         const stats = progress.weeklyStats[weekKey];
         const metRequirement = stats.totalPoints >= req.weeklyPoints;
         const status = metRequirement ? '✅' : '❌';
+        const detail = weekDetails[weekKey] || {};
+        const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
+        const relativeLabel = describeRelativeWeek(referenceTimestamp);
+        const dateLabel = referenceTimestamp ? moment(referenceTimestamp).format('MMM D, YYYY') : null;
+        let heading = `Week ${weekKey}`;
+        if (relativeLabel) {
+            heading = `${relativeLabel} · Week ${weekKey}`;
+        }
+        if (dateLabel) {
+            heading += ` · ${dateLabel}`;
+        }
 
         statusLines.push(
-            `**${weekLabels[i]} (${weekKey}):** ${status}\n` +
+            `**${heading}:** ${status}\n` +
             `Points: \`${stats.totalPoints.toFixed(1)}\` | Valid Posts: \`${stats.validPosts}\` | Avg Quality: \`${stats.avgQuality}\``
         );
     }
@@ -395,11 +466,9 @@ module.exports = {
     name: 'messageCreate',
     once: false,
     async execute(message) {
-        // Ignore bot messages and DMs
         if (message.author.bot) return;
         if (message.channel.isDMBased()) return;
 
-        // Check if message contains any CC question phrase
         const rawContent = message.content;
         const normalizedContent = rawContent.toLowerCase();
         const sanitizedContent = normalizedContent
@@ -421,18 +490,15 @@ module.exports = {
             const platformResults = {};
             const existingCCPlatforms = [];
 
-            // Check all platforms
             for (const [key, config] of Object.entries(PLATFORMS)) {
                 const data = await getPlatformData(key, userId);
                 if (data && data.appRow) {
                     platformResults[key] = data;
                 } else if (data && (data.activeCreatorRow || data.paidCreatorRow)) {
-                    // User is a CC on this platform but has no application
                     existingCCPlatforms.push(config.name);
                 }
             }
 
-            // If no applications found
             if (Object.keys(platformResults).length === 0) {
                 if (existingCCPlatforms.length > 0) {
                     await message.reply({
@@ -448,7 +514,6 @@ module.exports = {
                 return;
             }
 
-            // Build embed with all platform data
             const embed = new EmbedBuilder()
                 .setTitle('📊 Your Content Creator Progress')
                 .setDescription(`Hey <@${userId}>! Here's why you may not have CC yet:`)
@@ -456,13 +521,11 @@ module.exports = {
                 .setTimestamp()
                 .setFooter({ text: 'Data updates every Monday' });
 
-            // Add fields for each platform
             for (const [platform, data] of Object.entries(platformResults)) {
                 const field = formatPlatformEmbed(platform, data);
                 embed.addFields(field);
             }
 
-            // Add helpful footer
             embed.addFields({
                 name: '💡 Tips',
                 value: 'Use `/cc-check-progress` anytime to check your progress!\n' +
