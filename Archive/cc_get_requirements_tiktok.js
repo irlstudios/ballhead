@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
 const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const credentials = require('../resources/secret.json');
 const moment = require('moment');
 
 function authorize() {
