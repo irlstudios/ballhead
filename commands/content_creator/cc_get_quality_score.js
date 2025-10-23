@@ -207,6 +207,7 @@ function processData(postsData, pId, platformFilter = null) {
         const caption = row[6];
         const views = row[8];
         const quality = row[11];
+        const points = row[12];
         const week = row[14];
 
         if (ownerUsername) {
@@ -217,12 +218,14 @@ function processData(postsData, pId, platformFilter = null) {
         const weekNumber = parseWeek(week);
         const likeNumber = parseNumber(likesCount);
         const viewsNumber = parseNumber(views);
+        const pointsNumber = parseNumber(points);
         const { unix: postDateUnix, display: postDateDisplay } = parseDate(postDate);
 
         const post = {
             score: qualityScore !== null ? qualityScore.toFixed(2) : 'N/A',
             likes: likeNumber !== null ? likeNumber.toLocaleString() : (likesCount ? likesCount.toString().trim() : 'N/A'),
             views: viewsNumber !== null ? viewsNumber.toLocaleString() : (views ? views.toString().trim() : 'N/A'),
+            points: pointsNumber !== null ? pointsNumber.toLocaleString() : (points ? points.toString().trim() : 'N/A'),
             details: caption ? caption.trim() : 'No caption provided.',
             week: weekNumber !== null ? weekNumber : null,
             postDateUnix,
@@ -363,8 +366,13 @@ module.exports = {
                     };
                 });
 
-            if (formattedWeeklyFields.length > 0) {
-                overviewEmbed.addFields(formattedWeeklyFields);
+            // Cap weekly fields to stay within Discord's 25 field limit
+            const baseFields = 2 + (userData.selectedPlatform ? 1 : 0);
+            const maxWeekly = Math.max(0, 25 - baseFields);
+            const weeklyToAdd = formattedWeeklyFields.slice(0, maxWeekly);
+
+            if (weeklyToAdd.length > 0) {
+                overviewEmbed.addFields(weeklyToAdd);
             } else {
                 overviewEmbed.addFields({ name: '📅 Weekly Averages', value: 'No weekly data available.', inline: false });
             }
