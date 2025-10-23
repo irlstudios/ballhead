@@ -1728,8 +1728,13 @@ const handleNext2 = async (interaction) => {
                     };
                 });
 
-            if (weeklyFields.length > 0) {
-                embed.addFields(weeklyFields);
+            // Cap fields to avoid Discord's 25-field limit
+            const baseFields = 2 + (platform ? 1 : 0);
+            const maxWeekly = Math.max(0, 25 - baseFields);
+            const weeklyToAdd = weeklyFields.slice(0, maxWeekly);
+
+            if (weeklyToAdd.length > 0) {
+                embed.addFields(weeklyToAdd);
             } else {
                 embed.addFields({ name: '📅 Weekly Averages', value: 'No weekly data available.', inline: false });
             }
@@ -1748,6 +1753,7 @@ const handleNext2 = async (interaction) => {
                 .addFields(
                     { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
+                    { name: '💎 Points', value: post.points ? post.points.toString() : 'N/A', inline: true },
                     { name: '👁️ Views', value: post.views.toString(), inline: true },
                     { name: '📅 Season Week', value: post.week !== null ? `Week ${post.week}` : 'N/A', inline: true },
                     { name: '🪪 Platform', value: post.platform || platform || 'N/A', inline: true },
@@ -1848,8 +1854,13 @@ const handlePrev2 = async (interaction) => {
                     };
                 });
 
-            if (weeklyFields.length > 0) {
-                embed.addFields(weeklyFields);
+            // Cap fields to avoid Discord's 25-field limit
+            const baseFieldsPrev = 2 + (platform ? 1 : 0);
+            const maxWeeklyPrev = Math.max(0, 25 - baseFieldsPrev);
+            const weeklyToAddPrev = weeklyFields.slice(0, maxWeeklyPrev);
+
+            if (weeklyToAddPrev.length > 0) {
+                embed.addFields(weeklyToAddPrev);
             } else {
                 embed.addFields({ name: '📅 Weekly Averages', value: 'No weekly data available.', inline: false });
             }
@@ -1868,6 +1879,7 @@ const handlePrev2 = async (interaction) => {
                 .addFields(
                     { name: '📈 Score', value: post.score.toString(), inline: true },
                     { name: '❤️ Likes', value: post.likes.toString(), inline: true },
+                    { name: '💎 Points', value: post.points ? post.points.toString() : 'N/A', inline: true },
                     { name: '👁️ Views', value: post.views.toString(), inline: true },
                     { name: '📅 Season Week', value: post.week !== null ? `Week ${post.week}` : 'N/A', inline: true },
                     { name: '🪪 Platform', value: post.platform || platform || 'N/A', inline: true },
