@@ -8,8 +8,7 @@ const AUTHORIZED_ROLES = [
     '1150196818475491419',
 ];
 
-// Track scheduled resets per-channel so newer schedules replace older ones
-const scheduledResets = new Map(); // channelId -> Timeout
+const scheduledResets = new Map();
 
 /**
  * Parse duration strings like `30m`, `1h`, `1d`, `45s` into milliseconds
@@ -88,8 +87,9 @@ module.exports = {
 
             // Clear any existing scheduled reset for this channel
             const previous = scheduledResets.get(channel.id);
-            if (previous) clearTimeout(previous);
+            if (previous?.timeout) clearTimeout(previous.timeout);
 
+            const expiresAt = Date.now() + durationMs;
             const timeout = setTimeout(async () => {
                 try {
                     await channel.setRateLimitPerUser(0, 'Automatic reset after scheduled cooldown length');
@@ -100,14 +100,15 @@ module.exports = {
                     scheduledResets.delete(channel.id);
                 }
             }, durationMs);
-            scheduledResets.set(channel.id, timeout);
+            scheduledResets.set(channel.id, { timeout, expiresAt, cooldownSeconds, appliedBy: interaction.user.id });
 
             const embed = new EmbedBuilder()
-                .setTitle('Channel Cooldown Set')
-                .setDescription(`Slowmode updated for <#${channel.id}>`)
+                .setTitle(previous ? 'Channel Cooldown Updated' : 'Channel Cooldown Set')
+                .setDescription(`Slowmode ${previous ? 'updated' : 'applied'} for <#${channel.id}>`)
                 .addFields(
                     { name: 'Cooldown', value: `${cooldownSeconds} seconds`, inline: true },
                     { name: 'Length', value: lengthInput, inline: true },
+                    { name: 'Expires', value: `<t:${Math.floor(expiresAt/1000)}:R>`, inline: true },
                 )
                 .setColor(0x2ECC71);
 
@@ -118,12 +119,11 @@ module.exports = {
                 const logChannelId = '834246361716883466';
                 const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
                 if (logChannel && typeof logChannel.send === 'function') {
-                    const expiresAt = Date.now() + durationMs;
                     const expiresUnix = Math.floor(expiresAt / 1000);
                     const logEmbed = new EmbedBuilder()
-                        .setTitle('Cooldown Applied')
+                        .setTitle(previous ? 'Cooldown Updated' : 'Cooldown Applied')
                         .setColor(0x3498DB)
-                        .setDescription('A channel cooldown has been applied.')
+                        .setDescription(`A channel cooldown has been ${previous ? 'updated' : 'applied'}.`)
                         .addFields(
                             { name: 'Channel', value: `<#${channel.id}>`, inline: true },
                             { name: 'Cooldown', value: `${cooldownSeconds} seconds`, inline: true },
@@ -131,6 +131,10 @@ module.exports = {
                             { name: 'Expires', value: `<t:${expiresUnix}:R> (<t:${expiresUnix}:F>)`, inline: false },
                         )
                         .setTimestamp(new Date(expiresAt));
+                    if (previous?.expiresAt) {
+                        const prevUnix = Math.floor(previous.expiresAt / 1000);
+                        logEmbed.addFields({ name: 'Previous Expires', value: `<t:${prevUnix}:R> (<t:${prevUnix}:F>)`, inline: false });
+                    }
                     await logChannel.send({ embeds: [logEmbed] });
                 }
             } catch (logErr) {
