@@ -5,7 +5,7 @@ const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const credentials = require('../../resources/secret.json');
 
 const sheetId = '1zjBhY8oBLOlxuSLpozy0M4WpV11Q83kvoxs74u4EjyM';
-const tabName = 'HRD Participants (Weekly)';
+const tabName = 'S2 HRD Participants (Weekly)';
 
 try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
