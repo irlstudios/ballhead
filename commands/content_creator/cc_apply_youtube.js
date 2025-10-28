@@ -198,38 +198,7 @@ module.exports = {
             return;
         }
 
-        const pad = (n) => String(n).padStart(2, '0');
-        const now = new Date();
-        const yy = String(now.getUTCFullYear()).slice(-2);
-        const timestamp = `${pad(now.getUTCMonth() + 1)}/${pad(now.getUTCDate())}/${yy}`;
-        const values = [
-            ['YouTube', cleanUsername, interaction.user.id, timestamp]
-        ];
-        let appendedRange;
-
-        try {
-            const appendResponse = await sheets.spreadsheets.values.append({
-                spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
-                range: '\'CC Applications\'!A:D',
-                valueInputOption: 'RAW',
-                resource: {values},
-                insertDataOption: 'INSERT_ROWS',
-                includeValuesInResponse: true
-            });
-            appendedRange = appendResponse.data?.updates?.updatedRange;
-        } catch (error) {
-            console.error('Error logging to Google Sheets:', error);
-            return interaction.editReply({content: 'Error logging your application. Please try again later.'});
-        }
-
-        const logChannel = interaction.client.channels.cache.get('1098354875324174477');
-        if (logChannel) {
-            const logEmbed = new EmbedBuilder()
-                .setTitle('New YouTube CC Application')
-                .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\nYouTube: ${youtubeUrl}`)
-                .setColor('#00ff00');
-            logChannel.send({embeds: [logEmbed]});
-        }
+        // Sheet append will happen after successful verification
 
         await interaction.editReply({content: 'Your application is being processed. We will follow up in your DMs once verification finishes.'});
         await interaction.member.roles.add(prospect_role);
@@ -256,6 +225,37 @@ module.exports = {
                     const channelId = matchedItem.aboutChannelInfo?.channelId || matchedItem.channelId || '';
                     const channelUrl = matchedItem.aboutChannelInfo?.channelUrl || matchedItem.channelUrl || youtubeUrl;
                     const subscribers = matchedItem.aboutChannelInfo?.numberOfSubscribers != null ? matchedItem.aboutChannelInfo.numberOfSubscribers : '';
+                    // Append to sheet only after successful verification
+                    const nowStamp = formatDate(new Date());
+                    const baseValues = [[
+                        'YouTube',
+                        cleanUsername,
+                        interaction.user.id,
+                        nowStamp
+                    ]];
+                    let appendedRange;
+                    try {
+                        const appendResponse = await sheets.spreadsheets.values.append({
+                            spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                            range: `'CC Applications'!A:D`,
+                            valueInputOption: 'USER_ENTERED',
+                            resource: { values: baseValues },
+                            insertDataOption: 'INSERT_ROWS',
+                            includeValuesInResponse: true
+                        });
+                        appendedRange = appendResponse.data?.updates?.updatedRange;
+                    } catch (error) {
+                        console.error('Error logging verified application to Google Sheets:', error);
+                    }
+
+                    const logChannel = interaction.client.channels.cache.get('1098354875324174477');
+                    if (logChannel) {
+                        const logEmbed = new EmbedBuilder()
+                            .setTitle('New YouTube CC Application')
+                            .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\nYouTube: ${youtubeUrl}`)
+                            .setColor('#00ff00');
+                        logChannel.send({embeds: [logEmbed]});
+                    }
                     const accountVideos = items.filter(item => {
                         if (item?.type && item.type !== 'video' && item.type !== 'shorts') {
                             return false;
@@ -270,21 +270,47 @@ module.exports = {
                     if (appendedRange) {
                         const rowNumber = extractRowNumber(appendedRange);
                         if (rowNumber) {
+                            const prev = rowNumber - 1;
+                            const eVal = channelId;
+                            const fVal = channelUrl;
+                            const gVal = subscribers;
+
+                            const hFormula = `=J${rowNumber}+O${rowNumber}+T${rowNumber}`;
+                            const iDate = `=I${prev}`;
+                            const jFormula = `=COUNTIFS(INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & I${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & N${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const kFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!C:C"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & I${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & N${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const lFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!L:L"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & I${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & N${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const mFormula = `=SUMIFS(INDIRECT("'" & A${rowNumber} & " Data'!M:M"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & I${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & N${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const nDate = `=N${prev}`;
+                            const oFormula = `=COUNTIFS(INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & N${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const pFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!C:C"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & N${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const qFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!L:L"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & N${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const rFormula = `=SUMIFS(INDIRECT("'" & A${rowNumber} & " Data'!M:M"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & N${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber}, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const sDate = `=S${prev}`;
+                            const tFormula = `=COUNTIFS(INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & S${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber} + 6, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const uFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!C:C"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & S${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber} + 6, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const vFormula = `=IFERROR(ROUND(AVERAGEIFS(INDIRECT("'" & A${rowNumber} & " Data'!L:L"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & S${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber} + 6, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)), 0)`;
+                            const wFormula = `=SUMIFS(INDIRECT("'" & A${rowNumber} & " Data'!M:M"), INDIRECT("'" & A${rowNumber} & " Data'!B:B"), E${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), ">=" & S${rowNumber}, ARRAYFORMULA(DATEVALUE(INDIRECT("'" & A${rowNumber} & " Data'!E:E"))), "<=" & S${rowNumber} + 6, INDIRECT("'" & A${rowNumber} & " Data'!J:J"), TRUE)`;
+                            const xFormula = `=M${rowNumber}`;
+                            const yFormula = `=R${rowNumber}`;
+                            const zFormula = `=W${rowNumber}`;
+                            const aaFormula = `=AND(X${rowNumber}>=8, Y${rowNumber}>=8, Z${rowNumber}>=8)`;
+
                             try {
                                 await sheets.spreadsheets.values.update({
                                     spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
-                                    range: `'CC Applications'!E${rowNumber}:G${rowNumber}`,
-                                    valueInputOption: 'RAW',
+                                    range: `'CC Applications'!E${rowNumber}:AA${rowNumber}`,
+                                    valueInputOption: 'USER_ENTERED',
                                     resource: {
                                         values: [[
-                                            channelId,
-                                            channelUrl,
-                                            subscribers
+                                            eVal, fVal, gVal, hFormula, iDate, jFormula, kFormula, lFormula, mFormula,
+                                            nDate, oFormula, pFormula, qFormula, rFormula, sDate, tFormula, uFormula,
+                                            vFormula, wFormula, xFormula, yFormula, zFormula, aaFormula
                                         ]]
                                     }
                                 });
                             } catch (updateError) {
-                                console.error('Failed to update CC application Apify data:', updateError);
+                                console.error('Failed to populate CC Applications formulas:', updateError);
                             }
                             const nowFormatted = formatDate(new Date());
                             let latestTimestamp = null;
@@ -302,10 +328,8 @@ module.exports = {
                                 await sheets.spreadsheets.values.update({
                                     spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
                                     range: `'CC Applications'!AB${rowNumber}:AC${rowNumber}`,
-                                    valueInputOption: 'RAW',
-                                    resource: {
-                                        values: [[nowFormatted, latestFormatted]]
-                                    }
+                                    valueInputOption: 'USER_ENTERED',
+                                    resource: { values: [[nowFormatted, latestFormatted]] }
                                 });
                             } catch (dateUpdateError) {
                                 console.error('Failed to update CC application date columns:', dateUpdateError);
@@ -357,15 +381,38 @@ module.exports = {
                         }
                         if (uniqueRows.length) {
                             try {
-                                await sheets.spreadsheets.values.append({
+                                const appendResp = await sheets.spreadsheets.values.append({
                                     spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
                                     range: '\'YouTube Data\'!A:I',
                                     valueInputOption: 'RAW',
                                     insertDataOption: 'INSERT_ROWS',
+                                    includeValuesInResponse: true,
                                     resource: {values: uniqueRows}
                                 });
+                                const videoRange = appendResp.data?.updates?.updatedRange;
+                                const startRow = extractRowNumber(videoRange);
+                                if (startRow) {
+                                    const formulas = uniqueRows.map((_, idx) => {
+                                        const r = startRow + idx;
+                                        const j = `=ISNUMBER(SEARCH("*gymclassvr*", G${r}))`;
+                                        const k = `=ISNUMBER(SEARCH("gcwowmoment", G${r}))`;
+                                        const l = `=IFERROR(VLOOKUP(D${r}, IMPORTRANGE("https://docs.google.com/spreadsheets/d/1Ze84DPzXsdaGAsg_t5MJMbmvGJlF1Q03R-uJ-OdpfU0/edit#gid=2025075070", "Season 16 Posts!G:M"), 7, FALSE), "Not Found")`;
+                                        const m = `=IF(AND(OR($J${r}=TRUE,$J${r}="TRUE"), $C${r}>=15), 4, 0) + IF(AND(NOT(OR($K${r}=TRUE,$K${r}="TRUE")), OR($J${r}=TRUE,$J${r}="TRUE"), $C${r}>=15, OR($L${r}=3,$L${r}=4,$L${r}=5)), $L${r}, 0) + IF(AND(OR($J${r}=TRUE,$J${r}="TRUE"), OR($K${r}=TRUE,$K${r}="TRUE")), 5, 0)`;
+                                        const n = `=AND(J${r}=TRUE)`;
+                                        const o = `=ISNUMBER(SEARCH("short", D${r}))`;
+                                        const p = `=ISOWEEKNUM(E${r})`;
+                                        return [j, k, l, m, n, o, p];
+                                    });
+                                    const endRow = startRow + uniqueRows.length - 1;
+                                    await sheets.spreadsheets.values.update({
+                                        spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                        range: `YouTube Data!J${startRow}:P${endRow}`,
+                                        valueInputOption: 'USER_ENTERED',
+                                        resource: { values: formulas }
+                                    });
+                                }
                             } catch (videoError) {
-                                console.error('Failed to append YouTube video data:', videoError);
+                                console.error('Failed to append YouTube video data or formulas:', videoError);
                             }
                         }
                     }
