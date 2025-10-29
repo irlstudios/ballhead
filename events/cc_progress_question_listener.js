@@ -330,10 +330,38 @@ function analyzeWeeklyProgress(userPosts, config) {
     });
 
     // Calculate consecutive weeks by working backwards from the most recent week
-    // Only count streaks that are current/recent (not historical streaks from months ago)
+    // Only count streaks that are current/recent and actually consecutive (no gaps)
     let consecutiveWeeksFromEnd = 0;
     for (let i = weekEntries.length - 1; i >= 0; i--) {
-        if (weekEntries[i].stats.totalPoints >= 8) {
+        const currentEntry = weekEntries[i];
+
+        // Check if this week meets the points requirement
+        if (currentEntry.stats.totalPoints >= 8) {
+            // If this is not the first week we're counting, verify it's consecutive with the previous
+            if (consecutiveWeeksFromEnd > 0 && i < weekEntries.length - 1) {
+                const nextEntry = weekEntries[i + 1];
+
+                // Check if weeks are consecutive by comparing timestamps (should be ~1 week apart)
+                // or by comparing parsed week numbers (should be sequential)
+                const currentTimestamp = currentEntry.sortTimestamp;
+                const nextTimestamp = nextEntry.sortTimestamp;
+
+                if (currentTimestamp && nextTimestamp) {
+                    const weeksDiff = moment(nextTimestamp).diff(moment(currentTimestamp), 'weeks', true);
+                    // Allow some tolerance (between 0.5 and 1.5 weeks apart)
+                    if (weeksDiff < 0.5 || weeksDiff > 1.5) {
+                        // Gap detected - not consecutive
+                        break;
+                    }
+                } else if (currentEntry.parsedWeek !== null && nextEntry.parsedWeek !== null) {
+                    // Check if parsed week numbers are sequential
+                    if (nextEntry.parsedWeek - currentEntry.parsedWeek !== 1) {
+                        // Gap detected - not consecutive
+                        break;
+                    }
+                }
+            }
+
             consecutiveWeeksFromEnd++;
         } else {
             // Stop counting when we hit a week that doesn't meet requirements
