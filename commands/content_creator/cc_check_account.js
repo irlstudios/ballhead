@@ -393,96 +393,96 @@ function formatPlatformEmbed(platform, platformData) {
         };
     }
 
-    const allWeeksWithData = progress.allWeeks;
-    const weekDetails = progress.weekDetails || {};
-
-    // Find the most recent week number in the data to use as our reference
-    let mostRecentWeekNum = null;
-    let mostRecentTimestamp = null;
-
-    for (const weekKey of allWeeksWithData) {
-        const weekNum = parseSeasonWeek(weekKey);
-        const detail = weekDetails[weekKey] || {};
-        const timestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
-
-        if (weekNum !== null && timestamp !== null) {
-            if (mostRecentWeekNum === null || weekNum > mostRecentWeekNum ||
-                (weekNum === mostRecentWeekNum && timestamp > mostRecentTimestamp)) {
-                mostRecentWeekNum = weekNum;
-                mostRecentTimestamp = timestamp;
-            }
-        }
-    }
-
-    // If we have no data at all, show nothing
-    if (mostRecentWeekNum === null) {
-        return {
-            name: `${config.emoji} ${config.name}`,
-            value: `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No valid posts with week assignments yet.`,
-            inline: false
-        };
-    }
-
-    // Build a fixed structure: show the 3 most recent consecutive weeks
-    // Start from the most recent week and go back 2 weeks
-    const recentWeeks = [];
+    // Build calendar-based weeks: Last week, 2 weeks ago, 3 weeks ago
+    // These are ALWAYS based on the current date, not user data
     const now = moment();
+    const calendarWeeks = [];
 
-    for (let i = 0; i < 3; i++) {
-        const weekNum = mostRecentWeekNum - i;
-        const weekKey = `Week ${weekNum}`;
-        recentWeeks.unshift(weekKey); // Add to beginning so they're in chronological order
+    for (let weeksAgo = 1; weeksAgo <= 3; weeksAgo++) {
+        const weekStart = moment().subtract(weeksAgo, 'weeks').startOf('week');
+        const weekEnd = moment().subtract(weeksAgo, 'weeks').endOf('week');
 
-        // If this week doesn't have data, create empty stats
-        if (!progress.weeklyStats[weekKey]) {
-            progress.weeklyStats[weekKey] = {
-                totalPoints: 0,
-                validPosts: 0,
-                totalPosts: 0,
-                avgQuality: '0.00'
-            };
-        }
-
-        // If we don't have a timestamp for this week, estimate it
-        if (!weekDetails[weekKey] || !weekDetails[weekKey].latestTimestamp) {
-            if (mostRecentTimestamp) {
-                // Estimate: each week is ~7 days apart
-                const estimatedTs = mostRecentTimestamp - (i * 7 * 24 * 60 * 60 * 1000);
-                weekDetails[weekKey] = {
-                    latestTimestamp: estimatedTs,
-                    earliestTimestamp: estimatedTs
-                };
-            }
-        }
+        calendarWeeks.push({
+            weeksAgo,
+            weekStart,
+            weekEnd,
+            timestamp: weekStart.valueOf()
+        });
     }
 
-    for (const weekKey of recentWeeks) {
-        const stats = progress.weeklyStats[weekKey];
-        const metRequirement = stats.totalPoints >= req.weeklyPoints;
+    // For each calendar week, aggregate the user's posts that fall in that time range
+    const calendarWeekStats = calendarWeeks.map(calWeek => {
+        let totalPoints = 0;
+        let validPosts = 0;
+        let totalPosts = 0;
+        let qualitySum = 0;
+
+        // Go through all user posts and find ones that fall in this calendar week
+        for (const post of userPosts) {
+            const postMoment = parseSpreadsheetDate(post[4]);
+            if (!postMoment) continue;
+
+            // Check if post falls within this calendar week
+            if (postMoment.isBetween(calWeek.weekStart, calWeek.weekEnd, null, '[]')) {
+                const pointsEarned = parseFloat(post[12]) || 0;
+                const isValid = post[13]?.trim()?.toLowerCase() === 'true' || post[13]?.trim() === 'TRUE';
+                const qualityScore = parseFloat(post[11]) || 0;
+
+                totalPosts++;
+                if (isValid) {
+                    totalPoints += pointsEarned;
+                    validPosts++;
+                    qualitySum += qualityScore;
+                }
+            }
+        }
+
+        const avgQuality = validPosts > 0 ? (qualitySum / validPosts).toFixed(2) : '0.00';
+
+        return {
+            weeksAgo: calWeek.weeksAgo,
+            totalPoints,
+            validPosts,
+            totalPosts,
+            avgQuality,
+            timestamp: calWeek.timestamp,
+            weekStart: calWeek.weekStart,
+            weekEnd: calWeek.weekEnd
+        };
+    });
+
+    // Reverse so oldest week is first (3 weeks ago, 2 weeks ago, last week)
+    calendarWeekStats.reverse();
+
+    for (const weekStat of calendarWeekStats) {
+        const metRequirement = weekStat.totalPoints >= req.weeklyPoints;
         const status = metRequirement ? '✅' : '❌';
-        const detail = weekDetails[weekKey] || {};
-        const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
-        const relativeLabel = describeRelativeWeek(referenceTimestamp);
-        const dateLabel = referenceTimestamp ? moment(referenceTimestamp).format('MMM D, YYYY') : null;
-        let heading = `Week ${weekKey}`;
-        if (relativeLabel) {
-            heading = `${relativeLabel} · Week ${weekKey}`;
-        }
-        if (dateLabel) {
-            heading += ` · ${dateLabel}`;
-        }
+
+        const relativeLabel = describeRelativeWeek(weekStat.timestamp);
+        const dateLabel = moment(weekStat.weekStart).format('MMM D, YYYY');
+        const heading = `${relativeLabel} · ${dateLabel}`;
 
         statusLines.push(
             `**${heading}:** ${status}\n` +
-            `Points: \`${stats.totalPoints.toFixed(1)}\` | Valid Posts: \`${stats.validPosts}\` | Avg Quality: \`${stats.avgQuality}\``
+            `Points: \`${weekStat.totalPoints.toFixed(1)}\` | Valid Posts: \`${weekStat.validPosts}\` | Avg Quality: \`${weekStat.avgQuality}\``
         );
+    }
+
+    // Calculate consecutive weeks from the calendar-based stats
+    let consecutiveWeeksFromEnd = 0;
+    for (let i = calendarWeekStats.length - 1; i >= 0; i--) {
+        if (calendarWeekStats[i].totalPoints >= req.weeklyPoints) {
+            consecutiveWeeksFromEnd++;
+        } else {
+            break;
+        }
     }
 
     const followerCount = parseInt(progress.followers);
     const meetsFollowerReq = !isNaN(followerCount) && followerCount >= req.followers;
     const followerStatus = meetsFollowerReq ? '✅' : '❌';
 
-    const meetsConsecutiveReq = progress.consecutiveWeeksMet >= req.weeksRequired;
+    const meetsConsecutiveReq = consecutiveWeeksFromEnd >= req.weeksRequired;
     const consecutiveStatus = meetsConsecutiveReq ? '✅' : '❌';
 
     let statusHeader = '';
@@ -494,7 +494,7 @@ function formatPlatformEmbed(platform, platformData) {
         name: `${config.emoji} ${config.name}`,
         value: statusHeader +
                `**${followerLabel}:** ${progress.followers} ${followerStatus} (need ${req.followers})\n` +
-               `**Consecutive Weeks (${req.weeklyPoints}+ pts):** ${progress.consecutiveWeeksMet}/${req.weeksRequired} ${consecutiveStatus}\n` +
+               `**Consecutive Weeks (${req.weeklyPoints}+ pts):** ${consecutiveWeeksFromEnd}/${req.weeksRequired} ${consecutiveStatus}\n` +
                `**Requirements:** ${req.weeklyPoints} points/week for ${req.weeksRequired} consecutive weeks\n\n` +
                statusLines.join('\n\n'),
         inline: false
