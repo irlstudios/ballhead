@@ -396,63 +396,64 @@ function formatPlatformEmbed(platform, platformData) {
     const allWeeksWithData = progress.allWeeks;
     const weekDetails = progress.weekDetails || {};
 
-    // Filter to only include weeks from the last 3 weeks (chronologically)
-    let recentWeeks = allWeeksWithData.filter(weekKey => {
+    // Find the most recent week number in the data to use as our reference
+    let mostRecentWeekNum = null;
+    let mostRecentTimestamp = null;
+
+    for (const weekKey of allWeeksWithData) {
+        const weekNum = parseSeasonWeek(weekKey);
         const detail = weekDetails[weekKey] || {};
-        const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
-        if (!referenceTimestamp) return false;
+        const timestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
 
-        // Calculate how many weeks ago this week was
-        const reference = moment(referenceTimestamp).startOf('week');
-        const now = moment().startOf('week');
-        const weeksAgo = now.diff(reference, 'weeks');
-
-        // Only include weeks within the last 3 weeks (0, 1, 2, or 3 weeks ago)
-        return weeksAgo <= 3;
-    });
-
-    // Fill in gaps between weeks so missing weeks show as 0 points
-    if (recentWeeks.length >= 2) {
-        const filledWeeks = [];
-        for (let i = 0; i < recentWeeks.length; i++) {
-            filledWeeks.push(recentWeeks[i]);
-
-            // Check if there's a next week and if there's a gap
-            if (i < recentWeeks.length - 1) {
-                const currentWeekNum = parseSeasonWeek(recentWeeks[i]);
-                const nextWeekNum = parseSeasonWeek(recentWeeks[i + 1]);
-
-                if (currentWeekNum !== null && nextWeekNum !== null && nextWeekNum - currentWeekNum > 1) {
-                    // There's a gap - fill it
-                    for (let missingWeek = currentWeekNum + 1; missingWeek < nextWeekNum; missingWeek++) {
-                        const missingWeekKey = `Week ${missingWeek}`;
-                        filledWeeks.push(missingWeekKey);
-                        // Add empty stats for this missing week
-                        if (!progress.weeklyStats[missingWeekKey]) {
-                            progress.weeklyStats[missingWeekKey] = {
-                                totalPoints: 0,
-                                validPosts: 0,
-                                totalPosts: 0,
-                                avgQuality: '0.00'
-                            };
-                        }
-                        // Estimate timestamp for the missing week (for relative date display)
-                        const currentDetail = weekDetails[recentWeeks[i]] || {};
-                        const nextDetail = weekDetails[recentWeeks[i + 1]] || {};
-                        const currentTs = currentDetail.latestTimestamp ?? currentDetail.earliestTimestamp;
-                        const nextTs = nextDetail.latestTimestamp ?? nextDetail.earliestTimestamp;
-                        if (currentTs && nextTs) {
-                            const estimatedTs = currentTs + ((nextTs - currentTs) * (missingWeek - currentWeekNum) / (nextWeekNum - currentWeekNum));
-                            weekDetails[missingWeekKey] = {
-                                latestTimestamp: estimatedTs,
-                                earliestTimestamp: estimatedTs
-                            };
-                        }
-                    }
-                }
+        if (weekNum !== null && timestamp !== null) {
+            if (mostRecentWeekNum === null || weekNum > mostRecentWeekNum ||
+                (weekNum === mostRecentWeekNum && timestamp > mostRecentTimestamp)) {
+                mostRecentWeekNum = weekNum;
+                mostRecentTimestamp = timestamp;
             }
         }
-        recentWeeks = filledWeeks;
+    }
+
+    // If we have no data at all, show nothing
+    if (mostRecentWeekNum === null) {
+        return {
+            name: `${config.emoji} ${config.name}`,
+            value: `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No valid posts with week assignments yet.`,
+            inline: false
+        };
+    }
+
+    // Build a fixed structure: show the 3 most recent consecutive weeks
+    // Start from the most recent week and go back 2 weeks
+    const recentWeeks = [];
+    const now = moment();
+
+    for (let i = 0; i < 3; i++) {
+        const weekNum = mostRecentWeekNum - i;
+        const weekKey = `Week ${weekNum}`;
+        recentWeeks.unshift(weekKey); // Add to beginning so they're in chronological order
+
+        // If this week doesn't have data, create empty stats
+        if (!progress.weeklyStats[weekKey]) {
+            progress.weeklyStats[weekKey] = {
+                totalPoints: 0,
+                validPosts: 0,
+                totalPosts: 0,
+                avgQuality: '0.00'
+            };
+        }
+
+        // If we don't have a timestamp for this week, estimate it
+        if (!weekDetails[weekKey] || !weekDetails[weekKey].latestTimestamp) {
+            if (mostRecentTimestamp) {
+                // Estimate: each week is ~7 days apart
+                const estimatedTs = mostRecentTimestamp - (i * 7 * 24 * 60 * 60 * 1000);
+                weekDetails[weekKey] = {
+                    latestTimestamp: estimatedTs,
+                    earliestTimestamp: estimatedTs
+                };
+            }
+        }
     }
 
     for (const weekKey of recentWeeks) {
