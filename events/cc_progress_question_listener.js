@@ -329,15 +329,15 @@ function analyzeWeeklyProgress(userPosts, config) {
         return a.encounterIndex - b.encounterIndex;
     });
 
-    let maxConsecutive = 0;
-    let currentStreak = 0;
-
-    for (const entry of weekEntries) {
-        if (entry.stats.totalPoints >= 8) {
-            currentStreak++;
-            maxConsecutive = Math.max(maxConsecutive, currentStreak);
+    // Calculate consecutive weeks by working backwards from the most recent week
+    // Only count streaks that are current/recent (not historical streaks from months ago)
+    let consecutiveWeeksFromEnd = 0;
+    for (let i = weekEntries.length - 1; i >= 0; i--) {
+        if (weekEntries[i].stats.totalPoints >= 8) {
+            consecutiveWeeksFromEnd++;
         } else {
-            currentStreak = 0;
+            // Stop counting when we hit a week that doesn't meet requirements
+            break;
         }
     }
 
@@ -346,7 +346,7 @@ function analyzeWeeklyProgress(userPosts, config) {
     return {
         followers: followerCount,
         weeklyStats,
-        consecutiveWeeksMet: maxConsecutive,
+        consecutiveWeeksMet: consecutiveWeeksFromEnd,
         totalValidPosts,
         allWeeks,
         weekDetails
@@ -414,8 +414,22 @@ function formatPlatformEmbed(platform, platformData) {
     }
 
     const allWeeksWithData = progress.allWeeks;
-    const recentWeeks = allWeeksWithData.slice(-3);
     const weekDetails = progress.weekDetails || {};
+
+    // Filter to only include weeks from the last 3 weeks (chronologically)
+    const recentWeeks = allWeeksWithData.filter(weekKey => {
+        const detail = weekDetails[weekKey] || {};
+        const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
+        if (!referenceTimestamp) return false;
+
+        // Calculate how many weeks ago this week was
+        const reference = moment(referenceTimestamp).startOf('week');
+        const now = moment().startOf('week');
+        const weeksAgo = now.diff(reference, 'weeks');
+
+        // Only include weeks within the last 3 weeks (0, 1, 2, or 3 weeks ago)
+        return weeksAgo <= 3;
+    });
 
     for (const weekKey of recentWeeks) {
         const stats = progress.weeklyStats[weekKey];
