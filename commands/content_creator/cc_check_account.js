@@ -281,15 +281,15 @@ function analyzeWeeklyProgress(userPosts, config) {
         return a.encounterIndex - b.encounterIndex;
     });
 
-    let maxConsecutive = 0;
-    let currentStreak = 0;
-
-    for (const entry of weekEntries) {
-        if (entry.stats.totalPoints >= 8) {
-            currentStreak++;
-            maxConsecutive = Math.max(maxConsecutive, currentStreak);
+    // Calculate consecutive weeks by working backwards from the most recent week
+    // Only count streaks that are current/recent (not historical streaks from months ago)
+    let consecutiveWeeksFromEnd = 0;
+    for (let i = weekEntries.length - 1; i >= 0; i--) {
+        if (weekEntries[i].stats.totalPoints >= 8) {
+            consecutiveWeeksFromEnd++;
         } else {
-            currentStreak = 0;
+            // Stop counting when we hit a week that doesn't meet requirements
+            break;
         }
     }
 
@@ -298,7 +298,7 @@ function analyzeWeeklyProgress(userPosts, config) {
     return {
         followers: followerCount,
         weeklyStats,
-        consecutiveWeeksMet: maxConsecutive,
+        consecutiveWeeksMet: consecutiveWeeksFromEnd,
         totalValidPosts,
         allWeeks,
         weekDetails
@@ -366,8 +366,22 @@ function formatPlatformEmbed(platform, platformData) {
     }
 
     const allWeeksWithData = progress.allWeeks;
-    const recentWeeks = allWeeksWithData.slice(-3);
     const weekDetails = progress.weekDetails || {};
+
+    // Filter to only include weeks from the last 3 weeks (chronologically)
+    const recentWeeks = allWeeksWithData.filter(weekKey => {
+        const detail = weekDetails[weekKey] || {};
+        const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
+        if (!referenceTimestamp) return false;
+
+        // Calculate how many weeks ago this week was
+        const reference = moment(referenceTimestamp).startOf('week');
+        const now = moment().startOf('week');
+        const weeksAgo = now.diff(reference, 'weeks');
+
+        // Only include weeks within the last 3 weeks (0, 1, 2, or 3 weeks ago)
+        return weeksAgo <= 3;
+    });
 
     for (const weekKey of recentWeeks) {
         const stats = progress.weeklyStats[weekKey];
@@ -414,15 +428,45 @@ function formatPlatformEmbed(platform, platformData) {
     };
 }
 
+const MODERATOR_ROLES = [
+    '805833778064130104',
+    '939634611909185646',
+    '1258042039895986249'
+];
+
+function canCheckOthers(member) {
+    if (!member || !member.roles) return false;
+    return MODERATOR_ROLES.some(roleId => member.roles.cache.has(roleId));
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('cc-check-progress')
-        .setDescription('Check your Content Creator application status and requirements progress across all platforms'),
+        .setDescription('Check your Content Creator application status and requirements progress across all platforms')
+        .addUserOption(option =>
+            option.setName('user')
+                .setDescription('(Moderator only) Check another user\'s progress')
+                .setRequired(false)
+        ),
     async execute(interaction) {
         try {
             await interaction.deferReply({ ephemeral: false });
 
-            const userId = interaction.user.id;
+            const targetUser = interaction.options.getUser('user');
+            const isModerator = canCheckOthers(interaction.member);
+
+            // If they're trying to check someone else but aren't a moderator, deny
+            if (targetUser && !isModerator) {
+                await interaction.editReply({
+                    content: 'You don\'t have permission to check other users\' progress. You can only check your own progress.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Determine whose progress to check
+            const userId = targetUser ? targetUser.id : interaction.user.id;
+            const isCheckingOther = targetUser && targetUser.id !== interaction.user.id;
             const platformResults = {};
             const existingCCPlatforms = [];
 
@@ -437,22 +481,25 @@ module.exports = {
 
             if (Object.keys(platformResults).length === 0) {
                 if (existingCCPlatforms.length > 0) {
+                    const pronoun = isCheckingOther ? 'They\'re' : 'You\'re';
+                    const possessive = isCheckingOther ? 'their' : 'your';
                     await interaction.editReply({
-                        content: 'Looks like you\'re already a CC, silly! 😄\n\n' +
-                                 'You\'re a Content Creator for: **' + existingCCPlatforms.join(', ') + '**\n\n' +
-                                 'You also don\'t have any open applications to other platforms.'
+                        content: `${isCheckingOther ? `<@${userId}> is` : 'Looks like you\'re'} already a CC, silly! 😄\n\n` +
+                                 `${pronoun} a Content Creator for: **${existingCCPlatforms.join(', ')}**\n\n` +
+                                 `${pronoun} also don't have any open applications to other platforms.`
                     });
                 } else {
                     await interaction.editReply({
-                        content: 'You haven\'t applied for any CC programs yet.\n\nUse `/tiktok-cc-apply`, `/youtube-cc-apply`, or `/instagram-cc-apply` to get started!'
+                        content: `${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n\n` +
+                                 `${isCheckingOther ? 'They need' : 'Use'} ${isCheckingOther ? 'to use' : ''} \`/tiktok-cc-apply\`, \`/youtube-cc-apply\`, or \`/instagram-cc-apply\` to get started!`
                     });
                 }
                 return;
             }
 
             const embed = new EmbedBuilder()
-                .setTitle('📊 Your Content Creator Progress')
-                .setDescription('Here\'s your current status across all platforms you\'ve applied to:')
+                .setTitle(`📊 ${isCheckingOther ? `${targetUser.username}'s` : 'Your'} Content Creator Progress`)
+                .setDescription(`${isCheckingOther ? `Here's <@${userId}>'s` : 'Here\'s your'} current status across all platforms ${isCheckingOther ? 'they\'ve' : 'you\'ve'} applied to:`)
                 .setColor('#0099ff')
                 .setTimestamp()
                 .setFooter({ text: 'Data updates every Monday' });
