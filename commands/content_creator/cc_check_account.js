@@ -397,7 +397,7 @@ function formatPlatformEmbed(platform, platformData) {
     const weekDetails = progress.weekDetails || {};
 
     // Filter to only include weeks from the last 3 weeks (chronologically)
-    const recentWeeks = allWeeksWithData.filter(weekKey => {
+    let recentWeeks = allWeeksWithData.filter(weekKey => {
         const detail = weekDetails[weekKey] || {};
         const referenceTimestamp = detail.latestTimestamp ?? detail.earliestTimestamp ?? null;
         if (!referenceTimestamp) return false;
@@ -410,6 +410,50 @@ function formatPlatformEmbed(platform, platformData) {
         // Only include weeks within the last 3 weeks (0, 1, 2, or 3 weeks ago)
         return weeksAgo <= 3;
     });
+
+    // Fill in gaps between weeks so missing weeks show as 0 points
+    if (recentWeeks.length >= 2) {
+        const filledWeeks = [];
+        for (let i = 0; i < recentWeeks.length; i++) {
+            filledWeeks.push(recentWeeks[i]);
+
+            // Check if there's a next week and if there's a gap
+            if (i < recentWeeks.length - 1) {
+                const currentWeekNum = parseSeasonWeek(recentWeeks[i]);
+                const nextWeekNum = parseSeasonWeek(recentWeeks[i + 1]);
+
+                if (currentWeekNum !== null && nextWeekNum !== null && nextWeekNum - currentWeekNum > 1) {
+                    // There's a gap - fill it
+                    for (let missingWeek = currentWeekNum + 1; missingWeek < nextWeekNum; missingWeek++) {
+                        const missingWeekKey = `Week ${missingWeek}`;
+                        filledWeeks.push(missingWeekKey);
+                        // Add empty stats for this missing week
+                        if (!progress.weeklyStats[missingWeekKey]) {
+                            progress.weeklyStats[missingWeekKey] = {
+                                totalPoints: 0,
+                                validPosts: 0,
+                                totalPosts: 0,
+                                avgQuality: '0.00'
+                            };
+                        }
+                        // Estimate timestamp for the missing week (for relative date display)
+                        const currentDetail = weekDetails[recentWeeks[i]] || {};
+                        const nextDetail = weekDetails[recentWeeks[i + 1]] || {};
+                        const currentTs = currentDetail.latestTimestamp ?? currentDetail.earliestTimestamp;
+                        const nextTs = nextDetail.latestTimestamp ?? nextDetail.earliestTimestamp;
+                        if (currentTs && nextTs) {
+                            const estimatedTs = currentTs + ((nextTs - currentTs) * (missingWeek - currentWeekNum) / (nextWeekNum - currentWeekNum));
+                            weekDetails[missingWeekKey] = {
+                                latestTimestamp: estimatedTs,
+                                earliestTimestamp: estimatedTs
+                            };
+                        }
+                    }
+                }
+            }
+        }
+        recentWeeks = filledWeeks;
+    }
 
     for (const weekKey of recentWeeks) {
         const stats = progress.weeklyStats[weekKey];
