@@ -1675,7 +1675,7 @@ const handleNext2 = async (interaction) => {
             return interaction.followUp({ content: 'Pagination data not found or has expired.', ephemeral: true });
         }
 
-        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform } = paginationData;
+        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform, seasonStart } = paginationData;
         let { currentPage } = paginationData;
 
         currentPage += 1;
@@ -1696,7 +1696,8 @@ const handleNext2 = async (interaction) => {
                 .setColor(color)
                 .addFields(
                     { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true },
-                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true }
+                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true },
+                    { name: '🚀 Season Start', value: (seasonStart && seasonStart.display) ? seasonStart.display : 'N/A', inline: true }
                 );
 
             if (platform) {
@@ -1729,7 +1730,7 @@ const handleNext2 = async (interaction) => {
                 });
 
             // Cap fields to avoid Discord's 25-field limit
-            const baseFields = 2 + (platform ? 1 : 0);
+            const baseFields = 3 + (platform ? 1 : 0);
             const maxWeekly = Math.max(0, 25 - baseFields);
             const weeklyToAdd = weeklyFields.slice(0, maxWeekly);
 
@@ -1801,7 +1802,7 @@ const handlePrev2 = async (interaction) => {
             return interaction.followUp({ content: 'Pagination data not found or has expired.', ephemeral: true });
         }
 
-        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform } = paginationData;
+        const { posts, totalPages, username, userAvatar, runningAverage, weeklyAverages, embedColor, platform, seasonStart } = paginationData;
         let { currentPage } = paginationData;
 
         currentPage -= 1;
@@ -1822,7 +1823,8 @@ const handlePrev2 = async (interaction) => {
                 .setColor(color)
                 .addFields(
                     { name: '📈 Running Average (Season)', value: runningAverage.toString(), inline: true },
-                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true }
+                    { name: '📊 Total Posts', value: posts.length.toString(), inline: true },
+                    { name: '🚀 Season Start', value: (seasonStart && seasonStart.display) ? seasonStart.display : 'N/A', inline: true }
                 );
 
             if (platform) {
@@ -1855,7 +1857,7 @@ const handlePrev2 = async (interaction) => {
                 });
 
             // Cap fields to avoid Discord's 25-field limit
-            const baseFieldsPrev = 2 + (platform ? 1 : 0);
+            const baseFieldsPrev = 3 + (platform ? 1 : 0);
             const maxWeeklyPrev = Math.max(0, 25 - baseFieldsPrev);
             const weeklyToAddPrev = weeklyFields.slice(0, maxWeeklyPrev);
 
