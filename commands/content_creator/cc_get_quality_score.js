@@ -16,10 +16,13 @@ const PLATFORM_COLORS = {
     default: '#0099ff'
 };
 const CREATOR_LOOKUP_SHEETS = [
-    { range: 'CC Applications!A:Z', idIndex: 2, pIdIndex: 4 },
-    { range: 'Base Creators!A:Z', idIndex: 3, pIdIndex: 4 },
-    { range: 'Active Creators!A:Z', idIndex: 3, pIdIndex: 4 }
+    { range: 'CC Applications!A:Z', platformIndex: 0, idIndex: 2, pIdIndex: 4 },
+    { range: 'Base Creators!A:Z', platformIndex: 0, idIndex: 3, pIdIndex: 4 },
+    { range: 'Active Creators!A:Z', platformIndex: 0, idIndex: 3, pIdIndex: 4 }
 ];
+
+// Season start date is stored at Paid Creators!G2 in MM/DD/YYYY format
+const SEASON_START_RANGE = 'Paid Creators!G2';
 
 function authorize() {
     const { client_email, private_key } = credentials;
@@ -32,11 +35,23 @@ function authorize() {
     return auth;
 }
 
+function normalizePlatform(value) {
+    if (!value) return '';
+    const v = value.toString().trim().toLowerCase();
+    if (v === 'instagram') return 'Reels';
+    if (v === 'ig') return 'Reels';
+    if (v === 'reels') return 'Reels';
+    if (v === 'tiktok' || v === 'tik tok') return 'TikTok';
+    if (v === 'youtube' || v === 'yt') return 'YouTube';
+    return value.toString().trim();
+}
+
 async function getSheetData() {
     const sheets = google.sheets({ version: 'v4', auth: authorize() });
     const ranges = [
         ...PLATFORM_SHEETS.map(item => item.range),
-        ...CREATOR_LOOKUP_SHEETS.map(item => item.range)
+        ...CREATOR_LOOKUP_SHEETS.map(item => item.range),
+        SEASON_START_RANGE
     ];
     const response = await sheets.spreadsheets.values.batchGet({
         spreadsheetId: SPREADSHEET_ID,
@@ -44,7 +59,9 @@ async function getSheetData() {
     });
     const valueRanges = response.data.valueRanges || [];
     const posts = [];
+    // Map: discordId -> Map(platform -> pId)
     const creatorIds = new Map();
+    let seasonStart = { unix: null, display: 'N/A' };
 
     valueRanges.forEach((valueRange, index) => {
         if (index < PLATFORM_SHEETS.length) {
@@ -64,30 +81,50 @@ async function getSheetData() {
         }
 
         const lookupIndex = index - PLATFORM_SHEETS.length;
-        const lookupConfig = CREATOR_LOOKUP_SHEETS[lookupIndex];
-        const values = valueRange.values;
-        if (!values || values.length < 2) {
+        if (lookupIndex < CREATOR_LOOKUP_SHEETS.length) {
+            const lookupConfig = CREATOR_LOOKUP_SHEETS[lookupIndex];
+            const values = valueRange.values;
+            if (!values || values.length < 2) {
+                return;
+            }
+            values.slice(1).forEach(row => {
+                const platformRaw = row[lookupConfig.platformIndex];
+                const discordId = row[lookupConfig.idIndex];
+                const pId = row[lookupConfig.pIdIndex];
+                if (!discordId || !pId || !platformRaw) {
+                    return;
+                }
+                const normalizedId = normalizeDiscordId(discordId);
+                if (!normalizedId) {
+                    return;
+                }
+                const plat = normalizePlatform(platformRaw);
+                const pIdTrim = pId.toString().trim();
+                if (!pIdTrim) return;
+                if (!creatorIds.has(normalizedId)) {
+                    creatorIds.set(normalizedId, new Map());
+                }
+                const byPlat = creatorIds.get(normalizedId);
+                if (!byPlat.has(plat)) {
+                    byPlat.set(plat, pIdTrim);
+                }
+            });
             return;
         }
-        values.slice(1).forEach(row => {
-            const discordId = row[lookupConfig.idIndex];
-            const pId = row[lookupConfig.pIdIndex];
-            if (!discordId || !pId) {
-                return;
-            }
-            const normalizedId = normalizeDiscordId(discordId);
-            if (!normalizedId || creatorIds.has(normalizedId)) {
-                return;
-            }
-            creatorIds.set(normalizedId, pId.toString().trim());
-        });
+
+        // Season start date range (Paid Creators!G2)
+        const values = valueRange.values;
+        const cell = (values && values[0] && values[0][0]) ? values[0][0] : null;
+        if (cell) {
+            seasonStart = parseDate(cell);
+        }
     });
 
     if (posts.length === 0) {
         throw new Error('No data found in the content creator sheets.');
     }
 
-    return { posts, creatorIds };
+    return { posts, creatorIds, seasonStart };
 }
 
 function parseWeek(value) {
@@ -165,19 +202,39 @@ function isValidRow(value) {
     return normalized === 'yes' || normalized === 'true' || normalized === '1' || normalized === 'y';
 }
 
-function processData(postsData, pId, platformFilter = null) {
+function isOnOrAfterDay(unixA, unixB) {
+    if (unixA === null || unixB === null) return false;
+    const a = new Date(unixA * 1000);
+    const b = new Date(unixB * 1000);
+    const aDay = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
+    const bDay = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+    return aDay >= bDay;
+}
+
+function processData(postsData, pIds, platformFilter = null, seasonStartUnix = null) {
     const userData = {
         username: 'Unknown',
         runningAverage: 'N/A',
         weeklyAverages: {},
         posts: [],
-        pId
+        pId: pIds
     };
 
     let totalQuality = 0;
     let count = 0;
     const weeklyScores = {};
     const embedColor = platformFilter ? (PLATFORM_COLORS[platformFilter] || PLATFORM_COLORS.default) : PLATFORM_COLORS.default;
+
+    const pIdSet = new Set(Array.isArray(pIds) ? pIds.filter(Boolean) : [pIds].filter(Boolean));
+
+    // If we were asked to filter by user ids but none are available, return empty
+    if (pIdSet.size === 0) {
+        return {
+            ...userData,
+            embedColor,
+            selectedPlatform: platformFilter || null
+        };
+    }
 
     postsData.forEach((entry) => {
         const row = entry.row;
@@ -191,14 +248,11 @@ function processData(postsData, pId, platformFilter = null) {
         const rowPId = row[1];
         const trimmedPId = rowPId ? rowPId.toString().trim() : '';
 
-        if (trimmedPId !== pId) {
+        if (!pIdSet.has(trimmedPId)) {
             return;
         }
 
-        const validity = row[13];
-        if (validity && !isValidRow(validity)) {
-            return;
-        }
+        // Do not filter by validity; show all posts as requested
 
         const ownerUsername = row[0];
         const likesCount = row[2];
@@ -221,8 +275,18 @@ function processData(postsData, pId, platformFilter = null) {
         const pointsNumber = parseNumber(points);
         const { unix: postDateUnix, display: postDateDisplay } = parseDate(postDate);
 
+        // Season start gating: include only posts on/after season start
+        if (seasonStartUnix && (postDateUnix === null || !isOnOrAfterDay(postDateUnix, seasonStartUnix))) {
+            return;
+        }
+
+        const qualityRaw = quality !== undefined && quality !== null ? quality.toString().trim() : '';
+        const scoreDisplay = qualityScore !== null
+            ? qualityScore.toFixed(2)
+            : (qualityRaw && /not\s*found/i.test(qualityRaw) ? 'Not Found' : 'Not Found');
+
         const post = {
-            score: qualityScore !== null ? qualityScore.toFixed(2) : 'N/A',
+            score: scoreDisplay,
             likes: likeNumber !== null ? likeNumber.toLocaleString() : (likesCount ? likesCount.toString().trim() : 'N/A'),
             views: viewsNumber !== null ? viewsNumber.toLocaleString() : (views ? views.toString().trim() : 'N/A'),
             points: pointsNumber !== null ? pointsNumber.toLocaleString() : (points ? points.toString().trim() : 'N/A'),
@@ -272,7 +336,8 @@ function processData(postsData, pId, platformFilter = null) {
         userData.weeklyAverages[weekKey] = weeklyCount > 0 ? (total / weeklyCount).toFixed(2) : 'N/A';
     });
 
-    console.info(`Processed ${userData.posts.length} posts for creator ID ${pId} on platform ${platformFilter || 'All Platforms'}.`);
+    const pIdList = Array.from(pIdSet.values()).join(', ');
+    console.info(`Processed ${userData.posts.length} posts for creator IDs [${pIdList}] on platform ${platformFilter || 'All Platforms'}.`);
 
     return {
         ...userData,
@@ -284,15 +349,15 @@ function processData(postsData, pId, platformFilter = null) {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('quality-score')
-        .setDescription('Find your quality score for this CC season')
+        .setDescription('View your tracked posts for this CC season')
         .addUserOption(option =>
             option.setName('user')
-                .setDescription('The user to view quality scores of')
+                .setDescription('The user to view posts of')
                 .setRequired(false)
         )
         .addStringOption(option =>
             option.setName('platform')
-                .setDescription('The platform to filter your quality scores by')
+                .setDescription('The platform to filter posts by')
                 .setRequired(false)
                 .addChoices(
                     { name: 'YouTube', value: 'YouTube' },
@@ -309,20 +374,31 @@ module.exports = {
 
             const platformOption = interaction.options.getString('platform') || null;
 
-            const { posts, creatorIds } = await getSheetData();
+            const { posts, creatorIds, seasonStart } = await getSheetData();
             const lookupKey = normalizeDiscordId(userId);
-            const creatorId = creatorIds.get(lookupKey);
+            const byPlatform = creatorIds.get(lookupKey);
 
-            if (!creatorId) {
+            if (!byPlatform || (byPlatform instanceof Map && byPlatform.size === 0)) {
                 await interaction.reply({ content: 'No creator profile found for this user.', ephemeral: true });
                 return;
             }
 
-            const userData = processData(posts, creatorId, platformOption);
+            let pIdsForSearch = [];
+            if (platformOption) {
+                const plat = normalizePlatform(platformOption);
+                const pId = (byPlatform instanceof Map) ? byPlatform.get(plat) : null;
+                if (pId) pIdsForSearch = [pId];
+            } else {
+                if (byPlatform instanceof Map) {
+                    pIdsForSearch = Array.from(byPlatform.values());
+                }
+            }
+
+            const userData = processData(posts, pIdsForSearch, platformOption, seasonStart.unix);
 
             if (userData.posts.length === 0) {
                 const platformText = platformOption ? `on ${platformOption}` : 'across all platforms';
-                await interaction.reply({ content: `No quality scores found for this user ${platformText}.`, ephemeral: true });
+                await interaction.reply({ content: `No posts found for this user ${platformText}.`, ephemeral: true });
                 return;
             }
 
@@ -334,7 +410,8 @@ module.exports = {
                 .setColor(userData.embedColor)
                 .addFields(
                     { name: '📈 Running Average (Season)', value: userData.runningAverage.toString(), inline: true },
-                    { name: '📊 Total Posts', value: userData.posts.length.toString(), inline: true }
+                    { name: '📊 Total Posts', value: userData.posts.length.toString(), inline: true },
+                    { name: '🚀 Season Start', value: seasonStart.display || 'N/A', inline: true }
                 );
 
             if (userData.selectedPlatform) {
@@ -367,7 +444,7 @@ module.exports = {
                 });
 
             // Cap weekly fields to stay within Discord's 25 field limit
-            const baseFields = 2 + (userData.selectedPlatform ? 1 : 0);
+            const baseFields = 3 + (userData.selectedPlatform ? 1 : 0);
             const maxWeekly = Math.max(0, 25 - baseFields);
             const weeklyToAdd = formattedWeeklyFields.slice(0, maxWeekly);
 
@@ -376,6 +453,7 @@ module.exports = {
             } else {
                 overviewEmbed.addFields({ name: '📅 Weekly Averages', value: 'No weekly data available.', inline: false });
             }
+
 
             const prevButton = new ButtonBuilder()
                 .setCustomId('prev2')
@@ -414,7 +492,8 @@ module.exports = {
                 runningAverage: userData.runningAverage,
                 weeklyAverages: userData.weeklyAverages,
                 embedColor: userData.embedColor,
-                platform: userData.selectedPlatform
+                platform: userData.selectedPlatform,
+                seasonStart: seasonStart
             });
 
             setTimeout(() => {
@@ -422,12 +501,12 @@ module.exports = {
             }, 10 * 60 * 1000);
 
         } catch (error) {
-            console.error(`Error fetching quality scores: ${error.message}`);
+            console.error(`Error fetching posts: ${error.message}`);
 
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'An error occurred while fetching quality scores.', ephemeral: true });
+                await interaction.reply({ content: 'An error occurred while fetching posts.', ephemeral: true });
             } else {
-                await interaction.editReply({ content: 'An error occurred while fetching quality scores.' });
+                await interaction.editReply({ content: 'An error occurred while fetching posts.' });
             }
         }
     },
