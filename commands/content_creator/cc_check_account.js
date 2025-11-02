@@ -66,6 +66,30 @@ function parseSeasonWeek(value) {
     return Number.isNaN(number) ? null : number;
 }
 
+function buildAccountUrl(platform, username, platformId) {
+    const normalize = (u) => {
+        if (!u) return null;
+        const t = u.toString().trim();
+        return t.startsWith('@') ? t.slice(1) : t;
+    };
+
+    const user = normalize(username);
+
+    switch (platform) {
+        case 'tiktok':
+            return user ? `https://www.tiktok.com/@${user}` : null;
+        case 'youtube':
+            if (platformId && platformId.toString().trim().startsWith('UC')) {
+                return `https://www.youtube.com/channel/${platformId.toString().trim()}`;
+            }
+            return user ? `https://www.youtube.com/@${user}` : null;
+        case 'reels': // Instagram Reels
+            return user ? `https://www.instagram.com/${user}/` : null;
+        default:
+            return null;
+    }
+}
+
 function parseSpreadsheetDate(value) {
     if (!value) return null;
     const trimmed = value.toString().trim();
@@ -336,6 +360,11 @@ function analyzeWeeklyProgress(userPosts, config) {
 function formatPlatformEmbed(platform, platformData) {
     const { appRow, userPosts, activeCreatorRow, paidCreatorRow, config } = platformData;
 
+    const username = appRow?.[1]?.trim();
+    const platformId = platformData.platformId;
+    const accountUrl = buildAccountUrl(platform, username, platformId);
+    const accountLine = accountUrl ? `**Account:** ${accountUrl}\n` : '';
+
     const isActiveCreator = activeCreatorRow !== null;
     const isPaidCreator = paidCreatorRow !== null;
 
@@ -343,7 +372,8 @@ function formatPlatformEmbed(platform, platformData) {
         const ccType = isPaidCreator ? 'Paid' : 'Active';
         return {
             name: `${config.emoji} ${config.name}`,
-            value: '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
+            value: accountLine +
+                   '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
                    'Keep posting great content and check out `/quality-score` to see your tracked posts.',
             inline: false
         };
@@ -353,7 +383,7 @@ function formatPlatformEmbed(platform, platformData) {
     if (!appDateStr) {
         return {
             name: `${config.emoji} ${config.name}`,
-            value: '⚠️ Application found but date is missing. Contact support.',
+            value: accountLine + '⚠️ Application found but date is missing. Contact support.',
             inline: false
         };
     }
@@ -374,7 +404,7 @@ function formatPlatformEmbed(platform, platformData) {
         const nextMonday = moment().day(8);
         return {
             name: `${config.emoji} ${config.name}`,
-            value: `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No posts tracked yet. Check back <t:${nextMonday.unix()}:R>`,
+            value: accountLine + `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No posts tracked yet. Check back <t:${nextMonday.unix()}:R>`,
             inline: false
         };
     }
@@ -388,7 +418,7 @@ function formatPlatformEmbed(platform, platformData) {
     if (Object.keys(progress.weeklyStats).length === 0) {
         return {
             name: `${config.emoji} ${config.name}`,
-            value: `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No valid posts with week assignments yet.`,
+            value: accountLine + `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No valid posts with week assignments yet.`,
             inline: false
         };
     }
@@ -492,7 +522,8 @@ function formatPlatformEmbed(platform, platformData) {
 
     return {
         name: `${config.emoji} ${config.name}`,
-        value: statusHeader +
+        value: accountLine +
+               statusHeader +
                `**${followerLabel}:** ${progress.followers} ${followerStatus} (need ${req.followers})\n` +
                `**Consecutive Weeks (${req.weeklyPoints}+ pts):** ${consecutiveWeeksFromEnd}/${req.weeksRequired} ${consecutiveStatus}\n` +
                `**Requirements:** ${req.weeklyPoints} points/week for ${req.weeksRequired} consecutive weeks\n\n` +
