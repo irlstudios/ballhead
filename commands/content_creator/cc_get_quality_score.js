@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
 const { google } = require('googleapis');
 const credentials = require('../../resources/secret.json');
 
@@ -368,6 +368,9 @@ module.exports = {
 
     async execute(interaction) {
         try {
+            // Acknowledge the interaction immediately to avoid expiration
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const userId = targetUser.id;
             const userAvatar = targetUser.displayAvatarURL({ dynamic: true });
@@ -379,7 +382,7 @@ module.exports = {
             const byPlatform = creatorIds.get(lookupKey);
 
             if (!byPlatform || (byPlatform instanceof Map && byPlatform.size === 0)) {
-                await interaction.reply({ content: 'No creator profile found for this user.', ephemeral: true });
+                await interaction.editReply({ content: 'No creator profile found for this user.' });
                 return;
             }
 
@@ -398,7 +401,7 @@ module.exports = {
 
             if (userData.posts.length === 0) {
                 const platformText = platformOption ? `on ${platformOption}` : 'across all platforms';
-                await interaction.reply({ content: `No posts found for this user ${platformText}.`, ephemeral: true });
+                await interaction.editReply({ content: `No posts found for this user ${platformText}.` });
                 return;
             }
 
@@ -469,10 +472,9 @@ module.exports = {
 
             const actionRow = new ActionRowBuilder().addComponents(prevButton, nextButton);
 
-            const reply = await interaction.reply({
+            const reply = await interaction.editReply({
                 embeds: [overviewEmbed],
                 components: [actionRow],
-                fetchReply: true,
             });
 
             if (!reply) {
