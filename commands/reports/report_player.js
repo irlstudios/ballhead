@@ -13,10 +13,18 @@ module.exports = {
             option.setName('rule-broken')
                 .setDescription('Describe the rule broken by the player')
                 .setRequired(true))
+        .addStringOption(option =>
+            option.setName('time-of-offense')
+                .setDescription('Time of offense (e.g., 2025-03-10 14:30 UTC)')
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('lobby-name')
+                .setDescription('Lobby name where the offense occurred')
+                .setRequired(true))
         .addAttachmentOption(option =>
             option.setName('proof')
-                .setDescription('Attach proof (video/image) of the rule-breaking')
-                .setRequired(true)),
+                .setDescription('(Optional) Provide a video of the user breaking the guidelines')
+                .setRequired(false)),
 
     async execute(interaction) {
         try {
@@ -25,18 +33,21 @@ module.exports = {
             const reporter = interaction.user.tag;
             const reportedUser = interaction.options.getString('username');
             const ruleBroken = interaction.options.getString('rule-broken');
+            const timeOfOffense = interaction.options.getString('time-of-offense');
+            const lobbyName = interaction.options.getString('lobby-name');
             const proof = interaction.options.getAttachment('proof');
 
             const reportEmbed = new EmbedBuilder()
                 .setTitle(`Report: ${reportedUser}`)
-                .setDescription(`**Report From:** ${reporter}\n\n**User who broke the guidelines:** ${reportedUser}\n\n**Rule broken by user(s):** ${ruleBroken}`)
+                .setDescription(`**Report From:** ${reporter}\n\n**User who broke the guidelines:** ${reportedUser}\n\n**Rule broken by user(s):** ${ruleBroken}\n\n**Time of Offense:** ${timeOfOffense}\n\n**Lobby Name:** ${lobbyName}`)
                 .setColor(0xff0000)
                 .setTimestamp()
                 .setFooter({text: 'Player Report'});
 
             const files = [];
             if (proof) {
-                if (proof.contentType.startsWith('image/')) {
+                const contentType = proof.contentType || '';
+                if (contentType.startsWith('image/')) {
                     reportEmbed.setImage(proof.url);
                 } else {
                     const proofAttachment = new AttachmentBuilder(proof.url, {name: proof.name});
