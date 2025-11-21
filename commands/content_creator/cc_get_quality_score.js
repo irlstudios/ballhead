@@ -3,7 +3,7 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags
 const { google } = require('googleapis');
 const credentials = require('../../resources/secret.json');
 
-const SPREADSHEET_ID = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
+const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const PLATFORM_SHEETS = [
     { range: 'TikTok Data!A:O', platform: 'TikTok' },
     { range: 'Reels Data!A:O', platform: 'Reels' },
