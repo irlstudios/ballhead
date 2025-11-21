@@ -15,7 +15,7 @@ function authorize() {
 }
 
 const sheets = google.sheets({ version: 'v4', auth: authorize() });
-const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
+const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 
 const PLATFORMS = {
     tiktok: {

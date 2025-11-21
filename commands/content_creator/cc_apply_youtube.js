@@ -160,7 +160,7 @@ module.exports = {
         const sheets = google.sheets({version: 'v4', auth: authorize()});
         try {
             const existingResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                 range: '\'CC Applications\'!A:C'
             });
             const existingRows = existingResponse.data?.values || [];
@@ -236,7 +236,7 @@ module.exports = {
                     let appendedRange;
                     try {
                         const appendResponse = await sheets.spreadsheets.values.append({
-                            spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                             range: `'CC Applications'!A:D`,
                             valueInputOption: 'USER_ENTERED',
                             resource: { values: baseValues },
@@ -298,7 +298,7 @@ module.exports = {
 
                             try {
                                 await sheets.spreadsheets.values.update({
-                                    spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                                     range: `'CC Applications'!E${rowNumber}:AA${rowNumber}`,
                                     valueInputOption: 'USER_ENTERED',
                                     resource: {
@@ -326,7 +326,7 @@ module.exports = {
                             const latestFormatted = latestTimestamp !== null ? formatDate(new Date(latestTimestamp)) : '';
                             try {
                                 await sheets.spreadsheets.values.update({
-                                    spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                                     range: `'CC Applications'!AB${rowNumber}:AC${rowNumber}`,
                                     valueInputOption: 'USER_ENTERED',
                                     resource: { values: [[nowFormatted, latestFormatted]] }
@@ -362,7 +362,7 @@ module.exports = {
                         let existingUrlSet = new Set();
                         try {
                             const existingResponse = await sheets.spreadsheets.values.get({
-                                spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                                 range: '\'YouTube Data\'!D:D'
                             });
                             const existingValues = existingResponse.data?.values || [];
@@ -382,7 +382,7 @@ module.exports = {
                         if (uniqueRows.length) {
                             try {
                                 const appendResp = await sheets.spreadsheets.values.append({
-                                    spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                                     range: '\'YouTube Data\'!A:I',
                                     valueInputOption: 'RAW',
                                     insertDataOption: 'INSERT_ROWS',
@@ -405,7 +405,7 @@ module.exports = {
                                     });
                                     const endRow = startRow + uniqueRows.length - 1;
                                     await sheets.spreadsheets.values.update({
-                                        spreadsheetId: '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk',
+                                        spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
                                         range: `YouTube Data!J${startRow}:P${endRow}`,
                                         valueInputOption: 'USER_ENTERED',
                                         resource: { values: formulas }
