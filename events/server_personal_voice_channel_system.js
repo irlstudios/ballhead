@@ -28,6 +28,30 @@ const BLACKLIST_DENY_OVERWRITE = {
     SendMessages: false
 };
 
+const getBlacklistTargetsForChannel = (channel) => {
+    const targets = new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
+    for (const roleId of BLACKLIST_ROLE_IDS) {
+        const role = channel.guild.roles.cache.get(roleId);
+        if (!role) continue;
+        for (const member of role.members.values()) {
+            targets.add(member.id);
+        }
+    }
+    return targets;
+};
+
+const applyBlacklistPermissions = async (channel) => {
+    if (!channel?.permissionOverwrites) return;
+    const targets = getBlacklistTargetsForChannel(channel);
+    for (const targetId of targets) {
+        try {
+            await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
+        } catch (error) {
+            if (error?.code !== 10003) throw error;
+        }
+    }
+};
+
 const isBlacklisted = (member) => {
     if (!member) return false;
     if (BLACKLIST_USER_IDS.has(member.id)) return true;
@@ -72,6 +96,7 @@ module.exports = {
         }
 
         if (newState.channelId && client.vcHosts && client.vcHosts.has(newState.channelId) && isBlacklisted(newState.member)) {
+            await applyBlacklistPermissions(newState.channel);
             await newState.setChannel(null);
             return;
         }
@@ -138,21 +163,7 @@ module.exports = {
                 ]
             });
             client.vcCreated.add(newChannel.id);
-            const applyBlacklistPermission = async (targetId) => {
-                try {
-                    await newChannel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
-                } catch (error) {
-                    if (error?.code !== 10003) throw error;
-                }
-            };
-
-            for (const id of BLACKLIST_USER_IDS) {
-                await applyBlacklistPermission(id);
-            }
-
-            for (const roleId of BLACKLIST_ROLE_IDS) {
-                await applyBlacklistPermission(roleId);
-            }
+            await applyBlacklistPermissions(newChannel);
 
             try {
                 await retryAction(
