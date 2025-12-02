@@ -8,6 +8,32 @@ const clientConfig = {
     ssl: { rejectUnauthorized: false },
 };
 const pool = new Pool(clientConfig);
+const BLACKLIST_USER_IDS = new Set(['850757950124851250']);
+const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
+const BLACKLIST_DENY_OVERWRITE = {
+    Connect: false,
+    Speak: false,
+    Stream: false,
+    UseEmbeddedActivities: false,
+    SendMessages: false
+};
+
+const isUserBlacklisted = async (guild, userId) => {
+    if (BLACKLIST_USER_IDS.has(userId)) return true;
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return false;
+    return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
+};
+
+const applyBlacklistPermissions = async (channel) => {
+    for (const targetId of [...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]) {
+        try {
+            await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
+        } catch (error) {
+            if (error?.code !== 10003) throw error;
+        }
+    }
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -175,7 +201,12 @@ module.exports = {
             }
             const inviteUser = interaction.options.getUser('user');
             if (inviteUser) {
+                if (await isUserBlacklisted(interaction.guild, inviteUser.id)) {
+                    await applyBlacklistPermissions(roomChannel);
+                    return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
+                }
                 await roomChannel.permissionOverwrites.edit(inviteUser.id, { Connect: true });
+                await applyBlacklistPermissions(roomChannel);
                 return interaction.reply({ content: `<@${inviteUser.id}> invited.`, ephemeral: true });
             }
             return interaction.reply({ content: 'No user specified.', ephemeral: true });
@@ -200,6 +231,7 @@ module.exports = {
             const uninviteUser = interaction.options.getUser('user');
             if (uninviteUser) {
                 await roomChannel.permissionOverwrites.delete(uninviteUser.id);
+                await applyBlacklistPermissions(roomChannel);
                 return interaction.reply({ content: `<@${uninviteUser.id}> uninvited.`, ephemeral: true });
             }
             return interaction.reply({ content: 'No user specified.', ephemeral: true });
@@ -296,6 +328,7 @@ module.exports = {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: false });
+            await applyBlacklistPermissions(roomChannel);
             return interaction.reply({ content: 'Room locked.', ephemeral: true });
         }
         case 'unlock': {
@@ -316,6 +349,7 @@ module.exports = {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: true });
+            await applyBlacklistPermissions(roomChannel);
             return interaction.reply({ content: 'Room unlocked.', ephemeral: true });
         }
         case 'kick': {
@@ -362,7 +396,12 @@ module.exports = {
             }
             const blockUser = interaction.options.getUser('user');
             if (blockUser) {
+                if (await isUserBlacklisted(interaction.guild, blockUser.id)) {
+                    await applyBlacklistPermissions(roomChannel);
+                    return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
+                }
                 await roomChannel.permissionOverwrites.edit(blockUser.id, { Connect: false });
+                await applyBlacklistPermissions(roomChannel);
                 return interaction.reply({ content: `<@${blockUser.id}> blocked.`, ephemeral: true });
             }
             return interaction.reply({ content: 'No user specified.', ephemeral: true });
@@ -386,7 +425,12 @@ module.exports = {
             }
             const unblockUser = interaction.options.getUser('user');
             if (unblockUser) {
+                if (await isUserBlacklisted(interaction.guild, unblockUser.id)) {
+                    await applyBlacklistPermissions(roomChannel);
+                    return interaction.reply({ content: 'That user is blacklisted from joining rooms and cannot be unblocked.', ephemeral: true });
+                }
                 await roomChannel.permissionOverwrites.edit(unblockUser.id, { Connect: true });
+                await applyBlacklistPermissions(roomChannel);
                 return interaction.reply({ content: `<@${unblockUser.id}> unblocked.`, ephemeral: true });
             }
             return interaction.reply({ content: 'No user specified.', ephemeral: true });
