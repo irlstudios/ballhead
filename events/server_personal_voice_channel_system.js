@@ -11,7 +11,28 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     }
     throw new Error('Action failed after retries');
 };
-const BLACKLIST_USER_IDS = new Set();
+const BLACKLIST_USER_IDS = new Set(['850757950124851250']);
+const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
+const BLACKLIST_DENY_PERMISSIONS = [
+    PermissionFlagsBits.Connect,
+    PermissionFlagsBits.Speak,
+    PermissionFlagsBits.Stream,
+    PermissionFlagsBits.UseEmbeddedActivities,
+    PermissionFlagsBits.SendMessages
+];
+const BLACKLIST_DENY_OVERWRITE = {
+    Connect: false,
+    Speak: false,
+    Stream: false,
+    UseEmbeddedActivities: false,
+    SendMessages: false
+};
+
+const isBlacklisted = (member) => {
+    if (!member) return false;
+    if (BLACKLIST_USER_IDS.has(member.id)) return true;
+    return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
+};
 
 const clientConfig = {
     host: process.env.DB_HOST,
@@ -45,12 +66,12 @@ module.exports = {
         const VC_BLACK_LIST_ID = '1125497495678615582';
         const ADMIN_ID = '781397829808553994';
 
-        if (oldState.channelId !== specificVCID && newState.channelId === specificVCID && BLACKLIST_USER_IDS.has(newState.member.id)) {
+        if (oldState.channelId !== specificVCID && newState.channelId === specificVCID && isBlacklisted(newState.member)) {
             await newState.setChannel(null);
             return;
         }
 
-        if (newState.channelId && client.vcHosts && client.vcHosts.has(newState.channelId) && BLACKLIST_USER_IDS.has(newState.member.id)) {
+        if (newState.channelId && client.vcHosts && client.vcHosts.has(newState.channelId) && isBlacklisted(newState.member)) {
             await newState.setChannel(null);
             return;
         }
@@ -104,25 +125,33 @@ module.exports = {
                     },
                     {
                         id: VC_BLACK_LIST_ID,
-                        deny: [PermissionFlagsBits.Connect, PermissionFlagsBits.Speak, PermissionFlagsBits.Stream, PermissionFlagsBits.UseEmbeddedActivities, PermissionFlagsBits.SendMessages]
+                        deny: BLACKLIST_DENY_PERMISSIONS
+                    },
+                    {
+                        id: '847977550731149364',
+                        deny: BLACKLIST_DENY_PERMISSIONS
+                    },
+                    {
+                        id: '850757950124851250',
+                        deny: BLACKLIST_DENY_PERMISSIONS
                     }
                 ]
             });
             client.vcCreated.add(newChannel.id);
-            for (const id of BLACKLIST_USER_IDS) {
-                const member = await newChannel.guild.members.fetch(id).catch(() => null);
-                if (!member) continue;
+            const applyBlacklistPermission = async (targetId) => {
                 try {
-                    await newChannel.permissionOverwrites.edit(member, {
-                        Connect: false,
-                        Speak: false,
-                        Stream: false,
-                        UseEmbeddedActivities: false,
-                        SendMessages: false
-                    });
+                    await newChannel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
                 } catch (error) {
                     if (error?.code !== 10003) throw error;
                 }
+            };
+
+            for (const id of BLACKLIST_USER_IDS) {
+                await applyBlacklistPermission(id);
+            }
+
+            for (const roleId of BLACKLIST_ROLE_IDS) {
+                await applyBlacklistPermission(roleId);
             }
 
             try {
