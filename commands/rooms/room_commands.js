@@ -25,8 +25,24 @@ const isUserBlacklisted = async (guild, userId) => {
     return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
 };
 
+const enforceBlacklistForUser = async (channel, userId) => {
+    try {
+        await channel.permissionOverwrites.edit(userId, BLACKLIST_DENY_OVERWRITE);
+    } catch (error) {
+        if (error?.code !== 10003) throw error;
+    }
+};
+
 const applyBlacklistPermissions = async (channel) => {
-    for (const targetId of [...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]) {
+    const targetIds = new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
+    for (const roleId of BLACKLIST_ROLE_IDS) {
+        const role = channel.guild.roles.cache.get(roleId);
+        if (!role) continue;
+        for (const member of role.members.values()) {
+            targetIds.add(member.id);
+        }
+    }
+    for (const targetId of targetIds) {
         try {
             await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
         } catch (error) {
@@ -139,6 +155,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const members = Array.from(roomChannel.members.values()).map(member => ({
                 id: member.id,
                 isMuted: member.voice.serverMute || !roomChannel.permissionsFor(member).has('Speak'),
@@ -178,6 +195,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const newName = interaction.options.getString('name');
             await roomChannel.setName(newName);
             return interaction.reply({ content: `Room renamed to **${newName}**.`, ephemeral: true });
@@ -199,10 +217,11 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const inviteUser = interaction.options.getUser('user');
             if (inviteUser) {
                 if (await isUserBlacklisted(interaction.guild, inviteUser.id)) {
-                    await applyBlacklistPermissions(roomChannel);
+                    await enforceBlacklistForUser(roomChannel, inviteUser.id);
                     return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
                 }
                 await roomChannel.permissionOverwrites.edit(inviteUser.id, { Connect: true });
@@ -228,6 +247,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const uninviteUser = interaction.options.getUser('user');
             if (uninviteUser) {
                 await roomChannel.permissionOverwrites.delete(uninviteUser.id);
@@ -253,6 +273,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const newHost = interaction.options.getUser('user');
             await pool.query(
                 'UPDATE vc_hosts SET host_id = $2 WHERE channel_id = $1',
@@ -277,6 +298,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const muteUser = interaction.options.getUser('user');
             if (muteUser) {
                 await roomChannel.permissionOverwrites.edit(muteUser.id, { Speak: false });
@@ -302,6 +324,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const unmuteUser = interaction.options.getUser('user');
             if (unmuteUser) {
                 await roomChannel.permissionOverwrites.edit(unmuteUser.id, { Speak: true });
@@ -327,6 +350,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: false });
             await applyBlacklistPermissions(roomChannel);
             return interaction.reply({ content: 'Room locked.', ephemeral: true });
@@ -348,6 +372,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: true });
             await applyBlacklistPermissions(roomChannel);
             return interaction.reply({ content: 'Room unlocked.', ephemeral: true });
@@ -369,6 +394,7 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const kickUser = interaction.options.getUser('user');
             const kickMember = roomChannel.members.get(kickUser.id);
             if (kickMember) {
@@ -394,10 +420,11 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const blockUser = interaction.options.getUser('user');
             if (blockUser) {
                 if (await isUserBlacklisted(interaction.guild, blockUser.id)) {
-                    await applyBlacklistPermissions(roomChannel);
+                    await enforceBlacklistForUser(roomChannel, blockUser.id);
                     return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
                 }
                 await roomChannel.permissionOverwrites.edit(blockUser.id, { Connect: false });
@@ -423,10 +450,11 @@ module.exports = {
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
                 return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
             }
+            await applyBlacklistPermissions(roomChannel);
             const unblockUser = interaction.options.getUser('user');
             if (unblockUser) {
                 if (await isUserBlacklisted(interaction.guild, unblockUser.id)) {
-                    await applyBlacklistPermissions(roomChannel);
+                    await enforceBlacklistForUser(roomChannel, unblockUser.id);
                     return interaction.reply({ content: 'That user is blacklisted from joining rooms and cannot be unblocked.', ephemeral: true });
                 }
                 await roomChannel.permissionOverwrites.edit(unblockUser.id, { Connect: true });
