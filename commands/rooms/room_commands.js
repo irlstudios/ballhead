@@ -34,15 +34,10 @@ const enforceBlacklistForUser = async (channel, userId) => {
 };
 
 const applyBlacklistPermissions = async (channel) => {
-    const targetIds = new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
-    for (const roleId of BLACKLIST_ROLE_IDS) {
-        const role = channel.guild.roles.cache.get(roleId);
-        if (!role) continue;
-        for (const member of role.members.values()) {
-            targetIds.add(member.id);
-        }
-    }
-    for (const targetId of targetIds) {
+    // Only apply overwrites to the blacklist role(s) and explicit user IDs.
+    // Expanding to every member in the role can exceed Discord's max overwrite limit and
+    // prevent other room actions (lock/invite/block) from working.
+    for (const targetId of [...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]) {
         try {
             await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
         } catch (error) {
