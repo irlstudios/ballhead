@@ -28,21 +28,11 @@ const BLACKLIST_DENY_OVERWRITE = {
     SendMessages: false
 };
 
-const getBlacklistTargetsForChannel = (channel) => {
-    const targets = new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
-    for (const roleId of BLACKLIST_ROLE_IDS) {
-        const role = channel.guild.roles.cache.get(roleId);
-        if (!role) continue;
-        for (const member of role.members.values()) {
-            targets.add(member.id);
-        }
-    }
-    return targets;
-};
+const getBlacklistTargetsForChannel = () => new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
 
 const applyBlacklistPermissions = async (channel) => {
     if (!channel?.permissionOverwrites) return;
-    const targets = getBlacklistTargetsForChannel(channel);
+    const targets = getBlacklistTargetsForChannel();
     for (const targetId of targets) {
         try {
             await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
