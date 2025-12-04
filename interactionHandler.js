@@ -16,6 +16,7 @@ const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
 const DISCORD_BOT_TOKEN = process.env.TOKEN;
 const LOGGING_GUILD_ID = '1233740086839869501';
 const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
+const KO_HOST_APPLICATIONS_CHANNEL_ID = '1446163192785932409';
 const ITEMS_PER_PAGE = 10;
 
 const { createCanvas, loadImage } = require('canvas');
@@ -29,14 +30,14 @@ const clientConfig = {
     ssl: { rejectUnauthorized: false },
 };
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -174,15 +175,30 @@ const handleModalSubmit = async (interaction) => {
 
     if (action === 'report-bug') {
         await handleBugReport(interaction, customId);
-    } else if (action === 'officialApplicationModal') {
+        return;
+    }
+    if (action === 'officialApplicationModal') {
         await handleOfficialsApplicationSubmission(interaction);
-    } else if (action === 'generateTemplateModal_kotc' || action === 'generateTemplateModal_gc') {
+        return;
+    }
+    if (action === 'generateTemplateModal_kotc' || action === 'generateTemplateModal_gc') {
         await handleGenerateTemplateModal(interaction);
-    } else if (action === 'apply-base-league-modal') {
+        return;
+    }
+    if (action === 'apply-base-league-modal') {
         await handleApplyBaseLeagueModal(interaction);
-    } else if (action === 'denyLeagueModal') {
+        return;
+    }
+    if (action === 'denyLeagueModal') {
         await handleDenyLeagueModal(interaction);
-    } else console.warn('Unhandled modal action:', action);
+        return;
+    }
+    if (action === 'koHostApplicationModal') {
+        await handleKoHostApplication(interaction);
+        return;
+    }
+
+    console.warn('Unhandled modal action:', action);
     await interaction.reply({ content: 'This modal is not recognized.', ephemeral: true });
 };
 
@@ -319,7 +335,8 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         }
 
         const sheetID = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
-        const sheets = google.sheets({ version: 'v4', auth: authorize() });
+        const auth = await authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
 
         let agreedToRules, understandsConsequences, inGameUsername;
         try {
@@ -395,6 +412,78 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         console.log('Database connection closed');
     } catch (error) {
         console.error('Unexpected error in handleOfficialsApplicationSubmission:', error);
+    }
+};
+
+const handleKoHostApplication = async (interaction) => {
+    try {
+        const reason = interaction.fields.getTextInputValue('koHostReason');
+        const availability = interaction.fields.getTextInputValue('koHostAvailability');
+        const boxingAwareness = interaction.fields.getTextInputValue('koHostBoxingAwareness');
+        const guidelineAgreement = interaction.fields.getTextInputValue('koHostGuidelineAgreement');
+
+        const normalizeYesNo = (input) => input?.trim().toLowerCase();
+        const boxingNormalized = normalizeYesNo(boxingAwareness);
+        const guidelineNormalized = normalizeYesNo(guidelineAgreement);
+
+        const invalidFields = [];
+        if (boxingNormalized !== 'yes' && boxingNormalized !== 'no') invalidFields.push('Boxing operations/rules');
+        if (guidelineNormalized !== 'yes' && guidelineNormalized !== 'no') invalidFields.push('Guideline agreement');
+
+        if (invalidFields.length) {
+            await interaction.reply({
+                content: `Please answer \"Yes\" or \"No\" for: ${invalidFields.join(', ')}.`,
+                ephemeral: true
+            });
+            return;
+        }
+
+        const applicationsChannel = await interaction.client.channels.fetch(KO_HOST_APPLICATIONS_CHANNEL_ID).catch(() => null);
+        if (!applicationsChannel) {
+            await interaction.reply({ content: 'Could not find the KO-Host applications channel. Please alert a staff member.', ephemeral: true });
+            return;
+        }
+
+        const embed = new EmbedBuilder()
+            .setTitle('New KO-Host Application')
+            .addFields(
+                { name: 'Applicant', value: `<@${interaction.user.id}> (${interaction.user.tag})` },
+                { name: 'Why do you want to become a KO-Host?', value: reason || 'Not provided' },
+                { name: 'Availability', value: availability || 'Not provided' },
+                { name: 'Boxing Knowledge', value: boxingNormalized === 'yes' ? 'Yes' : 'No' },
+                { name: 'Guideline Agreement', value: guidelineNormalized === 'yes' ? 'Yes' : 'No' },
+            )
+            .setTimestamp();
+
+        const applicationMessage = await applicationsChannel.send({ embeds: [embed] });
+
+        try {
+            const auth = await authorize();
+            const sheets = google.sheets({ version: 'v4', auth });
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: '1JZ6tadLFzW68OiMXQeHndyJcwU7hp_Qgh_ar0hq4-sk',
+                range: 'Applications!A:E',
+                valueInputOption: 'USER_ENTERED',
+                resource: {
+                    values: [[
+                        interaction.user.tag,
+                        interaction.user.id,
+                        guidelineNormalized === 'yes' ? 'Yes' : 'No',
+                        applicationMessage?.url || 'Not available',
+                        'Pending'
+                    ]]
+                }
+            });
+        } catch (sheetError) {
+            console.error('Failed to write KO-Host application to sheet:', sheetError);
+        }
+
+        await interaction.reply({ content: 'Thank you! Your KO-Host application has been submitted.', ephemeral: true });
+    } catch (error) {
+        console.error('Error handling KO-Host application modal:', error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: 'There was an error submitting your application. Please try again later.', ephemeral: true }).catch(console.error);
+        }
     }
 };
 
@@ -489,9 +578,11 @@ const handleInviteButton = async (interaction, action) => {
             const member = await guild.members.fetch(invitedMemberId).catch(() => null);
             if (!member) { await interaction.editReply({ content: 'You could not be found in the server.' }); return; }
 
-            const sheetsAuthClient = new google.auth.JWT(
-                credentials.client_email, null, credentials.private_key, ['https://www.googleapis.com/auth/spreadsheets']
-            );
+            const sheetsAuthClient = new google.auth.JWT({
+                email: credentials.client_email,
+                key: credentials.private_key,
+                scopes: ['https://www.googleapis.com/auth/spreadsheets']
+            });
             const sheets = google.sheets({ version: 'v4', auth: sheetsAuthClient });
 
             const [squadMembersResponse, allDataResponse, squadLeadersResponse] = await Promise.all([
@@ -669,7 +760,7 @@ const handleApplicationButton = async (interaction, action, client) => {
         }
 
 
-        const auth = authorize();
+        const auth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth });
 
         let isAlreadyLeader = false;
@@ -1027,7 +1118,8 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         }
 
 
-        const sheets = google.sheets({ version: 'v4', auth: authorize() });
+        const auth = await authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
         const applicationUrl = interaction.message.url;
         console.log(`Application URL : ${applicationUrl}`);
         await updateOfficialApplicationStatus(sheets, applicationUrl, 'Approved');
@@ -1167,7 +1259,8 @@ const handleOfficialsApplicationReject = async (interaction) => {
             console.error('Failed to send DM to user:', dmError.message);
         }
 
-        const sheets = google.sheets({ version: 'v4', auth: authorize() });
+        const auth = await authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
         const applicationUrl = interaction.message.url;
         await updateOfficialApplicationStatus(sheets, applicationUrl, 'Rejected');
 

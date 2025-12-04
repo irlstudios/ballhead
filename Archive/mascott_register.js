@@ -15,12 +15,11 @@ const mascotSquads = [
 
 function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
     return auth;
 }
 

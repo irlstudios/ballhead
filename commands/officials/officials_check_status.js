@@ -6,14 +6,14 @@ const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 const FORM_RESPONSES_TAB = 'Form Responses 1';
 const STATS_TAB = 'Stats';
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -50,7 +50,7 @@ module.exports = {
         .setDescription('Check your current grade and requirement'),
     async execute(interaction) {
         const discordName = interaction.user.username.toLowerCase();
-        const auth = authorize();
+        const auth = await authorize();
 
         try {
             const formResponses = await fetchSheetData(auth, `${FORM_RESPONSES_TAB}!A:H`);

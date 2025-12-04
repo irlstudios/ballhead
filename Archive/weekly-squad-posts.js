@@ -33,12 +33,11 @@ try {
 
 function authorize() {
     const { client_email, private_key } = credentials;
-    return new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
+    return new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
 }
 
 function drawRoundedRect(ctx, x, y, width, height, radius, fillColor, borderColor) {

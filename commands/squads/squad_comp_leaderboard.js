@@ -13,14 +13,14 @@ try {
     console.error('Error loading fonts:', error);
 }
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -49,7 +49,7 @@ module.exports = {
         .setDescription('Displays the competitive squad leaderboard based on total wins since squad creation'),
 
     async execute(interaction) {
-        const auth = authorize();
+        const auth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth });
 
         try {

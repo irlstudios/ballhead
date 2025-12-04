@@ -5,12 +5,11 @@ const credentials = require('../resources/secret.json');
 
 function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key.replace(/\\n/g, '\n'),
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key.replace(/\\n/g, '\n'),
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
     return auth;
 }
 

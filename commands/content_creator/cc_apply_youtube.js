@@ -4,14 +4,14 @@ const {google} = require('googleapis');
 const credentials = require('../../resources/secret.json');
 const {fetchCreatorData} = require('../../API/apifyClient');
 
-function authorize() {
+async function authorize() {
     const {client_email, private_key} = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -157,7 +157,8 @@ module.exports = {
             console.error('Apify YouTube fetch failed to start:', error.response?.data || error.message || error);
         }
 
-        const sheets = google.sheets({version: 'v4', auth: authorize()});
+        const auth = await authorize();
+        const sheets = google.sheets({version: 'v4', auth});
         try {
             const existingResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',

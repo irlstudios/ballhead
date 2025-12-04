@@ -14,14 +14,15 @@ try {
     console.warn('Font load failed, using default fonts:', err);
 }
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    return new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    await auth.authorize();
+    return auth;
 }
 
 function drawTrophy(ctx, x, y, size, color) {
@@ -119,7 +120,7 @@ module.exports = {
         .setName('hrd-leaderboard')
         .setDescription('Displays the home run derby weekly leaderboard'),
     async execute(interaction) {
-        const auth = authorize();
+        const auth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth });
         await interaction.deferReply();
         try {

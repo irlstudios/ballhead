@@ -29,14 +29,14 @@ const SM_SQUAD_NAME = 2;
 const AD_ID = 1;
 const AD_SQUAD_TYPE = 3;
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -73,7 +73,8 @@ module.exports = {
             return;
         }
 
-        const sheets = google.sheets({ version: 'v4', auth: authorize() });
+        const auth = await authorize();
+        const sheets = google.sheets({ version: 'v4', auth });
 
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
