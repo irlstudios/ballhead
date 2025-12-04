@@ -24,14 +24,14 @@ const CREATOR_LOOKUP_SHEETS = [
 // Season start date is stored at Paid Creators!G2 in MM/DD/YYYY format
 const SEASON_START_RANGE = 'Paid Creators!G2';
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -47,7 +47,8 @@ function normalizePlatform(value) {
 }
 
 async function getSheetData() {
-    const sheets = google.sheets({ version: 'v4', auth: authorize() });
+    const auth = await authorize();
+    const sheets = google.sheets({ version: 'v4', auth });
     const ranges = [
         ...PLATFORM_SHEETS.map(item => item.range),
         ...CREATOR_LOOKUP_SHEETS.map(item => item.range),

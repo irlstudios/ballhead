@@ -15,7 +15,7 @@
     "fs": "^0.0.1-security",
     "fs-extra": "^11.2.0",
     "google-spreadsheet": "^4.1.4",
-    "googleapis": "^144.0.0",
+    "googleapis": "^167.0.0",
     "mixpanel": "^0.18.1",
     "moment": "^2.30.1",
     "moment-timezone": "^0.5.46",

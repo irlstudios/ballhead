@@ -2,18 +2,18 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { google } = require('googleapis');
 const credentials = require('../../resources/secret.json');
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
+    });
+    await auth.authorize();
     return auth;
 }
 
-const auth = authorize();
+let authPromise = null;
 
 const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
 
@@ -31,6 +31,8 @@ module.exports = {
         const user = interaction.options.getUser('user') || interaction.user;
         const discordId = user.id;
 
+        if (!authPromise) authPromise = authorize();
+        const auth = await authPromise;
         const sheets = google.sheets({ version: 'v4', auth });
 
         const metadata = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
