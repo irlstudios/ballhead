@@ -169,6 +169,39 @@ const modalConfig = {
                 required: true,
             },
         ],
+    },
+    'koHostApplicationModal': {
+        title: 'KO-Hosts Application',
+        fields: [
+            {
+                id: 'koHostReason',
+                label: 'Why do you want to be a KO-Host?',
+                placeholder: 'Share your motivation and experience',
+                style: 'Paragraph',
+                required: true,
+            },
+            {
+                id: 'koHostAvailability',
+                label: 'What days of the week are you free?',
+                placeholder: 'List the days and typical times',
+                style: 'Paragraph',
+                required: true,
+            },
+            {
+                id: 'koHostBoxingAwareness',
+                label: 'Do you know boxing operations/rules?',
+                placeholder: 'Yes/No and any relevant details',
+                style: 'Paragraph',
+                required: true,
+            },
+            {
+                id: 'koHostGuidelineAgreement',
+                label: 'Host role will be removed upon rule violation',
+                placeholder: 'Do you understand? Yes/No',
+                style: 'Short',
+                required: true,
+            },
+        ],
     }
 };
 

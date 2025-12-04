@@ -10,14 +10,14 @@ const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
 const MAX_SQUAD_MEMBERS = 10;
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -55,7 +55,7 @@ module.exports = {
             return;
         }
 
-        const auth = authorize();
+        const auth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth });
 
         try {

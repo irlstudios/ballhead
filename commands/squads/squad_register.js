@@ -9,14 +9,14 @@ const APPLICATION_CHANNEL_ID = '1218466649695457331';
 const LOGGING_GUILD_ID = '1233740086839869501';
 const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
     return auth;
 }
 
@@ -74,7 +74,7 @@ module.exports = {
             return interaction.editReply({ content: 'Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).', ephemeral: true });
         }
 
-        const gAuth = authorize();
+        const gAuth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth: gAuth });
 
         let applicationMessage;

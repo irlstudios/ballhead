@@ -3,17 +3,18 @@ const { google } = require('googleapis');
 const credentials = require('../resources/secret.json');
 const moment = require('moment');
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    return new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
+    return auth;
 }
 
-const sheets = google.sheets({ version: 'v4', auth: authorize() });
+let sheets;
 const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
 
 const PLATFORMS = {
@@ -573,6 +574,9 @@ module.exports = {
         if (!matchesPhrase && !matchesRegex) return;
 
         try {
+            const auth = await authorize();
+            sheets = google.sheets({ version: 'v4', auth });
+
             const userId = message.author.id;
             const platformResults = {};
             const existingCCPlatforms = [];

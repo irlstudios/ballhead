@@ -4,17 +4,18 @@ const { google } = require('googleapis');
 const credentials = require('../../resources/secret.json');
 const moment = require('moment');
 
-function authorize() {
+async function authorize() {
     const { client_email, private_key } = credentials;
-    return new google.auth.JWT(
-        client_email,
-        null,
-        private_key,
-        ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    const auth = new google.auth.JWT({
+        email: client_email,
+        key: private_key,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    await auth.authorize();
+    return auth;
 }
 
-const sheets = google.sheets({ version: 'v4', auth: authorize() });
+let sheets;
 const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 
 const PLATFORMS = {
@@ -555,6 +556,9 @@ module.exports = {
     async execute(interaction) {
         try {
             await interaction.deferReply({ ephemeral: false });
+
+            const auth = await authorize();
+            sheets = google.sheets({ version: 'v4', auth });
 
             const targetUser = interaction.options.getUser('user');
             const isModerator = canCheckOthers(interaction.member);
