@@ -7,7 +7,7 @@ module.exports = {
     async execute(client) {
         const channelId = '1036677798187778100';
 
-        client.on('ready', () => {
+        client.on('clientReady', () => {
             client.options.partials = ['MESSAGE', 'CHANNEL', 'REACTION'];
         });
 

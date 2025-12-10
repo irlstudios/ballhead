@@ -71,7 +71,7 @@ async function postUngradedVideoCount(client) {
 }
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     execute(client) {
         schedule('0 */2 * * *', async () => {
             await postUngradedVideoCount(client);

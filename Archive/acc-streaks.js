@@ -128,7 +128,7 @@ async function sendStreakMessages(client, streaks) {
 }
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     async execute(client) {
         console.log('Setting up streaks cron job...');

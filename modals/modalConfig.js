@@ -202,6 +202,39 @@ const modalConfig = {
                 required: true,
             },
         ],
+    },
+    'rankedSessionModal': {
+        title: 'Log Ranked Session',
+        fields: [
+            {
+                id: 'coachName',
+                label: 'Coach In-game Name',
+                placeholder: 'Enter coach in-game name',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'participantsName',
+                label: 'Participants In-game Name',
+                placeholder: 'Enter participants in-game name',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'madeAttempts',
+                label: 'Made Attempts (out of 10)',
+                placeholder: 'Enter a number between 0 and 10',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'bestParticipant',
+                label: 'Participant with the best score',
+                placeholder: 'Enter participant name',
+                style: 'Short',
+                required: true,
+            },
+        ],
     }
 };
 
