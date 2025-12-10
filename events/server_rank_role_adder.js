@@ -77,7 +77,7 @@ async function updateRoles (client) {
 }
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     execute (client) {
         schedule(
             '0 0 * * 3k',

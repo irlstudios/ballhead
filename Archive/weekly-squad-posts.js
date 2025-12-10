@@ -422,7 +422,7 @@ async function scheduledTask(client) {
 }
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     execute(client) {
         schedule('0 6 * * 3', () => {
