@@ -3,7 +3,7 @@ const { Routes } = require('discord-api-types/v10');
 require('dotenv').config({ path: './resources/.env' });
 
 module.exports = {
-    name: 'ready',
+    name: 'clientReady',
     once: true,
     async execute(client) {
         console.log(`Logged in as ${client.user.tag}!`);

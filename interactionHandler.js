@@ -167,6 +167,8 @@ const handleSelectMenu = async (interaction) => {
         } else {
             await interaction.reply({ content: 'We encounter an error occurred while processing your modal submission. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.', ephemeral: true });
         }
+    } else if (interaction.customId === 'rankSessionSkillSelect' || interaction.customId === 'rankSessionPassFailSelect') {
+        await handleRankSessionSelectMenu(interaction);
     }
 };
 
@@ -195,6 +197,10 @@ const handleModalSubmit = async (interaction) => {
     }
     if (action === 'koHostApplicationModal') {
         await handleKoHostApplication(interaction);
+        return;
+    }
+    if (action === 'rankedSessionModal') {
+        await handleRankedSessionModal(interaction);
         return;
     }
 
@@ -483,6 +489,158 @@ const handleKoHostApplication = async (interaction) => {
         console.error('Error handling KO-Host application modal:', error);
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({ content: 'There was an error submitting your application. Please try again later.', ephemeral: true }).catch(console.error);
+        }
+    }
+};
+
+const rankedSessionData = new Map();
+
+const handleRankSessionSelectMenu = async (interaction) => {
+    try {
+        const userId = interaction.user.id;
+        const messageId = interaction.message.id;
+        const key = `${userId}-${messageId}`;
+
+        const data = rankedSessionData.get(key);
+        if (!data) {
+            await interaction.reply({ content: 'Session data expired. Please run the command again.', ephemeral: true });
+            return;
+        }
+
+        if (interaction.customId === 'rankSessionSkillSelect') {
+            data.rankSkill = interaction.values[0];
+        } else if (interaction.customId === 'rankSessionPassFailSelect') {
+            data.passFail = interaction.values[0];
+        }
+
+        if (data.rankSkill && data.passFail) {
+            const skillLabels = {
+                'midrange_one_dribble_jump_shot_freethrow': 'Midrange One Dribble Jump Shot (Freethrow)',
+                'midrange_catch_and_shoot_jumpshot_freethrow': 'Midrange Catch and Shoot Jumpshot (Freethrow)',
+                'midrange_one_dribble_jump_shot_right_elbow': 'Midrange One Dribble Jump Shot (Right Elbow)',
+                'midrange_one_dribble_jump_shot_left_elbow': 'Midrange One Dribble Jump shot (Left Elbow)',
+                'perimeter_catch_and_shoot_top_key': 'Perimeter Catch and Shoot (Top of The key)',
+                'perimeter_one_dribble_jump_shot_top_key': 'Perimeter One Dribble Jump Shot (Top of The key)',
+            };
+
+            const skillLabel = skillLabels[data.rankSkill] || data.rankSkill;
+            const passFailLabel = data.passFail === 'pass' ? 'Pass' : 'Fail';
+
+            try {
+                const auth = await authorize();
+                const sheets = google.sheets({ version: 'v4', auth });
+                const currentDate = new Date().toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+
+                await sheets.spreadsheets.values.append({
+                    spreadsheetId: '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I',
+                    range: 'Log!A:G',
+                    valueInputOption: 'USER_ENTERED',
+                    resource: {
+                        values: [[
+                            currentDate,
+                            data.coachName,
+                            data.participantsName,
+                            skillLabel,
+                            data.madeAttempts,
+                            passFailLabel,
+                            data.bestParticipant
+                        ]]
+                    }
+                });
+
+                rankedSessionData.delete(key);
+                await interaction.update({
+                    content: '✅ Ranked session logged successfully!',
+                    components: []
+                });
+            } catch (sheetError) {
+                console.error('Failed to write ranked session to sheet:', sheetError);
+                await interaction.update({
+                    content: 'There was an error logging the session. Please try again later.',
+                    components: []
+                });
+            }
+        } else {
+            await interaction.deferUpdate();
+        }
+    } catch (error) {
+        console.error('Error handling rank session select menu:', error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({ content: 'There was an error processing your selection.', ephemeral: true }).catch(console.error);
+        }
+    }
+};
+
+const handleRankedSessionModal = async (interaction) => {
+    try {
+        const coachName = interaction.fields.getTextInputValue('coachName');
+        const participantsName = interaction.fields.getTextInputValue('participantsName');
+        const madeAttempts = interaction.fields.getTextInputValue('madeAttempts');
+        const bestParticipant = interaction.fields.getTextInputValue('bestParticipant');
+
+        const attemptsNum = parseInt(madeAttempts, 10);
+        if (isNaN(attemptsNum) || attemptsNum < 0 || attemptsNum > 10) {
+            await interaction.reply({
+                content: 'Made Attempts must be a number between 0 and 10.',
+                flags: 64
+            });
+            return;
+        }
+
+        const { ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+
+        const skillSelect = new StringSelectMenuBuilder()
+            .setCustomId('rankSessionSkillSelect')
+            .setPlaceholder('Select Rank Skill')
+            .addOptions([
+                { label: 'Midrange One Dribble Jump Shot (Freethrow)', value: 'midrange_one_dribble_jump_shot_freethrow' },
+                { label: 'Midrange Catch and Shoot Jumpshot (Freethrow)', value: 'midrange_catch_and_shoot_jumpshot_freethrow' },
+                { label: 'Midrange One Dribble Jump Shot (Right Elbow)', value: 'midrange_one_dribble_jump_shot_right_elbow' },
+                { label: 'Midrange One Dribble Jump shot (Left Elbow)', value: 'midrange_one_dribble_jump_shot_left_elbow' },
+                { label: 'Perimeter Catch and Shoot (Top of The key)', value: 'perimeter_catch_and_shoot_top_key' },
+                { label: 'Perimeter One Dribble Jump Shot (Top of The key)', value: 'perimeter_one_dribble_jump_shot_top_key' },
+            ]);
+
+        const passFailSelect = new StringSelectMenuBuilder()
+            .setCustomId('rankSessionPassFailSelect')
+            .setPlaceholder('Select Pass/Fail')
+            .addOptions([
+                { label: 'Pass', value: 'pass' },
+                { label: 'Fail', value: 'fail' },
+            ]);
+
+        await interaction.reply({
+            content: '**Rank Skill:**\nSelect the skill evaluated in this session\n\n**Pass/Fail:**\nDid the participant pass? (5+ makes = Pass)',
+            components: [
+                new ActionRowBuilder().addComponents(skillSelect),
+                new ActionRowBuilder().addComponents(passFailSelect),
+            ],
+            flags: 64
+        });
+
+        const reply = await interaction.fetchReply();
+        const key = `${interaction.user.id}-${reply.id}`;
+        rankedSessionData.set(key, {
+            coachName,
+            participantsName,
+            madeAttempts,
+            bestParticipant,
+        });
+
+        setTimeout(() => {
+            rankedSessionData.delete(key);
+        }, 300000);
+    } catch (error) {
+        console.error('Error handling ranked session modal:', error);
+        if (!interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+                content: 'There was an error submitting the ranked session. Please try again later.',
+                flags: 64
+            }).catch(console.error);
         }
     }
 };
