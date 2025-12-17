@@ -51,6 +51,42 @@ function extractRowNumber(range) {
     return Number(match[1]);
 }
 
+function isApifyLimitError(error) {
+    const payload = error?.response?.data || error;
+    const inner = payload?.error || payload;
+    const type = inner?.type;
+    const message = inner?.message;
+    if (type === 'platform-feature-disabled') {
+        return true;
+    }
+    return typeof message === 'string' && message.toLowerCase().includes('hard limit exceeded');
+}
+
+async function logPendingApplication({sheets, platformLabel, username, interaction, profileUrl, logChannelId}) {
+    const nowStamp = formatDate(new Date());
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+            range: `'CC Applications'!A:D`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            resource: {values: [[platformLabel, username, interaction.user.id, nowStamp]]}
+        });
+    } catch (appendError) {
+        console.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
+    }
+    if (logChannelId) {
+        const logChannel = interaction.client.channels.cache.get(logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setTitle(`${platformLabel} CC Application (Queued)`)
+                .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\n${platformLabel}: ${profileUrl}\nStatus: Pending - Apify monthly limit reached`)
+                .setColor('#FFA500');
+            logChannel.send({embeds: [logEmbed]});
+        }
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('tiktok-cc-apply')
@@ -140,6 +176,8 @@ module.exports = {
         }
 
         let apifyPromise;
+        let apifyLimitHit = false;
+        let apifyLimitHandled = false;
         try {
             const apifyInput = {
                 apifyProxyCountry: 'US',
@@ -174,7 +212,12 @@ module.exports = {
                 input: apifyInput
             });
         } catch (error) {
-            console.error('Apify TikTok fetch failed to start:', error.response?.data || error.message || error);
+            if (isApifyLimitError(error)) {
+                apifyLimitHit = true;
+                console.error('Apify TikTok fetch skipped due to monthly limit:', error.response?.data || error.message || error);
+            } else {
+                console.error('Apify TikTok fetch failed to start:', error.response?.data || error.message || error);
+            }
         }
 
         await interaction.editReply({content: 'Your application is being processed. We will follow up in your DMs once verification finishes.'});
@@ -187,6 +230,35 @@ module.exports = {
                 console.error('Failed to send TikTok application DM:', dmError);
             }
         };
+
+        const handleApifyLimitExceeded = async () => {
+            if (apifyLimitHandled) {
+                return;
+            }
+            apifyLimitHandled = true;
+            await logPendingApplication({
+                sheets,
+                platformLabel: 'TikTok',
+                username: cleanUsername,
+                interaction,
+                profileUrl: tiktokUrl,
+                logChannelId: '1084168091778424972'
+            });
+            await notifyUser(
+                [
+                    '⏳ We added your TikTok application to the queue.',
+                    'We will review and fetch your data this Sunday.',
+                    `Link on file: ${tiktokUrl}`,
+                    '',
+                    'No further action is needed from you. Thanks for your patience!'
+                ].join('\n')
+            );
+        };
+
+        if (apifyLimitHit) {
+            await handleApifyLimitExceeded();
+            return;
+        }
 
         if (apifyPromise) {
             apifyPromise.then(async (data) => {
@@ -394,11 +466,17 @@ module.exports = {
                 }
                 await notifyUser(`We could not find your TikTok account using ${tiktokUrl}. Please double-check the link and submit a new application.`);
             }).catch(async (error) => {
+                if (isApifyLimitError(error)) {
+                    await handleApifyLimitExceeded();
+                    return;
+                }
                 console.error('Apify TikTok fetch failed during run:', error.response?.data || error.message || error);
                 await notifyUser(`We had trouble verifying ${tiktokUrl}. Please try again later or contact a staff member.`);
             });
         } else {
-            await notifyUser(`We could not start the verification for ${tiktokUrl}. Please try again later or contact a staff member.`);
+            if (!apifyLimitHandled) {
+                await notifyUser(`We could not start the verification for ${tiktokUrl}. Please try again later or contact a staff member.`);
+            }
         }
     }
 };

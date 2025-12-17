@@ -100,6 +100,42 @@ function extractDurationSeconds(item) {
     return '';
 }
 
+function isApifyLimitError(error) {
+    const payload = error?.response?.data || error;
+    const inner = payload?.error || payload;
+    const type = inner?.type;
+    const message = inner?.message;
+    if (type === 'platform-feature-disabled') {
+        return true;
+    }
+    return typeof message === 'string' && message.toLowerCase().includes('hard limit exceeded');
+}
+
+async function logPendingApplication({sheets, platformLabel, username, interaction, profileUrl, logChannelId}) {
+    const nowStamp = formatDate(new Date());
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+            range: `'CC Applications'!A:D`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            resource: {values: [[platformLabel, username, interaction.user.id, nowStamp]]}
+        });
+    } catch (appendError) {
+        console.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
+    }
+    if (logChannelId) {
+        const logChannel = interaction.client.channels.cache.get(logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setTitle(`${platformLabel} CC Application (Queued)`)
+                .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\n${platformLabel}: ${profileUrl}\nStatus: Pending - Apify monthly limit reached`)
+                .setColor('#FFA500');
+            logChannel.send({embeds: [logEmbed]});
+        }
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('instagram-cc-apply')
@@ -146,6 +182,8 @@ module.exports = {
         const cleanUsernameLower = cleanUsername.toLowerCase();
 
         let apifyPromise;
+        let apifyLimitHit = false;
+        let apifyLimitHandled = false;
         try {
             const apifyInput = {
                 data_type: 'all',
@@ -160,7 +198,12 @@ module.exports = {
                 input: apifyInput
             });
         } catch (error) {
-            console.error('Apify Instagram fetch failed to start:', error.response?.data || error.message || error);
+            if (isApifyLimitError(error)) {
+                apifyLimitHit = true;
+                console.error('Apify Instagram fetch skipped due to monthly limit:', error.response?.data || error.message || error);
+            } else {
+                console.error('Apify Instagram fetch failed to start:', error.response?.data || error.message || error);
+            }
         }
 
         const auth = await authorize();
@@ -215,6 +258,35 @@ module.exports = {
                 console.error('Failed to send Instagram application DM:', dmError);
             }
         };
+
+        const handleApifyLimitExceeded = async () => {
+            if (apifyLimitHandled) {
+                return;
+            }
+            apifyLimitHandled = true;
+            await logPendingApplication({
+                sheets,
+                platformLabel: 'Reels',
+                username: cleanUsername,
+                interaction,
+                profileUrl: instagramUrl,
+                logChannelId: '1128804307261718568'
+            });
+            await notifyUser(
+                [
+                    '⏳ We added your Instagram application to the queue.',
+                    'We will review and fetch your data this Sunday.',
+                    `Link on file: ${instagramUrl}`,
+                    '',
+                    'No further action is needed from you. Thanks for your patience!'
+                ].join('\n')
+            );
+        };
+
+        if (apifyLimitHit) {
+            await handleApifyLimitExceeded();
+            return;
+        }
 
         if (apifyPromise) {
             apifyPromise.then(async (data) => {
@@ -419,11 +491,17 @@ module.exports = {
                 }
                 await notifyUser(`We could not find your Instagram account using ${instagramUrl}. Please double-check the link and submit a new application.`);
             }).catch(async (error) => {
+                if (isApifyLimitError(error)) {
+                    await handleApifyLimitExceeded();
+                    return;
+                }
                 console.error('Apify Instagram fetch failed during run:', error.response?.data || error.message || error);
                 await notifyUser(`We had trouble verifying ${instagramUrl}. Please try again later or contact a staff member.`);
             });
         } else {
-            await notifyUser(`We could not start the verification for ${instagramUrl}. Please try again later or contact a staff member.`);
+            if (!apifyLimitHandled) {
+                await notifyUser(`We could not start the verification for ${instagramUrl}. Please try again later or contact a staff member.`);
+            }
         }
     }
 };
