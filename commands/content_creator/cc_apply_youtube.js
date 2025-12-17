@@ -75,6 +75,42 @@ function durationToSeconds(value) {
     return seconds;
 }
 
+function isApifyLimitError(error) {
+    const payload = error?.response?.data || error;
+    const inner = payload?.error || payload;
+    const type = inner?.type;
+    const message = inner?.message;
+    if (type === 'platform-feature-disabled') {
+        return true;
+    }
+    return typeof message === 'string' && message.toLowerCase().includes('hard limit exceeded');
+}
+
+async function logPendingApplication({sheets, platformLabel, username, interaction, profileUrl, logChannelId}) {
+    const nowStamp = formatDate(new Date());
+    try {
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+            range: `'CC Applications'!A:D`,
+            valueInputOption: 'USER_ENTERED',
+            insertDataOption: 'INSERT_ROWS',
+            resource: {values: [[platformLabel, username, interaction.user.id, nowStamp]]}
+        });
+    } catch (appendError) {
+        console.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
+    }
+    if (logChannelId) {
+        const logChannel = interaction.client.channels.cache.get(logChannelId);
+        if (logChannel) {
+            const logEmbed = new EmbedBuilder()
+                .setTitle(`${platformLabel} CC Application (Queued)`)
+                .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\n${platformLabel}: ${profileUrl}\nStatus: Pending - Apify monthly limit reached`)
+                .setColor('#FFA500');
+            logChannel.send({embeds: [logEmbed]});
+        }
+    }
+}
+
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('youtube-cc-apply')
@@ -131,6 +167,8 @@ module.exports = {
         const normalizedYoutubeUrl = youtubeUrl.replace(/\/+$/, '').toLowerCase();
 
         let apifyPromise;
+        let apifyLimitHit = false;
+        let apifyLimitHandled = false;
         try {
             const apifyInput = {
                 startUrls: [
@@ -154,7 +192,12 @@ module.exports = {
                 input: apifyInput
             });
         } catch (error) {
-            console.error('Apify YouTube fetch failed to start:', error.response?.data || error.message || error);
+            if (isApifyLimitError(error)) {
+                apifyLimitHit = true;
+                console.error('Apify YouTube fetch skipped due to monthly limit:', error.response?.data || error.message || error);
+            } else {
+                console.error('Apify YouTube fetch failed to start:', error.response?.data || error.message || error);
+            }
         }
 
         const auth = await authorize();
@@ -211,6 +254,35 @@ module.exports = {
                 console.error('Failed to send YouTube application DM:', dmError);
             }
         };
+
+        const handleApifyLimitExceeded = async () => {
+            if (apifyLimitHandled) {
+                return;
+            }
+            apifyLimitHandled = true;
+            await logPendingApplication({
+                sheets,
+                platformLabel: 'YouTube',
+                username: cleanUsername,
+                interaction,
+                profileUrl: youtubeUrl,
+                logChannelId: '1098354875324174477'
+            });
+            await notifyUser(
+                [
+                    '⏳ We added your YouTube application to the queue.',
+                    'We will review and fetch your data this Sunday.',
+                    `Link on file: ${youtubeUrl}`,
+                    '',
+                    'No further action is needed from you. Thanks for your patience!'
+                ].join('\n')
+            );
+        };
+
+        if (apifyLimitHit) {
+            await handleApifyLimitExceeded();
+            return;
+        }
 
         if (apifyPromise) {
             apifyPromise.then(async (data) => {
@@ -432,11 +504,17 @@ module.exports = {
                 }
                 await notifyUser(`We could not find your YouTube channel using ${youtubeUrl}. Please double-check the link and submit a new application.`);
             }).catch(async (error) => {
+                if (isApifyLimitError(error)) {
+                    await handleApifyLimitExceeded();
+                    return;
+                }
                 console.error('Apify YouTube fetch failed during run:', error.response?.data || error.message || error);
                 await notifyUser(`We had trouble verifying ${youtubeUrl}. Please try again later or contact a staff member.`);
             });
         } else {
-            await notifyUser(`We could not start the verification for ${youtubeUrl}. Please try again later or contact a staff member.`);
+            if (!apifyLimitHandled) {
+                await notifyUser(`We could not start the verification for ${youtubeUrl}. Please try again later or contact a staff member.`);
+            }
         }
     }
 };
