@@ -1,7 +1,7 @@
 'use strict';
 require('dotenv').config({ path: './resources/.env' });
 const logCommandUsage = require('./API/command-data');
-const { fetchInviteById, updateInviteStatus, deleteInvite, fetchSquadApplicationByMessageUrl, deleteSquadApplicationById } = require('./db');
+const { fetchInviteById, updateInviteStatus, deleteInvite } = require('./db');
 const credentials = require('./resources/secret.json');
 
 const { ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection } = require('discord.js');
@@ -14,8 +14,6 @@ const axios = require('axios');
 const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
 const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
 const DISCORD_BOT_TOKEN = process.env.TOKEN;
-const LOGGING_GUILD_ID = '1233740086839869501';
-const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
 const KO_HOST_APPLICATIONS_CHANNEL_ID = '1446163192785932409';
 const ITEMS_PER_PAGE = 10;
 
@@ -218,8 +216,6 @@ const handleButton = async(interaction, client) => {
             await handleInviteButton(interaction, customId);
         } else if (action.startsWith('lfg:')) {
             await handleLfgButton(interaction);
-        } else if (action === 'application') {
-            await handleApplicationButton(interaction, customId, client);
         } else if (action === 'pagination1') {
             await handlePagination1(interaction, customId);
         } else if (action === 'next2') {
@@ -438,7 +434,7 @@ const handleKoHostApplication = async (interaction) => {
 
         if (invalidFields.length) {
             await interaction.reply({
-                content: `Please answer \"Yes\" or \"No\" for: ${invalidFields.join(', ')}.`,
+                content: `Please answer "Yes" or "No" for: ${invalidFields.join(', ')}.`,
                 ephemeral: true
             });
             return;
@@ -848,300 +844,6 @@ const handleInviteButton = async (interaction, action) => {
             const errorEmbed = new EmbedBuilder().setTitle('Invite Button Interaction Error').setDescription(`**User:** ${interaction.user.tag} (${interaction.user.id})\n**Action:** ${action}\n**Msg ID:** ${interaction.message.id}\n**Error:** ${error.message}`).setColor(0xff0000).setTimestamp();
             await errorChannel.send({ embeds: [errorEmbed] });
         } catch (logError) { console.error('Failed to log button interaction error:', logError); }
-    }
-};
-
-const handleApplicationButton = async (interaction, action, client) => {
-    try {
-        await interaction.deferReply({ ephemeral: true });
-
-        const messageUrl = interaction.message.url;
-
-        let applicationData;
-        try {
-            applicationData = await fetchSquadApplicationByMessageUrl(messageUrl);
-
-            if (!applicationData) {
-                throw new Error(`No application data found in API for URL: ${messageUrl}`);
-            }
-            if (applicationData.status && applicationData.status !== 'Pending') {
-                await interaction.editReply({ content: `This application has already been ${applicationData.status.toLowerCase()}.`, ephemeral: true });
-                return;
-            }
-            if (typeof applicationData.member_object === 'string') {
-                applicationData.member_object_parsed = JSON.parse(applicationData.member_object);
-            } else if (typeof applicationData.member_object === 'object' && applicationData.member_object !== null) {
-                applicationData.member_object_parsed = applicationData.member_object;
-            } else {
-                throw new Error('Invalid or missing member_object in API data.');
-            }
-
-        } catch (apiError) {
-            console.error('Error fetching or parsing application data:', apiError);
-            await interaction.editReply({ content: 'Could not retrieve application details. It might have expired or there was an API error.', ephemeral: true });
-            return;
-        }
-
-        const { user_id: applicantUserId, member_squad_name: squadName, squad_type: squadType } = applicationData;
-        const memberObject = applicationData.member_object_parsed;
-        const applicantUsername = memberObject.username || 'Unknown User';
-
-
-        const user = await client.users.fetch(applicantUserId).catch(err => {
-            console.error(`Failed to fetch applicant user ${applicantUserId}: ${err.message}`);
-            return null;
-        });
-        if (!user) {
-            await interaction.editReply({ content: `Could not fetch the applicant's user profile (${applicantUserId}). They may no longer be on Discord.`, ephemeral: true });
-            return;
-        }
-
-        const guild = client.guilds.cache.get(interaction.guildId) || await client.guilds.fetch(interaction.guildId).catch(() => null);
-        if (!guild) {
-            await interaction.editReply({ content: 'Could not fetch the server information.', ephemeral: true });
-            return;
-        }
-        const member = await guild.members.fetch(applicantUserId).catch(() => null);
-        if (!member) {
-            await interaction.editReply({ content: `Could not find the applicant (<@${applicantUserId}>) as a member of this server.`, ephemeral: true });
-
-            return;
-        }
-
-        const squadLeaderRole = guild.roles.cache.get('1218468103382499400');
-        const competitiveRole = guild.roles.cache.get('1288918946258489354');
-        const contentRole = guild.roles.cache.get('1290803054140199003');
-        if (!squadLeaderRole || !competitiveRole || !contentRole) {
-            console.error('One or more required leader roles not found!');
-            await interaction.editReply({ content: 'Configuration error: Cannot find required roles.', ephemeral: true });
-            return;
-        }
-
-
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
-
-        let isAlreadyLeader = false;
-        if (action === 'accept') {
-            try {
-                const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                    range: 'Squad Leaders!A:F'
-                });
-                const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
-                isAlreadyLeader = squadLeaders.some(row => row && row.length > 1 && row[1] === applicantUserId);
-            } catch (sheetError) {
-                console.error('Error checking Squad Leaders sheet:', sheetError);
-                throw new Error('Failed to check existing squad leaders.');
-            }
-        }
-
-
-        if (action === 'accept') {
-            if (isAlreadyLeader) {
-                await user.send({
-                    embeds: [new EmbedBuilder().setTitle('Squad Registration Denied').setDescription('We noticed you submitted multiple applications. This one has been denied as you already own a squad.').setColor(0xFF0000)]
-                }).catch(() => console.log(`Failed to send 'already leader' denial DM to ${applicantUsername}`));
-
-                const denialEmbed = new EmbedBuilder()
-                    .setTitle('Squad Registration Denied (Already Leader)')
-                    .setDescription(`**${applicantUsername}**'s application for **${squadName}** was automatically denied because they already own a squad.`)
-                    .setColor(0xFF0000);
-                await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
-
-                await updateApplicationStatus(sheets, messageUrl, 'Denied');
-                await deleteApplicationDataByMessageUrl(messageUrl);
-
-                await interaction.editReply({ content: 'This user already owns a squad. The application has been automatically denied.', ephemeral: true });
-                return;
-            }
-
-            let currentDate = new Date();
-            let dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
-
-            const newLeaderRow = [
-                applicantUsername,
-                applicantUserId,
-                squadName,
-                'N/A',
-                'FALSE',
-                dateString
-            ];
-            await sheets.spreadsheets.values.append({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'Squad Leaders!A1',
-                valueInputOption: 'RAW',
-                resource: { values: [newLeaderRow] }
-            }).catch(err => { throw new Error(`Failed to append to Squad Leaders sheet: ${err.message}`); });
-
-
-            const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: 'All Data!A:H'
-            });
-            const allData = allDataResponse.data.values || [];
-            let userInAllDataIndex = -1;
-            const allDataHeaderless = allData.slice(1);
-            userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > 1 && row[1] === applicantUserId);
-
-            if (userInAllDataIndex !== -1) {
-                const sheetRowIndex = userInAllDataIndex + 2;
-                const valuesToUpdate = [
-                    squadName,
-                    squadType || 'N/A',
-                    'N/A',
-                    'FALSE',
-                    'Yes'
-                ];
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                    range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
-                    valueInputOption: 'RAW',
-                    resource: { values: [valuesToUpdate] }
-                }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
-
-            } else {
-                const newAllDataRow = [
-                    applicantUsername,
-                    applicantUserId,
-                    squadName,
-                    squadType || 'N/A',
-                    'N/A',
-                    'FALSE',
-                    'Yes',
-                    'TRUE'
-                ];
-                await sheets.spreadsheets.values.append({
-                    spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                    range: 'All Data!A1',
-                    valueInputOption: 'RAW',
-                    resource: { values: [newAllDataRow] }
-                }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
-            }
-
-            try {
-                await member.roles.add(squadLeaderRole);
-                if (squadType === 'Competitive') await member.roles.add(competitiveRole);
-                if (squadType === 'Content') await member.roles.add(contentRole);
-            } catch (roleError) {
-                console.warn(`Failed to add roles to ${applicantUsername} (${applicantUserId}): ${roleError.message}`);
-                await interaction.followUp({ content: `Warning: Could not add all required roles to ${member.user.tag}. Please check permissions and assign manually.`, ephemeral: true });
-            }
-
-            try {
-                await member.setNickname(`[${squadName}] ${applicantUsername}`);
-            } catch (nickError) {
-                if (nickError.code === 50013) {
-                    console.warn(`Missing permissions to set nickname for ${applicantUsername}`);
-                    await interaction.followUp({ content: `Warning: Could not set nickname for ${member.user.tag} due to permissions.`, ephemeral: true });
-                } else {
-                    console.warn(`Failed to set nickname for ${applicantUsername}: ${nickError.message}`);
-                }
-            }
-
-            try {
-                await user.send({
-                    embeds: [new EmbedBuilder().setTitle('Squad Registration Accepted!').setDescription(`Your application for squad **${squadName}** (${squadType || 'N/A'}) has been accepted!`).setColor(0x00FF00)]
-                });
-            } catch (dmError) {
-                console.warn(`Failed to send acceptance DM to ${applicantUsername}: ${dmError.message}`);
-                await interaction.followUp({ content: `Accepted application for ${member.user.tag}, but could not send them a DM notification.`, ephemeral: true });
-            }
-
-            const acceptanceEmbed = new EmbedBuilder()
-                .setTitle('Squad Registration Accepted')
-                .setDescription(`**${applicantUsername}**'s application for **${squadName}** (${squadType || 'N/A'}) was accepted by <@${interaction.user.id}>.`)
-                .setColor(0x00FF00)
-                .setTimestamp();
-            await interaction.message.edit({ embeds: [acceptanceEmbed], components: [] }).catch(console.error);
-
-            await updateApplicationStatus(sheets, messageUrl, 'Accepted');
-            await deleteApplicationDataByMessageUrl(messageUrl);
-
-            await interaction.editReply({ content: '✅ Squad registration accepted and processed.', ephemeral: true });
-
-        } else if (action === 'deny') {
-            const genericDenyReason = 'Your squad registration application was not approved at this time. You may re-apply later if circumstances change.';
-
-            await user.send({
-                embeds: [new EmbedBuilder().setTitle('Squad Registration Denied').setDescription(genericDenyReason).setColor(0xFF0000)]
-            }).catch(() => console.log(`Failed to send denial DM to ${applicantUsername}`));
-
-            const denialEmbed = new EmbedBuilder()
-                .setTitle('Squad Registration Denied')
-                .setDescription(`**${applicantUsername}**'s application for **${squadName}** was denied by <@${interaction.user.id}>.`)
-                .setColor(0xFF0000)
-                .setTimestamp();
-            await interaction.message.edit({ embeds: [denialEmbed], components: [] }).catch(console.error);
-
-            await updateApplicationStatus(sheets, messageUrl, 'Denied');
-            await deleteApplicationDataByMessageUrl(messageUrl);
-
-            await interaction.editReply({ content: '❌ Squad registration denied.', ephemeral: true });
-        }
-
-    } catch (error) {
-        console.error('Error in handleApplicationButton:', error);
-        try {
-            const errorGuild = await client.guilds.fetch(LOGGING_GUILD_ID);
-            const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
-            const errorEmbed = new EmbedBuilder()
-                .setTitle('Application Button Error')
-                .setDescription(`**Button:** ${interaction.customId}\n**User:** ${interaction.user.tag} (${interaction.user.id})\n**Error:** ${error.message}`)
-                .setColor(0xFF0000)
-                .setTimestamp();
-            await errorChannel.send({ embeds: [errorEmbed] });
-        } catch (logError) {
-            console.error('Failed to log application button error:', logError);
-        }
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: `An error occurred: ${error.message || 'Please try again.'}`, ephemeral: true }).catch(console.error);
-        } else {
-            await interaction.editReply({ content: `An error occurred: ${error.message || 'Please try again.'}`, ephemeral: true }).catch(console.error);
-        }
-    }
-};
-
-
-const updateApplicationStatus = async (sheets, applicationMessageUrl, status) => {
-    try {
-        const applicationsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-            range: 'Applications!A:F'
-        });
-
-        const applications = applicationsResponse.data.values || [];
-        let applicationIndex = -1;
-        const headerlessApplications = applications.slice(1);
-        applicationIndex = headerlessApplications.findIndex(row => row && row.length > 4 && row[4] === applicationMessageUrl);
-
-        if (applicationIndex !== -1) {
-            const sheetRowIndex = applicationIndex + 2;
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k',
-                range: `Applications!F${sheetRowIndex}`,
-                valueInputOption: 'RAW',
-                resource: { values: [[status]] }
-            });
-            console.log(`Updated application status to ${status} for URL ${applicationMessageUrl}`);
-        } else {
-            console.error(`Could not find application row with URL ${applicationMessageUrl} to update status to ${status}.`);
-        }
-    } catch (error) {
-        console.error('Error updating application status in sheet:', error.message);
-    }
-};
-
-
-const deleteApplicationDataByMessageUrl = async (applicationMessageUrl) => {
-    try {
-        const app = await fetchSquadApplicationByMessageUrl(applicationMessageUrl);
-        if (!app) return null;
-        const result = await deleteSquadApplicationById(app.id);
-        return result;
-    } catch (error) {
-        console.error('Error deleting application data:', error.message);
-        return null;
     }
 };
 
