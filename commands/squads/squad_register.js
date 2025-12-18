@@ -1,13 +1,14 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { google } = require('googleapis');
 const credentials = require('../../resources/secret.json');
-const { Pool } = require('pg');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const REQUIRED_ROLE_ID = '924522770057031740';
-const APPLICATION_CHANNEL_ID = '1218466649695457331';
 const LOGGING_GUILD_ID = '1233740086839869501';
 const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
+const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
+const COMPETITIVE_ROLE_ID = '1288918946258489354';
+const CONTENT_ROLE_ID = '1290803054140199003';
 
 async function authorize() {
     const { client_email, private_key } = credentials;
@@ -20,28 +21,19 @@ async function authorize() {
     return auth;
 }
 
-const pool = new Pool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    port: process.env.DB_PORT || 5432,
-    ssl: { rejectUnauthorized: false },
-});
-
-pool.query('SELECT NOW()', err => {
-    if (err) {
-        console.error('❌ PostgreSQL Pool Error: Failed to connect.', err.stack);
-    } else {
-        console.log('✅ PostgreSQL Pool Connected.');
-    }
-});
+const formatDate = () => {
+    const now = new Date();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const year = now.getFullYear().toString().slice(-2);
+    return `${month}/${day}/${year}`;
+};
 
 module.exports = {
     cooldown: 604800,
     data: new SlashCommandBuilder()
         .setName('register')
-        .setDescription('Apply to register a new Squad.')
+        .setDescription('Register a new Squad.')
         .addStringOption(option =>
             option.setName('squadname')
                 .setDescription('The desired name/tag for your Squad (1-4 alphanumeric chars).')
@@ -77,20 +69,16 @@ module.exports = {
         const gAuth = await authorize();
         const sheets = google.sheets({ version: 'v4', auth: gAuth });
 
-        let applicationMessage;
-
         try {
-            const [allDataResponse, squadLeadersResponse, applicationsResponse] = await Promise.all([
+            const [allDataResponse, squadLeadersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Applications!A:F' })
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' })
             ]).catch(err => {
                 console.error('Error fetching sheet data:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
             });
 
             const allData = (allDataResponse.data.values || []).slice(1);
             const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
-            const applications = (applicationsResponse.data.values || []).slice(1);
 
             const userInAllData = allData.find(row => row && row.length > 1 && row[1] === userId);
             const userInSquadLeaders = squadLeaders.find(row => row && row.length > 1 && row[1] === userId);
@@ -105,82 +93,92 @@ module.exports = {
             if (squadNameTaken) {
                 return interaction.editReply({ content: `The squad tag **${squadName}** is already taken.`, ephemeral: true });
             }
-            const existingPendingApp = applications.find(row => row && row.length > 5 && row[1] === userId && row[5] === 'Pending');
-            if (existingPendingApp) {
-                return interaction.editReply({ content: 'You already have a pending squad application.', ephemeral: true });
+            const squadLeaderRole = interaction.guild.roles.cache.get(SQUAD_LEADER_ROLE_ID);
+            const competitiveRole = interaction.guild.roles.cache.get(COMPETITIVE_ROLE_ID);
+            const contentRole = interaction.guild.roles.cache.get(CONTENT_ROLE_ID);
+            if (!squadLeaderRole || !competitiveRole || !contentRole) {
+                return interaction.editReply({ content: 'Configuration error: required squad leader roles are missing.', ephemeral: true });
             }
 
-            const applicationEmbed = new EmbedBuilder()
-                .setColor('#FFA500').setTitle('New Squad Application')
-                .addFields( { name: 'Applicant', value: `${userTag} (<@${userId}>)`, inline: false }, { name: 'Requested Squad Name', value: squadName, inline: true }, { name: 'Requested Squad Type', value: squadType, inline: true } )
-                .setFooter({text: `Interaction ID: ${interaction.id}`}).setTimestamp();
-            const actionRow = new ActionRowBuilder()
-                .addComponents( new ButtonBuilder().setCustomId(`application_accept_${interaction.id}`).setLabel('Accept').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId(`application_deny_${interaction.id}`).setLabel('Deny').setStyle(ButtonStyle.Danger) );
-            const channel = await interaction.client.channels.fetch(APPLICATION_CHANNEL_ID).catch(err => {
-                console.error(`Failed to fetch application channel ${APPLICATION_CHANNEL_ID}: ${err.message}`); throw new Error('Could not find the application channel.');
-            });
-            applicationMessage = await channel.send({ embeds: [applicationEmbed], components: [actionRow] }).catch(err => {
-                console.error(`Failed to send application message to channel ${APPLICATION_CHANNEL_ID}: ${err.message}`); throw new Error('Failed to send the application message.');
-            });
-
-
-            const tableName = 'squad_applications_data';
-            const dbClient = await pool.connect();
-            try {
-                const columns = [
-                    'member_display_name',
-                    'member_object',
-                    'member_squad_name',
-                    'message_url',
-                    'user_id',
-                    'squad_type'
-                ];
-
-                const memberInfoObject = {
-                    id: userId,
-                    username: username,
-                    tag: userTag,
-                    avatar: interaction.user.displayAvatarURL()
-                };
-
-                const values = [
-                    interaction.member.displayName,
-                    JSON.stringify(memberInfoObject),
-                    squadName,
-                    applicationMessage.url,
-                    userId,
-                    squadType
-                ];
-
-                const placeholders = values.map((_, index) => `$${index + 1}`).join(', ');
-                const insertQuery = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders}) RETURNING *;`;
-
-
-                console.log(`Attempting to insert application into PostgreSQL table ${tableName} for interaction ${interaction.id}`);
-
-                const result = await dbClient.query(insertQuery, values);
-                console.log('✅ Application data successfully inserted into PostgreSQL:', result.rows?.[0] || 'No rows returned.');
-
-            } catch (dbError) {
-                console.error(`❌ Failed to insert application data into PostgreSQL table ${tableName}:`, dbError);
-                applicationMessage.delete().catch(delErr => console.error(`Failed to delete application msg ${applicationMessage.id} after DB error: ${delErr.message}`));
-                throw new Error('Failed to record the application in the database.');
-            } finally {
-                dbClient.release();
-            }
-
+            const dateString = formatDate();
+            const newLeaderRow = [
+                username,
+                userId,
+                squadName,
+                'N/A',
+                'FALSE',
+                dateString
+            ];
 
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_ID,
-                range: 'Applications!A1',
+                range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
-                resource: { values: [[username, userId, squadName, squadType, applicationMessage.url, 'Pending']] }
-            }).catch(err => {
-                console.error(`Failed to append application to sheet after DB insert: ${err.message}`);
-            });
+                resource: { values: [newLeaderRow] }
+            }).catch(err => { throw new Error(`Failed to append to Squad Leaders sheet: ${err.message}`); });
+
+            const userInAllDataIndex = allData.findIndex(row => row && row.length > 1 && row[1] === userId);
+
+            if (userInAllDataIndex !== -1) {
+                const sheetRowIndex = userInAllDataIndex + 2;
+                const valuesToUpdate = [
+                    squadName,
+                    squadType || 'N/A',
+                    'N/A',
+                    'FALSE',
+                    'Yes'
+                ];
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
+                    valueInputOption: 'RAW',
+                    resource: { values: [valuesToUpdate] }
+                }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
+            } else {
+                const newAllDataRow = [
+                    username,
+                    userId,
+                    squadName,
+                    squadType || 'N/A',
+                    'N/A',
+                    'FALSE',
+                    'Yes',
+                    'TRUE'
+                ];
+                await sheets.spreadsheets.values.append({
+                    spreadsheetId: SPREADSHEET_ID,
+                    range: 'All Data!A1',
+                    valueInputOption: 'RAW',
+                    resource: { values: [newAllDataRow] }
+                }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
+            }
+
+            try {
+                await interaction.member.roles.add(squadLeaderRole);
+                if (squadType === 'Competitive') await interaction.member.roles.add(competitiveRole);
+                if (squadType === 'Content') await interaction.member.roles.add(contentRole);
+            } catch (roleError) {
+                console.warn(`Failed to add roles to ${username} (${userId}): ${roleError.message}`);
+                await interaction.followUp({ content: 'Warning: squad created, but some roles could not be assigned. Please check permissions and assign manually.', ephemeral: true });
+            }
+
+            try {
+                await interaction.member.setNickname(`[${squadName}] ${interaction.member.user.username}`);
+            } catch (nickError) {
+                console.warn(`Failed to set nickname for ${username}: ${nickError.message}`);
+                await interaction.followUp({ content: 'Warning: squad created, but nickname could not be updated due to permissions.', ephemeral: true });
+            }
+
+            try {
+                await interaction.user.send({
+                    embeds: [new EmbedBuilder().setTitle('Squad Registered').setDescription(`Your squad **${squadName}** (${squadType}) has been registered!`).setColor(0x00FF00)]
+                });
+            } catch (dmError) {
+                console.warn(`Failed to send registration DM to ${username}: ${dmError.message}`);
+            }
 
             await interaction.editReply({
-                content: `Your application to register squad **${squadName}** (${squadType}) has been submitted for review.`,
+                content: `✅ Squad **${squadName}** (${squadType}) has been registered and configured.`,
                 ephemeral: true
             });
 
@@ -199,7 +197,7 @@ module.exports = {
                 console.error('Failed to log registration error to Discord:', logError);
             }
             await interaction.editReply({
-                content: `An error occurred while submitting your application: ${error.message || 'Please try again later or contact an admin.'}`,
+                content: `An error occurred while registering your squad: ${error.message || 'Please try again later or contact an admin.'}`,
                 ephemeral: true
             }).catch(console.error);
         }
