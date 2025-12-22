@@ -67,10 +67,10 @@ async function logPendingApplication({sheets, platformLabel, username, interacti
     try {
         await sheets.spreadsheets.values.append({
             spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
-            range: `'CC Applications'!A:D`,
+            range: `'CC Applications'!A:F`,
             valueInputOption: 'USER_ENTERED',
             insertDataOption: 'INSERT_ROWS',
-            resource: {values: [[platformLabel, username, interaction.user.id, nowStamp]]}
+            resource: {values: [[platformLabel, username, interaction.user.id, nowStamp, '', profileUrl]]}
         });
     } catch (appendError) {
         console.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
