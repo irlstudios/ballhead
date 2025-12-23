@@ -1,22 +1,9 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
 const moment = require('moment');
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
-let sheets;
+const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
     tiktok: {
@@ -112,21 +99,14 @@ function describeRelativeWeek(timestamp) {
     return `${diff} weeks ago`;
 }
 
-async function getPlatformData(platform, discordId) {
+function getPlatformData(platform, discordId, valuesByRange) {
     try {
         const config = PLATFORMS[platform];
 
-        const [appRes, dataRes, activeRes, paidRes] = await Promise.all([
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.appRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.dataRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.activeCreatorsRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.paidCreatorsRange })
-        ]);
-
-        const appRows = appRes.data.values || [];
-        const dataRows = dataRes.data.values || [];
-        const activeRows = activeRes.data.values || [];
-        const paidRows = paidRes.data.values || [];
+        const appRows = valuesByRange.get(config.appRange) || [];
+        const dataRows = valuesByRange.get(config.dataRange) || [];
+        const activeRows = valuesByRange.get(config.activeCreatorsRange) || [];
+        const paidRows = valuesByRange.get(config.paidCreatorsRange) || [];
 
         let appRow = null;
         for (const row of appRows) {
@@ -554,12 +534,31 @@ module.exports = {
                 .setRequired(false)
         ),
     async execute(interaction) {
+        const cmdStartTime = Date.now();
         try {
             await interaction.deferReply({ ephemeral: false });
 
-            const auth = await authorize();
-            sheets = google.sheets({ version: 'v4', auth });
+            const sheetsStartTime = Date.now();
+            const sheets = await getSheetsClient();
+            console.log(`[cc-check-progress] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
+            const rangesToFetch = Array.from(new Set(
+                Object.values(PLATFORMS).flatMap(config => ([
+                    config.appRange,
+                    config.dataRange,
+                    config.activeCreatorsRange,
+                    config.paidCreatorsRange
+                ]))
+            ));
+            const cacheStartTime = Date.now();
+            const valuesByRange = await getCachedValues({
+                sheets,
+                spreadsheetId: sheetId,
+                ranges: rangesToFetch,
+                ttlMs: SHEET_CACHE_TTL_MS
+            });
+            console.log(`[cc-check-progress] Data fetched in ${Date.now() - cacheStartTime}ms`);
 
+            const processingStartTime = Date.now();
             const targetUser = interaction.options.getUser('user');
             const isModerator = canCheckOthers(interaction.member);
 
@@ -579,7 +578,7 @@ module.exports = {
             const existingCCPlatforms = [];
 
             for (const [key, config] of Object.entries(PLATFORMS)) {
-                const data = await getPlatformData(key, userId);
+                const data = getPlatformData(key, userId, valuesByRange);
                 if (data && data.appRow) {
                     platformResults[key] = data;
                 } else if (data && (data.activeCreatorRow || data.paidCreatorRow)) {
@@ -618,6 +617,10 @@ module.exports = {
             }
 
             await interaction.editReply({ embeds: [embed] });
+
+            const totalTime = Date.now() - cmdStartTime;
+            const processingTime = Date.now() - processingStartTime;
+            console.log(`[cc-check-progress] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
             console.error('Error in cc-check-progress:', error);
             if (!interaction.replied && !interaction.deferred) {
