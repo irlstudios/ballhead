@@ -94,8 +94,15 @@ if (!token) {
     process.exit(1);
 }
 
+const { startCacheWarmer } = require('./utils/cache_warmer');
+
 client.login(token).then(() => {
     console.log('Bot logged in successfully.');
+
+    // Start cache warming system
+    startCacheWarmer().catch(error => {
+        console.error('[Cache Warmer] Error starting cache warmer:', error);
+    });
 }).catch(error => {
     console.error('Failed to login:', error);
     process.exit(1);

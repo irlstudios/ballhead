@@ -1,9 +1,9 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 const PLATFORM_SHEETS = [
     { range: 'TikTok Data!A:O', platform: 'TikTok' },
     { range: 'Reels Data!A:O', platform: 'Reels' },
@@ -24,17 +24,6 @@ const CREATOR_LOOKUP_SHEETS = [
 // Season start date is stored at Paid Creators!G2 in MM/DD/YYYY format
 const SEASON_START_RANGE = 'Paid Creators!G2';
 
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
 function normalizePlatform(value) {
     if (!value) return '';
     const v = value.toString().trim().toLowerCase();
@@ -46,82 +35,78 @@ function normalizePlatform(value) {
     return value.toString().trim();
 }
 
-async function getSheetData() {
-    const auth = await authorize();
-    const sheets = google.sheets({ version: 'v4', auth });
+async function getSheetData(platformFilter = null) {
+    const sheets = await getSheetsClient();
+    const normalizedFilter = platformFilter ? normalizePlatform(platformFilter) : null;
+    const platformSheetsToUse = normalizedFilter
+        ? PLATFORM_SHEETS.filter(item => item.platform.toLowerCase() === normalizedFilter.toLowerCase())
+        : PLATFORM_SHEETS;
     const ranges = [
-        ...PLATFORM_SHEETS.map(item => item.range),
+        ...platformSheetsToUse.map(item => item.range),
         ...CREATOR_LOOKUP_SHEETS.map(item => item.range),
         SEASON_START_RANGE
     ];
-    const response = await sheets.spreadsheets.values.batchGet({
+    const valuesByRange = await getCachedValues({
+        sheets,
         spreadsheetId: SPREADSHEET_ID,
-        ranges
+        ranges,
+        ttlMs: SHEET_CACHE_TTL_MS
     });
-    const valueRanges = response.data.valueRanges || [];
     const posts = [];
     // Map: discordId -> Map(platform -> pId)
     const creatorIds = new Map();
     let seasonStart = { unix: null, display: 'N/A' };
 
-    valueRanges.forEach((valueRange, index) => {
-        if (index < PLATFORM_SHEETS.length) {
-            const values = valueRange.values;
-            if (!values || values.length < 2) {
-                return;
-            }
-            const platform = PLATFORM_SHEETS[index].platform;
-            const rows = values.slice(1);
-            rows.forEach(row => {
-                posts.push({
-                    platform,
-                    row
-                });
-            });
+    platformSheetsToUse.forEach((platformSheet) => {
+        const values = valuesByRange.get(platformSheet.range);
+        if (!values || values.length < 2) {
             return;
         }
-
-        const lookupIndex = index - PLATFORM_SHEETS.length;
-        if (lookupIndex < CREATOR_LOOKUP_SHEETS.length) {
-            const lookupConfig = CREATOR_LOOKUP_SHEETS[lookupIndex];
-            const values = valueRange.values;
-            if (!values || values.length < 2) {
-                return;
-            }
-            values.slice(1).forEach(row => {
-                const platformRaw = row[lookupConfig.platformIndex];
-                const discordId = row[lookupConfig.idIndex];
-                const pId = row[lookupConfig.pIdIndex];
-                if (!discordId || !pId || !platformRaw) {
-                    return;
-                }
-                const normalizedId = normalizeDiscordId(discordId);
-                if (!normalizedId) {
-                    return;
-                }
-                const plat = normalizePlatform(platformRaw);
-                const pIdTrim = pId.toString().trim();
-                if (!pIdTrim) return;
-                if (!creatorIds.has(normalizedId)) {
-                    creatorIds.set(normalizedId, new Map());
-                }
-                const byPlat = creatorIds.get(normalizedId);
-                if (!byPlat.has(plat)) {
-                    byPlat.set(plat, pIdTrim);
-                }
+        const rows = values.slice(1);
+        rows.forEach(row => {
+            posts.push({
+                platform: platformSheet.platform,
+                row
             });
-            return;
-        }
-
-        // Season start date range (Paid Creators!G2)
-        const values = valueRange.values;
-        const cell = (values && values[0] && values[0][0]) ? values[0][0] : null;
-        if (cell) {
-            seasonStart = parseDate(cell);
-        }
+        });
     });
 
-    if (posts.length === 0) {
+    CREATOR_LOOKUP_SHEETS.forEach((lookupConfig) => {
+        const values = valuesByRange.get(lookupConfig.range);
+        if (!values || values.length < 2) {
+            return;
+        }
+        values.slice(1).forEach(row => {
+            const platformRaw = row[lookupConfig.platformIndex];
+            const discordId = row[lookupConfig.idIndex];
+            const pId = row[lookupConfig.pIdIndex];
+            if (!discordId || !pId || !platformRaw) {
+                return;
+            }
+            const normalizedId = normalizeDiscordId(discordId);
+            if (!normalizedId) {
+                return;
+            }
+            const plat = normalizePlatform(platformRaw);
+            const pIdTrim = pId.toString().trim();
+            if (!pIdTrim) return;
+            if (!creatorIds.has(normalizedId)) {
+                creatorIds.set(normalizedId, new Map());
+            }
+            const byPlat = creatorIds.get(normalizedId);
+            if (!byPlat.has(plat)) {
+                byPlat.set(plat, pIdTrim);
+            }
+        });
+    });
+
+    const seasonValues = valuesByRange.get(SEASON_START_RANGE);
+    const cell = (seasonValues && seasonValues[0] && seasonValues[0][0]) ? seasonValues[0][0] : null;
+    if (cell) {
+        seasonStart = parseDate(cell);
+    }
+
+    if (posts.length === 0 && platformSheetsToUse.length === PLATFORM_SHEETS.length) {
         throw new Error('No data found in the content creator sheets.');
     }
 
@@ -368,17 +353,22 @@ module.exports = {
         ),
 
     async execute(interaction) {
+        const cmdStartTime = Date.now();
         try {
             // Acknowledge the interaction immediately to avoid expiration
             await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+            const dataFetchStartTime = Date.now();
             const targetUser = interaction.options.getUser('user') || interaction.user;
             const userId = targetUser.id;
             const userAvatar = targetUser.displayAvatarURL({ dynamic: true });
 
             const platformOption = interaction.options.getString('platform') || null;
 
-            const { posts, creatorIds, seasonStart } = await getSheetData();
+            const { posts, creatorIds, seasonStart } = await getSheetData(platformOption);
+            console.log(`[quality-score] Data fetched in ${Date.now() - dataFetchStartTime}ms`);
+
+            const processingStartTime = Date.now();
             const lookupKey = normalizeDiscordId(userId);
             const byPlatform = creatorIds.get(lookupKey);
 
@@ -503,6 +493,9 @@ module.exports = {
                 interaction.client.commandData.delete(reply.id);
             }, 10 * 60 * 1000);
 
+            const totalTime = Date.now() - cmdStartTime;
+            const processingTime = Date.now() - processingStartTime;
+            console.log(`[quality-score] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
             console.error(`Error fetching posts: ${error.message}`);
 
