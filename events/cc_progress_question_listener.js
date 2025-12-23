@@ -1,21 +1,9 @@
 const { EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../resources/secret.json');
 const moment = require('moment');
+const { getSheetsClient, getCachedValues } = require('../utils/sheets_cache');
 
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
-let sheets;
-const sheetId = '15P8BKPbO2DQX6yRXmc9gzuL3iLxfu4ef83Jb8Bi8AJk';
+const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
     tiktok: {
@@ -136,21 +124,14 @@ const ccQuestionPatterns = [
     /cc[\s'\u2019.,!?]*progress/i
 ];
 
-async function getPlatformData(platform, discordId) {
+function getPlatformData(platform, discordId, valuesByRange) {
     try {
         const config = PLATFORMS[platform];
 
-        const [appRes, dataRes, activeRes, paidRes] = await Promise.all([
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.appRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.dataRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.activeCreatorsRange }),
-            sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range: config.paidCreatorsRange })
-        ]);
-
-        const appRows = appRes.data.values || [];
-        const dataRows = dataRes.data.values || [];
-        const activeRows = activeRes.data.values || [];
-        const paidRows = paidRes.data.values || [];
+        const appRows = valuesByRange.get(config.appRange) || [];
+        const dataRows = valuesByRange.get(config.dataRange) || [];
+        const activeRows = valuesByRange.get(config.activeCreatorsRange) || [];
+        const paidRows = valuesByRange.get(config.paidCreatorsRange) || [];
 
         let appRow = null;
         for (const row of appRows) {
@@ -573,16 +554,39 @@ module.exports = {
 
         if (!matchesPhrase && !matchesRegex) return;
 
+        const eventStartTime = Date.now();
         try {
-            const auth = await authorize();
-            sheets = google.sheets({ version: 'v4', auth });
+            console.log(`[CC Question Listener] Triggered by message from ${message.author.tag}`);
 
+            const sheetsStartTime = Date.now();
+            const sheets = await getSheetsClient();
+            console.log(`[CC Question Listener] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
+
+            const rangesToFetch = Array.from(new Set(
+                Object.values(PLATFORMS).flatMap(config => ([
+                    config.appRange,
+                    config.dataRange,
+                    config.activeCreatorsRange,
+                    config.paidCreatorsRange
+                ]))
+            ));
+
+            const cacheStartTime = Date.now();
+            const valuesByRange = await getCachedValues({
+                sheets,
+                spreadsheetId: sheetId,
+                ranges: rangesToFetch,
+                ttlMs: SHEET_CACHE_TTL_MS
+            });
+            console.log(`[CC Question Listener] Data fetched in ${Date.now() - cacheStartTime}ms`);
+
+            const processingStartTime = Date.now();
             const userId = message.author.id;
             const platformResults = {};
             const existingCCPlatforms = [];
 
             for (const [key, config] of Object.entries(PLATFORMS)) {
-                const data = await getPlatformData(key, userId);
+                const data = getPlatformData(key, userId, valuesByRange);
                 if (data && data.appRow) {
                     platformResults[key] = data;
                 } else if (data && (data.activeCreatorRow || data.paidCreatorRow)) {
@@ -625,6 +629,10 @@ module.exports = {
             });
 
             await message.reply({ embeds: [embed] });
+
+            const totalTime = Date.now() - eventStartTime;
+            const processingTime = Date.now() - processingStartTime;
+            console.log(`[CC Question Listener] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
             console.error('Error in CC progress question listener:', error);
             await message.reply({
