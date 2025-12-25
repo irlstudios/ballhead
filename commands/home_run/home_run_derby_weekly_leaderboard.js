@@ -1,8 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { google } = require('googleapis');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const sheetId = '1zjBhY8oBLOlxuSLpozy0M4WpV11Q83kvoxs74u4EjyM';
 const tabName = 'S2 HRD Participants (Weekly)';
@@ -12,17 +11,6 @@ try {
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (err) {
     console.warn('Font load failed, using default fonts:', err);
-}
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-    await auth.authorize();
-    return auth;
 }
 
 function drawTrophy(ctx, x, y, size, color) {
@@ -120,8 +108,7 @@ module.exports = {
         .setName('hrd-leaderboard')
         .setDescription('Displays the home run derby weekly leaderboard'),
     async execute(interaction) {
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
         await interaction.deferReply();
         try {
             const response = await sheets.spreadsheets.values.get({

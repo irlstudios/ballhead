@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const REQUIRED_ROLE_ID = '924522770057031740';
@@ -9,17 +8,6 @@ const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
 const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
 const COMPETITIVE_ROLE_ID = '1288918946258489354';
 const CONTENT_ROLE_ID = '1290803054140199003';
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 const formatDate = () => {
     const now = new Date();
@@ -66,8 +54,7 @@ module.exports = {
             return interaction.editReply({ content: 'Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).', ephemeral: true });
         }
 
-        const gAuth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth: gAuth });
+        const sheets = await getSheetsClient();
 
         try {
             const [allDataResponse, squadLeadersResponse] = await Promise.all([

@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const SQUAD_OWNER_ROLES = ['1218468103382499400', '1288918946258489354', '1290803054140199003'];
@@ -25,17 +24,6 @@ const AD_SQUAD_NAME = 2;
 const AD_SQUAD_TYPE = 3;
 const AD_PREFERENCE = 7;
 
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('disband-squad')
@@ -46,8 +34,7 @@ module.exports = {
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
         const guild = interaction.guild;
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             const [squadLeadersResponse, squadMembersResponse, allDataResponse] = await Promise.all([

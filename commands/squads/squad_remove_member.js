@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const LOGGING_GUILD_ID = '1233740086839869501';
@@ -28,17 +27,6 @@ const SM_ID = 1;
 const SM_SQUAD_NAME = 2;
 const AD_ID = 1;
 const AD_SQUAD_TYPE = 3;
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -73,8 +61,7 @@ module.exports = {
             return;
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([

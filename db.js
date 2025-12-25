@@ -1,24 +1,42 @@
-const { Client } = require('pg');
+const { Pool } = require('pg');
 
-const clientConfig = {
+const poolConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     database: process.env.DB_DATABASE_NAME,
     password: process.env.DB_PASSWORD,
     ssl: { rejectUnauthorized: false },
+    max: 20, // Maximum number of clients in the pool
+    idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
+    connectionTimeoutMillis: 2000, // Return an error after 2 seconds if unable to get a client
 };
 
+// Create a connection pool for better performance
+const pool = new Pool(poolConfig);
+
+// Log pool errors
+pool.on('error', (err) => {
+    console.error('[DB Pool] Unexpected error on idle client', err);
+});
+
+// Execute query using connection pool
 const executeQuery = async (query, params) => {
-    const client = new Client(clientConfig);
+    const client = await pool.connect();
     try {
-        await client.connect();
         const result = await client.query(query, params);
-        await client.end();
         return result;
     } catch (err) {
-        await client.end();
+        console.error('[DB] Query error:', err);
         throw err;
+    } finally {
+        client.release(); // Return client to pool
     }
+};
+
+// Graceful shutdown function
+const closePool = async () => {
+    await pool.end();
+    console.log('[DB Pool] Connection pool closed');
 };
 
 const insertCommandUsage = async (command_name, user_id, channel_id, server_id, timestamp) => {
@@ -131,5 +149,7 @@ module.exports = {
     deleteInvite,
     updateInviteStatus,
     fetchInviteById,
-    updateUserReputation
+    updateUserReputation,
+    closePool,
+    pool
 };

@@ -1,8 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { google } = require('googleapis');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
 const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
@@ -13,17 +12,6 @@ try {
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (error) {
     console.error('Error loading fonts:', error);
-}
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-    await auth.authorize();
-    return auth;
 }
 
 function drawRoundedRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle) {
@@ -66,8 +54,7 @@ module.exports = {
 
     async execute(interaction) {
         const category = interaction.options.getString('category');
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             await interaction.deferReply();

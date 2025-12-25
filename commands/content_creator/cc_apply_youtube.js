@@ -1,19 +1,7 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
 const {EmbedBuilder} = require('discord.js');
-const {google} = require('googleapis');
-const credentials = require('../../resources/secret.json');
 const {fetchCreatorData} = require('../../API/apifyClient');
-
-async function authorize() {
-    const {client_email, private_key} = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 function formatDate(value) {
     if (value === undefined || value === null) {
@@ -200,8 +188,7 @@ module.exports = {
             }
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({version: 'v4', auth});
+        const sheets = await getSheetsClient();
         try {
             const existingResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',

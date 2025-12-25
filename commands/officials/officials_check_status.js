@@ -1,24 +1,11 @@
-const { google } = require('googleapis');
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 const FORM_RESPONSES_TAB = 'Form Responses 1';
 const STATS_TAB = 'Stats';
 
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
-async function fetchSheetData(auth, range) {
-    const sheets = google.sheets({ version: 'v4', auth });
+async function fetchSheetData(sheets, range) {
     const response = await sheets.spreadsheets.values.get({
         spreadsheetId: SHEET_ID,
         range: range
@@ -50,11 +37,11 @@ module.exports = {
         .setDescription('Check your current grade and requirement'),
     async execute(interaction) {
         const discordName = interaction.user.username.toLowerCase();
-        const auth = await authorize();
+        const sheets = await getSheetsClient();
 
         try {
-            const formResponses = await fetchSheetData(auth, `${FORM_RESPONSES_TAB}!A:H`);
-            const stats = await fetchSheetData(auth, `${STATS_TAB}!A:Q`);
+            const formResponses = await fetchSheetData(sheets, `${FORM_RESPONSES_TAB}!A:H`);
+            const stats = await fetchSheetData(sheets, `${STATS_TAB}!A:Q`);
 
             const dateRow = stats[0];
             const currentWeekIndex = getCurrentWeekIndex(dateRow);

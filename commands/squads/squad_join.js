@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const MAX_SQUAD_MEMBERS = 10;
@@ -16,17 +15,6 @@ const mascotSquads = [
     { name: 'Bee Squad', roleId: '1361466746149666956' },
     { name: 'Alligator Squad', roleId: '1361466697059664043' },
 ];
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 const SL_ID = 1;
 const SL_SQUAD_NAME = 2;
@@ -62,8 +50,7 @@ module.exports = {
             return;
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([

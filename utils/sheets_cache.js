@@ -14,6 +14,10 @@ const cacheStats = {
     lastReset: Date.now()
 };
 
+// Periodic cache cleanup interval
+let cleanupInterval = null;
+let statsResetInterval = null;
+
 function getCacheKey(spreadsheetId, range) {
     return `${spreadsheetId}::${range}`;
 }
@@ -139,10 +143,85 @@ function clearCache() {
     console.log('[Cache] Cache cleared');
 }
 
+// Clean up expired cache entries
+function cleanupExpiredEntries() {
+    const now = Date.now();
+    let cleaned = 0;
+
+    for (const [key, cached] of rangeCache.entries()) {
+        if (cached.expiresAt <= now) {
+            rangeCache.delete(key);
+            cleaned++;
+        }
+    }
+
+    if (cleaned > 0) {
+        console.log(`[Cache Cleanup] Removed ${cleaned} expired entries. Cache size: ${rangeCache.size}`);
+    }
+}
+
+// Reset cache statistics (prevents unbounded counter growth)
+function resetCacheStats() {
+    const oldStats = { ...cacheStats };
+    cacheStats.hits = 0;
+    cacheStats.misses = 0;
+    cacheStats.apiCalls = 0;
+    cacheStats.totalApiTime = 0;
+    cacheStats.lastReset = Date.now();
+
+    console.log('[Cache Stats] Reset statistics. Previous session:', {
+        hits: oldStats.hits,
+        misses: oldStats.misses,
+        hitRate: oldStats.hits + oldStats.misses > 0
+            ? ((oldStats.hits / (oldStats.hits + oldStats.misses)) * 100).toFixed(2) + '%'
+            : '0%',
+        apiCalls: oldStats.apiCalls,
+        avgApiTime: oldStats.apiCalls > 0
+            ? (oldStats.totalApiTime / oldStats.apiCalls).toFixed(2) + 'ms'
+            : '0ms'
+    });
+}
+
+// Start periodic maintenance tasks
+function startCacheMaintenance() {
+    if (cleanupInterval || statsResetInterval) {
+        return; // Already started
+    }
+
+    // Clean up expired entries every 10 minutes
+    cleanupInterval = setInterval(() => {
+        cleanupExpiredEntries();
+    }, 600000); // 10 minutes
+
+    // Reset statistics every 24 hours to prevent unbounded counter growth
+    statsResetInterval = setInterval(() => {
+        resetCacheStats();
+    }, 86400000); // 24 hours
+
+    console.log('[Cache Maintenance] Started periodic cleanup (every 10 minutes) and stats reset (every 24 hours)');
+}
+
+// Stop periodic maintenance tasks
+function stopCacheMaintenance() {
+    if (cleanupInterval) {
+        clearInterval(cleanupInterval);
+        cleanupInterval = null;
+        console.log('[Cache Maintenance] Stopped');
+    }
+    if (statsResetInterval) {
+        clearInterval(statsResetInterval);
+        statsResetInterval = null;
+        console.log('[Cache Maintenance] Stats reset stopped');
+    }
+}
+
 module.exports = {
     getSheetsClient,
     getCachedValues,
     warmCache,
     getCacheStats,
-    clearCache
+    clearCache,
+    startCacheMaintenance,
+    stopCacheMaintenance,
+    cleanupExpiredEntries
 };
