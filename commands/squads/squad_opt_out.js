@@ -1,11 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-
-const sheets = google.sheets('v4');
-const auth = new google.auth.GoogleAuth({
-    keyFile: 'resources/secret.json',
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const LOGGING_CHANNEL_ID = '1233853458092658749';
@@ -22,12 +16,11 @@ module.exports = {
         const username = interaction.user.username;
 
         const updatePreference = async (userID, currentUsername) => {
-            const client = await auth.getClient();
+            const sheets = await getSheetsClient();
             const range = 'All Data!A:H';
 
             try {
                 const response = await sheets.spreadsheets.values.get({
-                    auth: client,
                     spreadsheetId: SPREADSHEET_ID,
                     range,
                 });
@@ -52,7 +45,6 @@ module.exports = {
                         const updateRange = `All Data!H${rowIndex}`;
                         console.log(`Updating ${updateRange} to FALSE for user ${userID}`);
                         await sheets.spreadsheets.values.update({
-                            auth: client,
                             spreadsheetId: SPREADSHEET_ID,
                             range: updateRange,
                             valueInputOption: 'RAW',
@@ -75,7 +67,6 @@ module.exports = {
                         'FALSE'
                     ];
                     await sheets.spreadsheets.values.append({
-                        auth: client,
                         spreadsheetId: SPREADSHEET_ID,
                         range: 'All Data!A1',
                         valueInputOption: 'RAW',

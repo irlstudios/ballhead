@@ -6,3 +6,5 @@ resources/.env
 resources/secret.json
 .DS_Store
 AGENTS.md
+.claude
+CLAUDE.md

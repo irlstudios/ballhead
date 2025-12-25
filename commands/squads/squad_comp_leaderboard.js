@@ -1,8 +1,7 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { google } = require('googleapis');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
 
@@ -11,17 +10,6 @@ try {
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (error) {
     console.error('Error loading fonts:', error);
-}
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-    await auth.authorize();
-    return auth;
 }
 
 function drawRoundedRect(ctx, x, y, width, height, radius, fillColor, borderColor) {
@@ -49,8 +37,7 @@ module.exports = {
         .setDescription('Displays the competitive squad leaderboard based on total wins since squad creation'),
 
     async execute(interaction) {
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             await interaction.deferReply({ ephemeral: false });

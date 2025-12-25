@@ -107,3 +107,36 @@ client.login(token).then(() => {
     console.error('Failed to login:', error);
     process.exit(1);
 });
+
+// Graceful shutdown handling
+const { closePool } = require('./db');
+const { stopCacheWarmer } = require('./utils/cache_warmer');
+const { stopCacheMaintenance } = require('./utils/sheets_cache');
+
+async function gracefulShutdown(signal) {
+    console.log(`\n[Shutdown] Received ${signal}. Starting graceful shutdown...`);
+
+    try {
+        // Stop accepting new interactions
+        client.destroy();
+        console.log('[Shutdown] Discord client destroyed');
+
+        // Stop cache warming
+        stopCacheWarmer();
+
+        // Stop cache maintenance
+        stopCacheMaintenance();
+
+        // Close database pool
+        await closePool();
+
+        console.log('[Shutdown] Graceful shutdown complete');
+        process.exit(0);
+    } catch (error) {
+        console.error('[Shutdown] Error during graceful shutdown:', error);
+        process.exit(1);
+    }
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

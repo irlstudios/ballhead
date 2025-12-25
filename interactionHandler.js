@@ -2,10 +2,7 @@
 require('dotenv').config({ path: './resources/.env' });
 const logCommandUsage = require('./API/command-data');
 const { fetchInviteById, updateInviteStatus, deleteInvite } = require('./db');
-const credentials = require('./resources/secret.json');
-
 const { ActionRowBuilder, EmbedBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection } = require('discord.js');
-const { google } = require('googleapis');
 const { createModal } = require('./modals/modalFactory');
 const { Client } = require('pg');
 const BALLHEAD_GUILD_ID = '1233740086839869501';
@@ -20,6 +17,9 @@ const ITEMS_PER_PAGE = 10;
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
 
+// Use centralized Google Sheets client
+const { getSheetsClient } = require('./utils/sheets_cache');
+
 const clientConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
@@ -27,17 +27,6 @@ const clientConfig = {
     password: process.env.DB_PASSWORD,
     ssl: { rejectUnauthorized: false },
 };
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 function parseWeek(value) {
     if (!value) {
@@ -337,8 +326,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
         }
 
         const sheetID = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         let agreedToRules, understandsConsequences, inGameUsername;
         try {
@@ -460,8 +448,7 @@ const handleKoHostApplication = async (interaction) => {
         const applicationMessage = await applicationsChannel.send({ embeds: [embed] });
 
         try {
-            const auth = await authorize();
-            const sheets = google.sheets({ version: 'v4', auth });
+            const sheets = await getSheetsClient();
             await sheets.spreadsheets.values.append({
                 spreadsheetId: '1JZ6tadLFzW68OiMXQeHndyJcwU7hp_Qgh_ar0hq4-sk',
                 range: 'Applications!A:E',
@@ -523,8 +510,7 @@ const handleRankSessionSelectMenu = async (interaction) => {
             const passFailLabel = data.passFail === 'pass' ? 'Pass' : 'Fail';
 
             try {
-                const auth = await authorize();
-                const sheets = google.sheets({ version: 'v4', auth });
+                const sheets = await getSheetsClient();
                 const currentDate = new Date().toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: '2-digit',
@@ -732,12 +718,7 @@ const handleInviteButton = async (interaction, action) => {
             const member = await guild.members.fetch(invitedMemberId).catch(() => null);
             if (!member) { await interaction.editReply({ content: 'You could not be found in the server.' }); return; }
 
-            const sheetsAuthClient = new google.auth.JWT({
-                email: credentials.client_email,
-                key: credentials.private_key,
-                scopes: ['https://www.googleapis.com/auth/spreadsheets']
-            });
-            const sheets = google.sheets({ version: 'v4', auth: sheetsAuthClient });
+            const sheets = await getSheetsClient();
 
             const [squadMembersResponse, allDataResponse, squadLeadersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k', range: 'Squad Members!A:E' }),
@@ -978,8 +959,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         }
 
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
         const applicationUrl = interaction.message.url;
         console.log(`Application URL : ${applicationUrl}`);
         await updateOfficialApplicationStatus(sheets, applicationUrl, 'Approved');
@@ -1119,8 +1099,7 @@ const handleOfficialsApplicationReject = async (interaction) => {
             console.error('Failed to send DM to user:', dmError.message);
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
         const applicationUrl = interaction.message.url;
         await updateOfficialApplicationStatus(sheets, applicationUrl, 'Rejected');
 
@@ -2011,7 +1990,8 @@ const handleLfgButton = async (interaction) => {
                 members.clear();
                 for (const id of remaining) members.add(id);
                 await lfgUpdateStarterMessage(interaction.channel, queueDef, members);
-                await lfgUpsertRow(interaction.channel.id, queueDef, members, await lfgGetStatus(members, queueDef));
+                const status1 = await lfgGetStatus(members, queueDef);
+                await lfgUpsertRow(interaction.channel.id, queueDef, members, status1);
                 const client = interaction.client;
                 let fallback = null;
                 try {
@@ -2042,7 +2022,8 @@ const handleLfgButton = async (interaction) => {
                 return;
             }
             await lfgUpdateStarterMessage(interaction.channel, queueDef, members);
-            await lfgUpsertRow(interaction.channel.id, queueDef, members, await lfgGetStatus(members, queueDef));
+            const status2 = await lfgGetStatus(members, queueDef);
+            await lfgUpsertRow(interaction.channel.id, queueDef, members, status2);
             await interaction.editReply({ content: `Joined ${queueDef.name}.` });
             return;
         }
@@ -2053,12 +2034,14 @@ const handleLfgButton = async (interaction) => {
             }
             members.delete(interaction.user.id);
             await lfgUpdateStarterMessage(interaction.channel, queueDef, members);
-            await lfgUpsertRow(interaction.channel.id, queueDef, members, await lfgGetStatus(members, queueDef));
+            const status3 = await lfgGetStatus(members, queueDef);
+            await lfgUpsertRow(interaction.channel.id, queueDef, members, status3);
             await interaction.editReply({ content: `Left ${queueDef.name}.` });
             return;
         }
         if (lfgAction === 'status') {
-            await lfgUpsertRow(interaction.channel.id, queueDef, members, await lfgGetStatus(members, queueDef));
+            const status4 = await lfgGetStatus(members, queueDef);
+            await lfgUpsertRow(interaction.channel.id, queueDef, members, status4);
             await interaction.editReply({ content: `${members.size}/${queueDef.size} waiting in ${queueDef.name}.` });
             return;
         }
