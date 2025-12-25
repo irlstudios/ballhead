@@ -1,4 +1,4 @@
-const { warmCache, getCacheStats } = require('./sheets_cache');
+const { warmCache, getCacheStats, startCacheMaintenance } = require('./sheets_cache');
 
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const CACHE_TTL_MS = 1800000; // 30 minutes
@@ -25,6 +25,9 @@ let warmerInterval = null;
 
 async function startCacheWarmer() {
     console.log('[Cache Warmer] Starting cache warming system...');
+
+    // Start cache maintenance (cleanup expired entries, reset stats)
+    startCacheMaintenance();
 
     // Warm cache immediately on startup
     await warmCache({

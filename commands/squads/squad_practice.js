@@ -1,24 +1,12 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { google } = require('googleapis');
 const { EmbedBuilder, ChannelType } = require('discord.js');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const CHANNEL_ID = '1214781415670153266';
 const LOGGING_CHANNEL_ID = '1233854185276051516';
 const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
 const PRACTICE_DURATION_MS = 24 * 60 * 60 * 1000;
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -31,8 +19,7 @@ module.exports = {
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         let thread;
 

@@ -1,20 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -23,14 +10,12 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         async function getSquadList() {
             const range = '\'Squad Leaders\'!A:F';
             try {
                 const response = await sheets.spreadsheets.values.get({
-                    auth: auth,
                     spreadsheetId: SPREADSHEET_ID,
                     range,
                 });
@@ -99,6 +84,11 @@ module.exports = {
 
             if (!interaction.client.squadsPagination) interaction.client.squadsPagination = new Map();
             interaction.client.squadsPagination.set(interaction.id, { squadList, totalPages, currentPage });
+
+            // Clean up pagination data after 15 minutes to prevent memory leak
+            setTimeout(() => {
+                interaction.client.squadsPagination.delete(interaction.id);
+            }, 900000);
 
             await interaction.editReply({
                 embeds: [generateEmbed(currentPage)],

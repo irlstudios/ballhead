@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const GUILD_ID = '752216589792706621';
 const LOGGING_GUILD_ID = '1233740086839869501';
@@ -21,17 +20,6 @@ const SL_EVENT_SQUAD = 3;
 const AD_ID = 1;
 
 
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('leave-squad')
@@ -50,8 +38,7 @@ module.exports = {
             return;
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             const [squadMembersResponse, squadLeadersResponse, allDataResponse] = await Promise.all([

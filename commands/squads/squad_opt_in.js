@@ -1,17 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 
@@ -23,8 +11,7 @@ module.exports = {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
 
         try {
             const range = 'All Data!A:H';

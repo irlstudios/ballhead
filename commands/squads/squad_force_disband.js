@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { google } = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 const SQUAD_OWNER_ROLES = ['1218468103382499400', '1288918946258489354', '1290803054140199003'];
@@ -18,17 +17,6 @@ const mascotSquads = [
     { name: 'Bee Squad', roleId: '1361466746149666956' },
     { name: 'Alligator Squad', roleId: '1361466697059664043' },
 ];
-
-async function authorize() {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    await auth.authorize();
-    return auth;
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -57,8 +45,7 @@ module.exports = {
             });
         }
 
-        const auth = await authorize();
-        const sheets = google.sheets({ version: 'v4', auth });
+        const sheets = await getSheetsClient();
         const spreadsheetId = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 
         try {

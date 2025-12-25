@@ -174,6 +174,12 @@ module.exports = {
                 return;
             }
             client.vcCooldowns.set(newState.member.id, Date.now());
+
+            // Clean up cooldown after it expires to prevent memory leak
+            setTimeout(() => {
+                client.vcCooldowns.delete(newState.member.id);
+            }, COOLDOWN_MS);
+
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query(
                 `INSERT INTO vc_hosts(channel_id, host_id, created_at)

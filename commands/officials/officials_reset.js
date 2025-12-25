@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
-const { google } = require('googleapis');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const roleHierarchy = {
     '1286098187223957617': 3,
@@ -8,12 +8,6 @@ const roleHierarchy = {
 };
 
 const roleIds = ['1286098187223957617', '1286098139513880648', '1286098091396698134'];
-
-const auth = new google.auth.GoogleAuth({
-    keyFile: 'resources/secret.json',
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
-
 
 function sortOfficialsByRole(officials) {
     return officials.sort((a, b) => roleHierarchy[b.highestRoleId] - roleHierarchy[a.highestRoleId]);
@@ -60,8 +54,7 @@ module.exports = {
                 return;
             }
 
-            const client = await auth.getClient();
-            const sheets = google.sheets({ version: 'v4', auth: client });
+            const sheets = await getSheetsClient();
             const spreadsheetId = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 
             await guild.members.fetch();

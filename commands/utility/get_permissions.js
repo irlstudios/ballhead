@@ -1,6 +1,5 @@
 const {SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder} = require('discord.js');
-const {google} = require('googleapis');
-const credentials = require('../../resources/secret.json');
+const { getSheetsClient } = require('../../utils/sheets_cache');
 const fs = require('fs');
 const path = require('path');
 
@@ -9,16 +8,6 @@ const SHEET_NAME = 'Gym Class';
 const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
 const ERROR_LOG_GUILD_ID = '1233740086839869501';
 const REQUIRED_ROLES = ['752218192197320735', '805833778064130104'];
-
-function authorize() {
-    const {client_email, private_key} = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets']
-    });
-    return auth;
-}
 
 async function getChannelPermissions(channel) {
     const roles = [];
@@ -79,8 +68,7 @@ module.exports = {
             [ChannelType.GuildText, ChannelType.GuildVoice, ChannelType.GuildCategory, ChannelType.GuildNews, ChannelType.GuildStore].includes(channel.type)
         );
 
-        const auth = await authorize();
-        const sheets = google.sheets({version: 'v4', auth});
+        const sheets = await getSheetsClient();
 
         const data = [];
         const csvData = [['Name', 'Roles', 'Members', 'ID', 'Link']];

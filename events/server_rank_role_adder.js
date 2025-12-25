@@ -1,7 +1,6 @@
 const { schedule } = require('node-cron');
-const { google } = require('googleapis');
 const { EmbedBuilder } = require('discord.js');
-const credentials = require('../resources/secret.json');
+const { getSheetsClient } = require('../utils/sheets_cache');
 
 const SHEET_ID = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
 const ROLES = [
@@ -17,20 +16,8 @@ const EMOJIS = {
 const THREAD_ID = '1396935260008353944';
 const PARENT_CHANNEL_ID = '1083515855985442906';
 
-async function authorize () {
-    const { client_email, private_key } = credentials;
-    const auth = new google.auth.JWT({
-        email: client_email,
-        key: private_key,
-        scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly']
-    });
-    await auth.authorize();
-    return auth;
-}
-
 async function fetchMMRData () {
-    const auth = await authorize();
-    const sheets = google.sheets({ version: 'v4', auth });
+    const sheets = await getSheetsClient();
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
     const season = meta.data.sheets
         .map(s => s.properties.title)
