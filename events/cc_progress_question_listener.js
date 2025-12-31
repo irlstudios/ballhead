@@ -6,18 +6,6 @@ const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
-    tiktok: {
-        name: 'TikTok',
-        appRange: 'CC Applications!A:G',
-        dataRange: 'TikTok Data!A:O',
-        activeCreatorsRange: 'Active Creators!A:K',
-        paidCreatorsRange: 'Paid Creators!A:F',
-        platformKey: 'Tiktok',
-        requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
-        color: '#00f2ea',
-        emoji: '🎵',
-        weekColumnIndex: 14
-    },
     youtube: {
         name: 'YouTube',
         appRange: 'CC Applications!A:G',
@@ -603,7 +591,7 @@ module.exports = {
                     });
                 } else {
                     await message.reply({
-                        content: 'Hey <@' + userId + '>! You haven\'t applied for any CC programs yet.\n\nUse `/tiktok-cc-apply`, `/youtube-cc-apply`, or `/instagram-cc-apply` to get started!'
+                        content: 'Hey <@' + userId + '>! You haven\'t applied for any CC programs yet.\n\nUse `/youtube-cc-apply` or `/instagram-cc-apply` to get started.\nTikTok applications happen in the GC mobile app. Use `/cc_status` for updates.'
                     });
                 }
                 return;

@@ -5,12 +5,10 @@ const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache')
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 const PLATFORM_SHEETS = [
-    { range: 'TikTok Data!A:O', platform: 'TikTok' },
     { range: 'Reels Data!A:O', platform: 'Reels' },
     { range: 'YouTube Data!A:O', platform: 'YouTube' }
 ];
 const PLATFORM_COLORS = {
-    TikTok: '#FE2C55',
     Reels: '#E1306C',
     YouTube: '#FF0000',
     default: '#0099ff'
@@ -30,7 +28,6 @@ function normalizePlatform(value) {
     if (v === 'instagram') return 'Reels';
     if (v === 'ig') return 'Reels';
     if (v === 'reels') return 'Reels';
-    if (v === 'tiktok' || v === 'tik tok') return 'TikTok';
     if (v === 'youtube' || v === 'yt') return 'YouTube';
     return value.toString().trim();
 }
@@ -347,8 +344,7 @@ module.exports = {
                 .setRequired(false)
                 .addChoices(
                     { name: 'YouTube', value: 'YouTube' },
-                    { name: 'Instagram', value: 'Reels' },
-                    { name: 'TikTok', value: 'TikTok' },
+                    { name: 'Instagram', value: 'Reels' }
                 )
         ),
 
