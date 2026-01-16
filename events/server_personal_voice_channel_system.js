@@ -11,7 +11,7 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     }
     throw new Error('Action failed after retries');
 };
-const BLACKLIST_USER_IDS = new Set(['850757950124851250']);
+const BLACKLIST_USER_IDS = new Set(['']);
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
 const BLACKLIST_DENY_PERMISSIONS = [
     PermissionFlagsBits.Connect,
