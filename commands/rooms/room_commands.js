@@ -8,7 +8,7 @@ const clientConfig = {
     ssl: { rejectUnauthorized: false },
 };
 const pool = new Pool(clientConfig);
-const BLACKLIST_USER_IDS = new Set(['']);
+const BLACKLIST_USER_IDS = new Set();
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
 const BLACKLIST_DENY_OVERWRITE = {
     Connect: false,
