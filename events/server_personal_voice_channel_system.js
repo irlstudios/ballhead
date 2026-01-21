@@ -146,10 +146,6 @@ module.exports = {
                         id: '847977550731149364',
                         deny: BLACKLIST_DENY_PERMISSIONS
                     },
-                    {
-                        id: '850757950124851250',
-                        deny: BLACKLIST_DENY_PERMISSIONS
-                    }
                 ]
             });
             client.vcCreated.add(newChannel.id);
