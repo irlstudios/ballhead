@@ -9,7 +9,6 @@ const COMMON_RANGES = [
     // cc_check_account ranges
     'CC Applications!A:G',
     'TikTok Data!A:O',
-    'YouTube Data!A:P',
     'Reels Data!A:O',
     'Active Creators!A:K',
     'Paid Creators!A:F',
