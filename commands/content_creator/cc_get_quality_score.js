@@ -5,12 +5,10 @@ const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache')
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 const PLATFORM_SHEETS = [
-    { range: 'Reels Data!A:O', platform: 'Reels' },
-    { range: 'YouTube Data!A:O', platform: 'YouTube' }
+    { range: 'Reels Data!A:O', platform: 'Reels' }
 ];
 const PLATFORM_COLORS = {
     Reels: '#E1306C',
-    YouTube: '#FF0000',
     default: '#0099ff'
 };
 const CREATOR_LOOKUP_SHEETS = [
@@ -28,7 +26,6 @@ function normalizePlatform(value) {
     if (v === 'instagram') return 'Reels';
     if (v === 'ig') return 'Reels';
     if (v === 'reels') return 'Reels';
-    if (v === 'youtube' || v === 'yt') return 'YouTube';
     return value.toString().trim();
 }
 
@@ -343,7 +340,6 @@ module.exports = {
                 .setDescription('The platform to filter posts by')
                 .setRequired(false)
                 .addChoices(
-                    { name: 'YouTube', value: 'YouTube' },
                     { name: 'Instagram', value: 'Reels' }
                 )
         ),
