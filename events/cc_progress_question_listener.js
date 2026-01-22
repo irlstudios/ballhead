@@ -6,18 +6,6 @@ const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
-    youtube: {
-        name: 'YouTube',
-        appRange: 'CC Applications!A:G',
-        dataRange: 'YouTube Data!A:P',
-        activeCreatorsRange: 'Active Creators!A:K',
-        paidCreatorsRange: 'Paid Creators!A:F',
-        platformKey: 'YouTube',
-        requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
-        color: '#FF0000',
-        emoji: '🎬',
-        weekColumnIndex: 15
-    },
     reels: {
         name: 'Instagram',
         appRange: 'CC Applications!A:G',
@@ -399,7 +387,7 @@ function formatPlatformEmbed(platform, platformData) {
 
     const progress = analyzeWeeklyProgress(userPosts, config);
     const req = config.requirements;
-    const followerLabel = platform === 'youtube' ? 'Subscribers' : 'Followers';
+    const followerLabel = 'Followers';
 
     let statusLines = [];
 
@@ -591,7 +579,7 @@ module.exports = {
                     });
                 } else {
                     await message.reply({
-                        content: 'Hey <@' + userId + '>! You haven\'t applied for any CC programs yet.\n\nUse `/youtube-cc-apply` or `/instagram-cc-apply` to get started.\nTikTok applications happen in the GC mobile app. Use `/cc_status` for updates.'
+                        content: 'Hey <@' + userId + '>! You haven\'t applied for any CC programs yet.\n\nUse `/instagram-cc-apply` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
                     });
                 }
                 return;

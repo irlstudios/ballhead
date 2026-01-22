@@ -6,18 +6,6 @@ const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
-    youtube: {
-        name: 'YouTube',
-        appRange: 'CC Applications!A:G',
-        dataRange: 'YouTube Data!A:P',
-        activeCreatorsRange: 'Active Creators!A:K',
-        paidCreatorsRange: 'Paid Creators!A:F',
-        platformKey: 'YouTube',
-        requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
-        color: '#FF0000',
-        emoji: '🎬',
-        weekColumnIndex: 15
-    },
     reels: {
         name: 'Instagram',
         appRange: 'CC Applications!A:G',
@@ -52,11 +40,6 @@ function buildAccountUrl(platform, username, platformId) {
     const user = normalize(username);
 
     switch (platform) {
-        case 'youtube':
-            if (platformId && platformId.toString().trim().startsWith('UC')) {
-                return `https://www.youtube.com/channel/${platformId.toString().trim()}`;
-            }
-            return user ? `https://www.youtube.com/@${user}` : null;
         case 'reels': // Instagram Reels
             return user ? `https://www.instagram.com/${user}/` : null;
         default:
@@ -378,7 +361,7 @@ function formatPlatformEmbed(platform, platformData) {
 
     const progress = analyzeWeeklyProgress(userPosts, config);
     const req = config.requirements;
-    const followerLabel = platform === 'youtube' ? 'Subscribers' : 'Followers';
+    const followerLabel = 'Followers';
 
     let statusLines = [];
 
@@ -584,8 +567,8 @@ module.exports = {
                 } else {
                     await interaction.editReply({
                         content: `${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n\n` +
-                                 `${isCheckingOther ? 'They need' : 'Use'} ${isCheckingOther ? 'to use' : ''} \`/youtube-cc-apply\` or \`/instagram-cc-apply\` to get started.\n` +
-                                 'TikTok applications happen in the GC mobile app. Use `/cc_status` for updates.'
+                                 `${isCheckingOther ? 'They need' : 'Use'} ${isCheckingOther ? 'to use' : ''} \`/instagram-cc-apply\` to get started.\n` +
+                                 'TikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
                     });
                 }
                 return;
