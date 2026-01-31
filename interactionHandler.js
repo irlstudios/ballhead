@@ -23,28 +23,7 @@ const ITEMS_PER_PAGE = 10;
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
 
-// Use centralized Google Sheets client
 const { getSheetsClient } = require('./utils/sheets_cache');
-
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) {
-        parts.push(`## ${title}`);
-    }
-    if (subtitle) {
-        parts.push(subtitle);
-    }
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) {
-            parts.push('');
-        }
-        parts.push(...lines.filter(Boolean));
-    }
-    if (parts.length === 0) {
-        return null;
-    }
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
-}
 
 const clientConfig = {
     host: process.env.DB_HOST,
@@ -52,31 +31,6 @@ const clientConfig = {
     database: process.env.DB_DATABASE_NAME,
     password: process.env.DB_PASSWORD,
     ssl: { rejectUnauthorized: false } };
-
-function parseWeek(value) {
-    if (!value) {
-        return null;
-    }
-    const match = value.toString().match(/(\d+)/);
-    if (!match) {
-        return null;
-    }
-    const number = parseInt(match[1], 10);
-    return Number.isNaN(number) ? null : number;
-}
-
-function buildNoticeContainer({ title = 'Notice', subtitle, lines} = {}) {
-    const container = new ContainerBuilder();
-    const block = buildTextBlock({ title, subtitle, lines });
-            if (block) container.addTextDisplayComponents(block);
-    return container;
-}
-
-function noticePayload(message, options = {}) {
-    const lines = Array.isArray(message) ? message : [message];
-    const container = buildNoticeContainer({ ...options, lines });
-    return { flags: MessageFlags.IsComponentsV2, components: [container] };
-}
 
 const interactionHandler = async (interaction, client) => {
     try {
@@ -210,43 +164,7 @@ const handleSelectMenu = async (interaction) => {
         return;
     }
     if (interaction.customId === 'ff-leaderboard-select') {
-        const category = interaction.values[0] || FF_LEADERBOARD_DEFAULT_CATEGORY;
-        await interaction.deferUpdate();
-        try {
-            const result = await buildFriendlyFireLeaderboardPayload(category);
-            if (result.errorContainer) {
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer] });
-                return;
-            }
-            await interaction.editReply({
-                flags: MessageFlags.IsComponentsV2,
-                components: result.components,
-                files: result.files
-            });
-        } catch (error) {
-            console.error('Error updating Friendly Fire leaderboard:', error);
-            try {
-                const errorGuild = await interaction.client.guilds.fetch(FF_LEADERBOARD_ERROR_LOG_GUILD_ID);
-                const errorChannel = await errorGuild.channels.fetch(FF_LEADERBOARD_ERROR_LOG_CHANNEL_ID);
-                const errorContainer = new ContainerBuilder();
-                const block = buildTextBlock({
-                    title: 'Leaderboard Update Error',
-                    subtitle: 'Friendly Fire leaderboard failed',
-                    lines: [`**Error:** ${error.message}`]
-                });
-                if (block) errorContainer.addTextDisplayComponents(block);
-                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
-            } catch (logError) {
-                console.error('Failed to log FF leaderboard error:', logError);
-            }
-            await interaction.followUp({
-                ...noticePayload(
-                    'An error occurred while updating the leaderboard.',
-                    { title: 'Leaderboard Error', subtitle: 'Friendly Fire'}
-                ),
-                ephemeral: true
-            }).catch(console.error);
-        }
+        await handleFFLeaderboardSelect(interaction);
         return;
     }
 };
@@ -2747,4 +2665,89 @@ const lfgGetStatus = async (members, queueDef) => {
     return 'waiting';
 };
 
+const handleFFLeaderboardSelect = async (interaction) => {
+    const category = interaction.values[0] || FF_LEADERBOARD_DEFAULT_CATEGORY;
+    await interaction.deferUpdate();
+    try {
+        const result = await buildFriendlyFireLeaderboardPayload(category);
+        if (result.errorContainer) {
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer] });
+            return;
+        }
+        await interaction.editReply({
+            flags: MessageFlags.IsComponentsV2,
+            components: result.components,
+            files: result.files
+        });
+    } catch (error) {
+        console.error('Error updating Friendly Fire leaderboard:', error);
+        try {
+            const errorGuild = await interaction.client.guilds.fetch(FF_LEADERBOARD_ERROR_LOG_GUILD_ID);
+            const errorChannel = await errorGuild.channels.fetch(FF_LEADERBOARD_ERROR_LOG_CHANNEL_ID);
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({
+                title: 'Leaderboard Update Error',
+                subtitle: 'Friendly Fire leaderboard failed',
+                lines: [`**Error:** ${error.message}`]
+            });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
+        } catch (logError) {
+            console.error('Failed to log FF leaderboard error:', logError);
+        }
+        await interaction.followUp({
+            ...noticePayload(
+                'An error occurred while updating the leaderboard.',
+                { title: 'Leaderboard Error', subtitle: 'Friendly Fire'}
+            ),
+            ephemeral: true
+        }).catch(console.error);
+    }
+}
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
+
+
+function parseWeek(value) {
+    if (!value) {
+        return null;
+    }
+    const match = value.toString().match(/(\d+)/);
+    if (!match) {
+        return null;
+    }
+    const number = parseInt(match[1], 10);
+    return Number.isNaN(number) ? null : number;
+}
+
+function buildNoticeContainer({ title = 'Notice', subtitle, lines} = {}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+    if (block) container.addTextDisplayComponents(block);
+    return container;
+}
+
+function noticePayload(message, options = {}) {
+    const lines = Array.isArray(message) ? message : [message];
+    const container = buildNoticeContainer({ ...options, lines });
+    return { flags: MessageFlags.IsComponentsV2, components: [container] };
+}
 module.exports = interactionHandler;
