@@ -1,5 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const GUILD_ID = '752216589792706621';
 const LOGGING_GUILD_ID = '1233740086839869501';
@@ -19,6 +39,12 @@ const SL_SQUAD_NAME = 2;
 const SL_EVENT_SQUAD = 3;
 const AD_ID = 1;
 
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -34,7 +60,12 @@ module.exports = {
         const guild = interaction.guild;
 
         if (!member || !guild) {
-            await interaction.editReply({ content: 'Could not retrieve necessary server information.', ephemeral: true });
+            const errorContainer = buildNoticeContainer({
+                title: 'Server Info Missing',
+                subtitle: 'Leave Squad',
+                lines: ['Could not retrieve necessary server information.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             return;
         }
 
@@ -53,12 +84,22 @@ module.exports = {
 
             const userIsLeader = squadLeadersData.find(row => row && row.length > SL_ID && row[SL_ID]?.trim() === userId);
             if (userIsLeader) {
-                return interaction.editReply({ content: 'Sorry, squad leaders cannot leave their squad using this command. Please use `/disband-squad`.', ephemeral: true });
+                const infoContainer = buildNoticeContainer({
+                    title: 'Leaders Must Disband',
+                    subtitle: 'Leave Squad',
+                    lines: ['Squad leaders cannot leave their squad using this command.', 'Please use `/disband-squad`.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
 
             const userInSquadRowIndex = squadMembersData.findIndex(row => row && row.length > 1 && row[1]?.trim() === userId);
             if (userInSquadRowIndex === -1) {
-                return interaction.editReply({ content: 'You are not currently in a squad.', ephemeral: true });
+                const infoContainer = buildNoticeContainer({
+                    title: 'No Squad Found',
+                    subtitle: 'Leave Squad',
+                    lines: ['You are not currently in a squad.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
 
             const userInSquadRow = squadMembersData[userInSquadRowIndex];
@@ -66,7 +107,12 @@ module.exports = {
 
             if (!squadName || squadName === 'N/A') {
                 console.warn(`User ${userTag} (${userId}) found in Squad Members sheet but without a valid squad name.`);
-                return interaction.editReply({ content: 'Your squad data seems inconsistent. Please contact an administrator.', ephemeral: true });
+                const errorContainer = buildNoticeContainer({
+                    title: 'Data Inconsistent',
+                    subtitle: 'Leave Squad',
+                    lines: ['Your squad data seems inconsistent.', 'Please contact an administrator.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             console.log(`User ${userTag} (${userId}) is leaving squad: ${squadName}`);
@@ -94,8 +140,7 @@ module.exports = {
             console.log(`Clearing Squad Members range ${clearRange}`);
             await sheets.spreadsheets.values.clear({
                 spreadsheetId: SPREADSHEET_ID,
-                range: clearRange,
-            }).catch(err => { throw new Error(`Failed to clear row in Squad Members sheet: ${err.message}`); });
+                range: clearRange }).catch(err => { throw new Error(`Failed to clear row in Squad Members sheet: ${err.message}`); });
 
 
             const userInAllDataIndex = allData.findIndex(row => row && row.length > AD_ID && row[AD_ID]?.trim() === userId);
@@ -108,8 +153,7 @@ module.exports = {
                     spreadsheetId: SPREADSHEET_ID,
                     range: rangeToUpdate,
                     valueInputOption: 'RAW',
-                    resource: { values: valuesToUpdate },
-                }).catch(err => { throw new Error(`Failed to update row in All Data sheet: ${err.message}`); });
+                    resource: { values: valuesToUpdate } }).catch(err => { throw new Error(`Failed to update row in All Data sheet: ${err.message}`); });
             } else {
                 console.warn(`User ${userTag} (${userId}) was found in Squad Members but not in All Data sheet.`);
             }
@@ -120,14 +164,13 @@ module.exports = {
                 const ownerUsername = squadOwnerRow[0] || 'Leader';
                 try {
                     const ownerUser = await interaction.client.users.fetch(ownerId);
-                    const dmEmbed = new EmbedBuilder() /* ... DM embed ... */
-                        .setTitle('Member Left Squad')
-                        .setDescription(`Hello ${ownerUsername},\nUser **${userTag}** (<@${userId}>) has left your squad **${squadName}**.`)
-                        .setColor('#FFA500');
-                    await ownerUser.send({ embeds: [dmEmbed] }).catch(dmError => { /* ... handle DM error ... */
+                    const dmContainer = new ContainerBuilder();
+                    const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Update', lines: [`Hello ${ownerUsername},`, `User **${userTag}** (<@${userId}>) has left your squad **${squadName}**.`] });
+            if (block) dmContainer.addTextDisplayComponents(block);
+                    await ownerUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(dmError => {
                         console.error(`Failed to DM squad leader ${ownerId}: ${dmError.message}`);
                     });
-                } catch (error) { /* ... handle user fetch error ... */
+                } catch (error) {
                     console.error(`Failed to fetch squad leader user ${ownerId} for DM: ${error.message}`);
                 }
             } else {
@@ -137,13 +180,11 @@ module.exports = {
             try {
                 const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
-                const logEmbed = new EmbedBuilder() /* ... Log embed ... */
-                    .setTitle('Member Left Squad')
-                    .setDescription(`User **${userTag}** (<@${userId}>) has left the squad **${squadName}**.`)
-                    .setColor('#FFA500')
-                    .setTimestamp();
-                await loggingChannel.send({ embeds: [logEmbed] });
-            } catch (logError) { /* ... handle log error ... */
+                const logContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Activity', lines: [`User **${userTag}** (<@${userId}>) has left the squad **${squadName}**.`] });
+            if (block) logContainer.addTextDisplayComponents(block);
+                await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+            } catch (logError) {
                 console.error(`Failed to send log message: ${logError.message}`);
             }
 
@@ -181,9 +222,18 @@ module.exports = {
                 else { console.error(`Error during nickname/role cleanup for ${userTag} (${userId}):`, error.message); }
             }
 
+            const successContainer = buildNoticeContainer({
+                title: 'Squad Left',
+                subtitle: 'Leave Squad',
+                lines: [
+                    `You have successfully left the squad **${squadName}**.`,
+                    'Any associated event roles have also been removed.'
+                ]
+            });
             await interaction.editReply({
-                content: `You have successfully left the squad **${squadName}**. Any associated event roles have also been removed.`,
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2,
+                components: [successContainer],
+                ephemeral: true
             });
 
         } catch (error) {
@@ -191,20 +241,27 @@ module.exports = {
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder() /* ... Error log embed ... */
-                    .setTitle('Leave Squad Command Error')
-                    .setDescription(`**User:** ${userTag} (${userId})\n**Error:** ${error.message}`)
-                    .setColor('#FF0000')
-                    .setTimestamp();
-                await errorChannel.send({ embeds: [errorEmbed] });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Leave Squad Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 console.error(`Failed to log error to error channel: ${logError.message}`);
             }
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
+                const replyContainer = buildNoticeContainer({
+                    title: 'Request Failed',
+                    subtitle: 'Leave Squad',
+                    lines: ['An error occurred while processing your request.']
+                });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(console.error);
             } else if (!interaction.replied) {
-                await interaction.editReply({ content: 'An error occurred while processing your request...', ephemeral: true }).catch(console.error);
+                const replyContainer = buildNoticeContainer({
+                    title: 'Request Failed',
+                    subtitle: 'Leave Squad',
+                    lines: ['An error occurred while processing your request.']
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(console.error);
             }
         }
-    },
-};
+    } };

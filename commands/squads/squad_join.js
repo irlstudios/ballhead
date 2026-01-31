@@ -1,5 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const MAX_SQUAD_MEMBERS = 10;
@@ -27,6 +47,13 @@ const AD_SQUAD_TYPE = 3;
 const AD_EVENT_SQUAD = 4;
 const AD_PREFERENCE = 7;
 
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
+
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -41,12 +68,22 @@ module.exports = {
         const member = interaction.member;
 
         if (!member) {
-            await interaction.editReply({ content: 'Could not retrieve your member information.', ephemeral: true });
+            const errorContainer = buildNoticeContainer({
+                title: 'Member Missing',
+                subtitle: 'Random Squad Join',
+                lines: ['Could not retrieve your member information.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             return;
         }
         const guild = interaction.guild;
         if (!guild) {
-            await interaction.editReply({ content: 'This command must be run in a server.', ephemeral: true });
+            const errorContainer = buildNoticeContainer({
+                title: 'Server Required',
+                subtitle: 'Random Squad Join',
+                lines: ['This command must be run in a server.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             return;
         }
 
@@ -67,22 +104,46 @@ module.exports = {
 
             const userIsLeader = squadLeadersData.find(row => row && row.length > SL_ID && row[SL_ID] === userId);
             if (userIsLeader) {
-                await interaction.editReply({ content: 'You are already a squad leader and cannot join another squad.', ephemeral: true }); return;
+                const infoContainer = buildNoticeContainer({
+                    title: 'Already a Leader',
+                    subtitle: 'Random Squad Join',
+                    lines: ['You are already a squad leader and cannot join another squad.']
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return;
             }
             let userAllDataRowIndex = -1;
             const userAllDataRow = allData.find((row, index) => { if (row && row.length > AD_ID && row[AD_ID] === userId) { userAllDataRowIndex = index; return true; } return false; });
             if (userAllDataRow) {
                 if (userAllDataRow[AD_SQUAD_NAME] && userAllDataRow[AD_SQUAD_NAME] !== 'N/A') {
-                    await interaction.editReply({ content: `You are already in squad **${userAllDataRow[AD_SQUAD_NAME]}**. You must leave it first.`, ephemeral: true }); return;
+                    const infoContainer = buildNoticeContainer({
+                        title: 'Already in a Squad',
+                        subtitle: 'Random Squad Join',
+                        lines: [`You are already in squad **${userAllDataRow[AD_SQUAD_NAME]}**.`, 'You must leave it first.']
+                    });
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                    return;
                 }
                 if (userAllDataRow[AD_PREFERENCE] === 'FALSE') {
-                    await interaction.editReply({ content: 'You have opted out of squad invitations/joining. Use `/squad-opt-in` first.', ephemeral: true }); return;
+                    const infoContainer = buildNoticeContainer({
+                        title: 'Opted Out',
+                        subtitle: 'Random Squad Join',
+                        lines: ['You have opted out of squad invitations/joining.', 'Use `/squad-opt-in` first.']
+                    });
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                    return;
                 }
             }
 
             const openSquadLeaders = squadLeadersData.filter(row => row && row.length > SL_OPEN_SQUAD && row[SL_OPEN_SQUAD] === 'TRUE' && row[SL_SQUAD_NAME] && row[SL_SQUAD_NAME] !== 'N/A');
             if (openSquadLeaders.length === 0) {
-                await interaction.editReply({ content: 'Sorry, there are currently no squads open for joining.', ephemeral: true }); return;
+                const infoContainer = buildNoticeContainer({
+                    title: 'No Open Squads',
+                    subtitle: 'Random Squad Join',
+                    lines: ['Sorry, there are currently no squads open for joining.']
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return;
             }
             const availableSquads = [];
             for (const leaderRow of openSquadLeaders) {
@@ -103,7 +164,13 @@ module.exports = {
                 }
             }
             if (availableSquads.length === 0) {
-                await interaction.editReply({ content: 'Sorry, all open squads are currently full.', ephemeral: true }); return;
+                const infoContainer = buildNoticeContainer({
+                    title: 'All Squads Full',
+                    subtitle: 'Random Squad Join',
+                    lines: ['Sorry, all open squads are currently full.']
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return;
             }
 
             const randomIndex = Math.floor(Math.random() * availableSquads.length);
@@ -133,8 +200,23 @@ module.exports = {
             try {
                 await member.setNickname(`[${chosenSquad.name}] ${username}`);
             } catch (nickError) { /* ... handle nickname error ... */
-                if (nickError.code === 50013) { console.warn(`Missing permissions to set nickname for ${userTag}`); await interaction.followUp({ content: `Warning: Could not set your nickname due to permissions. Set it manually to \`[${chosenSquad.name}] ${username}\`.`, ephemeral: true }); }
-                else { console.warn(`Failed to set nickname for ${userTag}: ${nickError.message}`); await interaction.followUp({ content: `Warning: Failed to set nickname. Set it manually to \`[${chosenSquad.name}] ${username}\`.`, ephemeral: true }); }
+                if (nickError.code === 50013) {
+                    console.warn(`Missing permissions to set nickname for ${userTag}`);
+                    const warningContainer = buildNoticeContainer({
+                        title: 'Nickname Not Updated',
+                        subtitle: 'Permission Required',
+                        lines: [`Set it manually to \`[${chosenSquad.name}] ${username}\`.`]
+                    });
+                    await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
+                } else {
+                    console.warn(`Failed to set nickname for ${userTag}: ${nickError.message}`);
+                    const warningContainer = buildNoticeContainer({
+                        title: 'Nickname Update Failed',
+                        subtitle: 'Manual Update Needed',
+                        lines: [`Set it manually to \`[${chosenSquad.name}] ${username}\`.`]
+                    });
+                    await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
+                }
             }
 
             let assignedMascotRole = null;
@@ -149,11 +231,21 @@ module.exports = {
                             console.log(`Added mascot role '${assignedMascotRole}' to ${userTag}`);
                         } else {
                             console.warn(`Mascot role ID ${mascotInfo.roleId} (${mascotInfo.name}) not found in guild.`);
-                            await interaction.followUp({ content: `Warning: Could not find the Discord role for the squad's mascot team (${mascotInfo.name}). Please contact an admin.`, ephemeral: true });
+                            const warningContainer = buildNoticeContainer({
+                                title: 'Mascot Role Missing',
+                                subtitle: 'Role Lookup Failed',
+                                lines: [`Could not find the Discord role for the squad's mascot team (${mascotInfo.name}).`, 'Please contact an admin.']
+                            });
+                            await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
                         }
                     } catch (roleError) {
                         console.error(`Failed to add mascot role ${mascotInfo.name} to ${userTag}: ${roleError.message}`);
-                        await interaction.followUp({ content: `Warning: Could not assign the mascot role (${mascotInfo.name}) due to an error.`, ephemeral: true });
+                        const warningContainer = buildNoticeContainer({
+                            title: 'Mascot Role Not Assigned',
+                            subtitle: 'Role Update Failed',
+                            lines: [`Could not assign the mascot role (${mascotInfo.name}) due to an error.`]
+                        });
+                        await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
                     }
                 } else {
                     console.warn(`Could not find role ID mapping for event squad: ${chosenSquad.eventSquad}`);
@@ -165,12 +257,10 @@ module.exports = {
             if (assignedMascotRole) {
                 successDescription += `\nYou have also been assigned the **${assignedMascotRole}** role as part of the ongoing event.`;
             }
-            const successEmbed = new EmbedBuilder()
-                .setColor('#00FF00')
-                .setTitle('Joined Squad!')
-                .setDescription(successDescription)
-                .setTimestamp();
-            await interaction.editReply({ embeds: [successEmbed], ephemeral: true });
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Joined Squad!', subtitle: 'Random Squad Join', lines: [successDescription] });
+            if (block) successContainer.addTextDisplayComponents(block);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
 
             try {
@@ -179,12 +269,10 @@ module.exports = {
                 if (assignedMascotRole) {
                     leaderDmDescription += ` They have been assigned the **${assignedMascotRole}** role.`;
                 }
-                const leaderDmEmbed = new EmbedBuilder()
-                    .setColor('#FFFF00')
-                    .setTitle('New Member Joined!')
-                    .setDescription(leaderDmDescription)
-                    .setTimestamp();
-                await leaderUser.send({ embeds: [leaderDmEmbed] });
+                const leaderDmContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'New Member Joined!', subtitle: 'Random Squad Join', lines: [leaderDmDescription] });
+            if (block) leaderDmContainer.addTextDisplayComponents(block);
+                await leaderUser.send({ flags: MessageFlags.IsComponentsV2, components: [leaderDmContainer] });
             } catch (dmError) {
                 console.error(`Failed to send DM notification to leader ${chosenSquad.leaderId}: ${dmError.message}`);
             }
@@ -196,13 +284,11 @@ module.exports = {
                 if (assignedMascotRole) {
                     logDescription += `\n**Assigned Mascot Role:** ${assignedMascotRole}`;
                 }
-                const logEmbed = new EmbedBuilder()
-                    .setTitle('User Joined Random Squad')
-                    .setDescription(logDescription)
-                    .setColor('#00FFFF')
-                    .setTimestamp();
-                await loggingChannel.send({ embeds: [logEmbed] });
-            } catch (logError) { 
+                const logContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'User Joined Random Squad', subtitle: 'Squad Activity', lines: [logDescription] });
+            if (block) logContainer.addTextDisplayComponents(block);
+                await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+            } catch (logError) {
                 console.error('Failed to log random join action:', logError);
             }
 
@@ -213,18 +299,22 @@ module.exports = {
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder() /* ... error log embed ... */
-                    .setTitle('Join Random Squad Command Error')
-                    .setDescription(`**User:** ${userTag} (${userId})\n**Error:** ${error.message}`)
-                    .setColor('#FF0000')
-                    .setTimestamp();
-                await errorChannel.send({ embeds: [errorEmbed] });
-            } catch (logError) { 
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Join Random Squad Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
+            } catch (logError) {
                 console.error('Failed to log join command error:', logError);
             }
             
+            const replyContainer = buildNoticeContainer({
+                title: 'Request Failed',
+                subtitle: 'Random Squad Join',
+                lines: [`An error occurred: ${error.message || 'Could not process your request. Please try again later.'}`]
+            });
             await interaction.editReply({
-                content: `An error occurred: ${error.message || 'Could not process your request. Please try again later.'}`,
+                flags: MessageFlags.IsComponentsV2,
+                components: [replyContainer],
                 ephemeral: true
             }).catch(console.error);
         }
