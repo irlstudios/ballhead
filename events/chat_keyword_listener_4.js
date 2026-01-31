@@ -1,3 +1,5 @@
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+
 module.exports = {
     name: 'messageCreate',
     once: false,
@@ -15,7 +17,10 @@ module.exports = {
         if (phrases.some(phrase => messageContentLower.includes(phrase))) {
             const response = `Hey ${message.author}, if you're struggling to get likes on your videos, the Developers and the rest of the community can help! Post your video in https://discord.com/channels/752216589792706621/1186758799814570084 and we can give you some feedback on how you can get more likes and make your videos the best they can be.`;
 
-            await message.channel.send(response);
+            const replyContainer = new ContainerBuilder();
+            replyContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Get Better Feedback'));
+            replyContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(response));
+            await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [replyContainer] });
         }
     }
 };

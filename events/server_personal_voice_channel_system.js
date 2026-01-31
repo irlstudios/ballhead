@@ -1,4 +1,4 @@
-const { ChannelType, PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { Pool } = require('pg');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
@@ -96,7 +96,10 @@ module.exports = {
             const last = client.vcCooldowns.get(newState.member.id) || 0;
             if (now - last < COOLDOWN_MS) {
                 const remaining = Math.ceil((COOLDOWN_MS - (now - last)) / 1000);
-                await newState.member.send(`You are on cooldown for creating a voice channel. Please wait ${remaining}s and try again.`).catch(() => {});
+                const cooldownNotice = new ContainerBuilder();
+                cooldownNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Voice Channel Cooldown'));
+                cooldownNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent(`You are on cooldown for creating a voice channel. Please wait ${remaining}s and try again.`));
+                await newState.member.send({ flags: MessageFlags.IsComponentsV2, components: [cooldownNotice] }).catch(() => {});
                 await newState.setChannel(null);
                 return;
             }

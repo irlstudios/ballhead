@@ -1,5 +1,26 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
+
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 
 module.exports = {
@@ -26,25 +47,25 @@ module.exports = {
         const member = await guild.members.fetch(moderatorUserId);
         const isMod = MODERATOR_ROLES.some(roleId => member.roles.cache.has(roleId));
         if (!isMod) {
-            return interaction.editReply({
-                content: 'You do not have permission to use this command.',
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Access Denied', subtitle: 'Force Squad Name', lines: ['You do not have permission to use this command.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
 
         const squadNamePattern = /^[A-Z0-9]{1,4}$/;
         if (!squadNamePattern.test(newSquadName)) {
-            return interaction.editReply({
-                content: 'Invalid new squad name. The name must be between 1 and 4 alphanumeric characters.',
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Invalid Squad Name', subtitle: 'Force Squad Name', lines: ['The name must be between 1 and 4 alphanumeric characters.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
 
         if (currentSquadName === newSquadName) {
-            return interaction.editReply({
-                content: 'The new squad name cannot be the same as the current squad name.',
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'No Changes Detected', subtitle: 'Force Squad Name', lines: ['The new squad name cannot be the same as the current squad name.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
 
 
@@ -71,20 +92,20 @@ module.exports = {
 
             const squadLeaderRowIndex = squadLeaders.findIndex(row => row && row.length > 2 && row[2].toUpperCase() === currentSquadName);
             if (squadLeaderRowIndex === -1) {
-                return interaction.editReply({
-                    content: `The squad **${currentSquadName}** does not exist in the Squad Leaders sheet.`,
-                    ephemeral: true
-                });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Squad Not Found', subtitle: 'Force Squad Name', lines: [`The squad **${currentSquadName}** does not exist in the Squad Leaders sheet.`] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
             const squadLeaderRow = squadLeaders[squadLeaderRowIndex];
             const leaderId = squadLeaderRow[1];
 
             const isSquadNameTaken = squadLeaders.some((row, index) => row && row.length > 2 && row[2].toUpperCase() === newSquadName && index !== squadLeaderRowIndex);
             if (isSquadNameTaken) {
-                return interaction.editReply({
-                    content: `The squad name **${newSquadName}** is already in use. Please choose a different name.`,
-                    ephemeral: true
-                });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Name Already Used', subtitle: 'Force Squad Name', lines: [`The squad name **${newSquadName}** is already in use.`, 'Please choose a different name.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             const updatedSquadLeaders = squadLeaders.map(row => {
@@ -148,11 +169,10 @@ module.exports = {
                 try {
                     const guildMember = await guild.members.fetch(memberId);
                     if (guildMember) {
-                        const dmEmbed = new EmbedBuilder()
-                            .setTitle('Squad Name Changed')
-                            .setDescription(`Your squad's name (**${currentSquadName}**) has been forcefully changed to **${newSquadName}** by a moderator.`)
-                            .setColor(0xFFFF00);
-                        await guildMember.send({ embeds: [dmEmbed] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        const dmContainer = new ContainerBuilder();
+                        const block = buildTextBlock({ title: 'Squad Name Changed', subtitle: 'Moderator Update', lines: [`Your squad's name (**${currentSquadName}**) has been forcefully changed to **${newSquadName}** by a moderator.`] });
+            if (block) dmContainer.addTextDisplayComponents(block);
+                        await guildMember.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
 
                         try {
                             await guildMember.setNickname(`[${newSquadName}] ${guildMember.user.username}`);
@@ -193,18 +213,20 @@ module.exports = {
 
             if (loggingChannel) {
                 try {
-                    await loggingChannel.send(`Squad **${currentSquadName}** was forcefully renamed to **${newSquadName}** by moderator **${moderatorUserTag}** (${moderatorUserId}).`);
+                    const logContainer = new ContainerBuilder();
+                    const block = buildTextBlock({ title: 'Squad Force Rename', subtitle: 'Moderator Action', lines: [`Squad **${currentSquadName}** was forcefully renamed to **${newSquadName}**.`, `Moderator: **${moderatorUserTag}** (${moderatorUserId })`] });
+            if (block) logContainer.addTextDisplayComponents(block);
+                    await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
                     console.error('Failed to send log message:', logError);
                 }
             }
 
-            const successEmbed = new EmbedBuilder()
-                .setTitle('Squad Name Forcefully Changed')
-                .setDescription(`The squad **${currentSquadName}** has been successfully renamed to **${newSquadName}**. Members have been notified and nicknames updated (where possible).`)
-                .setColor(0x00FF00);
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Squad Renamed', subtitle: 'Force Squad Name', lines: [`The squad **${currentSquadName}** has been successfully renamed to **${newSquadName}**.`, 'Members have been notified and nicknames updated (where possible).'] });
+            if (block) successContainer.addTextDisplayComponents(block);
 
-            await interaction.editReply({ embeds: [successEmbed], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
 
         } catch (error) {
@@ -212,10 +234,10 @@ module.exports = {
             let errorMessage = 'An error occurred while changing the squad name. Please try again later.';
             if (error.response?.data?.error) { errorMessage += ` (Details: ${error.response.data.error.message})`; }
             else if (error.message) { errorMessage += ` (Details: ${error.message})`; }
-            await interaction.editReply({
-                content: errorMessage,
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Rename Failed', subtitle: 'Force Squad Name', lines: [errorMessage] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

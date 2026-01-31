@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder } = require('discord.js');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const moment = require('moment');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
@@ -533,10 +533,9 @@ module.exports = {
 
             // If they're trying to check someone else but aren't a moderator, deny
             if (targetUser && !isModerator) {
-                await interaction.editReply({
-                    content: 'You don\'t have permission to check other users\' progress. You can only check your own progress.',
-                    ephemeral: true
-                });
+                const container = new ContainerBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have permission to check other users\' progress.\nYou can only check your own progress.'));
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
             }
 
@@ -558,51 +557,46 @@ module.exports = {
             if (Object.keys(platformResults).length === 0) {
                 if (existingCCPlatforms.length > 0) {
                     const pronoun = isCheckingOther ? 'They\'re' : 'You\'re';
-                    const possessive = isCheckingOther ? 'their' : 'your';
-                    await interaction.editReply({
-                        content: `${isCheckingOther ? `<@${userId}> is` : 'Looks like you\'re'} already a CC, silly! 😄\n\n` +
-                                 `${pronoun} a Content Creator for: **${existingCCPlatforms.join(', ')}**\n\n` +
-                                 `${pronoun} also don't have any open applications to other platforms.`
-                    });
+                    const container = new ContainerBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                            `## Already a Content Creator\n${isCheckingOther ? `<@${userId}> is` : 'Looks like you\'re'} already a CC!\n${pronoun} a Content Creator for: **${existingCCPlatforms.join(', ')}**\n${pronoun} also don't have any open applications to other platforms.`
+                        ));
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 } else {
-                    await interaction.editReply({
-                        content: `${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n\n` +
-                                 `${isCheckingOther ? 'They need' : 'Use'} ${isCheckingOther ? 'to use' : ''} \`/instagram-cc-apply\` to get started.\n` +
-                                 'TikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
-                    });
+                    const container = new ContainerBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                            `## No Applications Found\n${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n${isCheckingOther ? 'They need to use' : 'Use'} \`/instagram-cc-apply\` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use \`/cc_status\` for updates.`
+                        ));
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 }
                 return;
             }
 
-            const embed = new EmbedBuilder()
-                .setTitle(`📊 ${isCheckingOther ? `${targetUser.username}'s` : 'Your'} Content Creator Progress`)
-                .setDescription(`${isCheckingOther ? `Here's <@${userId}>'s` : 'Here\'s your'} current status across all platforms ${isCheckingOther ? 'they\'ve' : 'you\'ve'} applied to:`)
-                .setColor('#0099ff')
-                .setTimestamp()
-                .setFooter({ text: 'Data updates every Monday' });
+            const titleText = `${isCheckingOther ? `${targetUser.username}'s` : 'Your'} Content Creator Progress`;
+            const introText = `${isCheckingOther ? `Here's <@${userId}>'s` : 'Here\'s your'} current status across all platforms ${isCheckingOther ? 'they\'ve' : 'you\'ve'} applied to:`;
 
+            let platformContent = '';
             for (const [platform, data] of Object.entries(platformResults)) {
                 const field = formatPlatformEmbed(platform, data);
-                embed.addFields(field);
+                platformContent += `\n\n**${field.name}**\n${field.value}`;
             }
 
-            await interaction.editReply({ embeds: [embed] });
+            const statusContainer = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${titleText}\n${introText}${platformContent}\n-# Data updates every Monday`));
+
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [statusContainer] });
 
             const totalTime = Date.now() - cmdStartTime;
             const processingTime = Date.now() - processingStartTime;
             console.log(`[cc-check-progress] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
             console.error('Error in cc-check-progress:', error);
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Request Failed\nAn unexpected error occurred while processing your request.'));
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: 'An unexpected error occurred while processing your request.',
-                    ephemeral: true
-                });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             } else {
-                await interaction.editReply({
-                    content: 'An unexpected error occurred while processing your request.',
-                    ephemeral: true
-                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
         }
     }

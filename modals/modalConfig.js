@@ -226,14 +226,7 @@ const modalConfig = {
                 placeholder: 'Enter a number between 0 and 10',
                 style: 'Short',
                 required: true,
-            },
-            {
-                id: 'bestParticipant',
-                label: 'Participant with the best score',
-                placeholder: 'Enter participant name',
-                style: 'Short',
-                required: true,
-            },
+            }
         ],
     }
 };

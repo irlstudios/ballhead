@@ -1,10 +1,37 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont } = require('canvas');
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const sheetId = '1zjBhY8oBLOlxuSLpozy0M4WpV11Q83kvoxs74u4EjyM';
 const tabName = 'S2 HRD Participants (Weekly)';
+
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
@@ -117,7 +144,12 @@ module.exports = {
             });
             const rows = response.data.values;
             if (!rows || rows.length < 2) {
-                return interaction.editReply({ content: 'No data found.', ephemeral: true });
+                const emptyContainer = buildNoticeContainer({
+                    title: 'No Leaderboard Data',
+                    subtitle: 'Home Run Derby',
+                    lines: ['No data found.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
             }
             const headers = rows[0];
             const dataRows = rows.slice(1);
@@ -304,15 +336,26 @@ module.exports = {
             ctx.fillRect(0, canvas.height - footerHeight, canvas.width, footerHeight);
 
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'hrd_leaderboard.png' });
-            const embed = new EmbedBuilder()
-                .setTitle('HOME RUN DERBY WEEKLY LEADERBOARD')
-                .setColor('#FFD700')
-                .setImage('attachment://hrd_leaderboard.png')
-                .setTimestamp();
-            await interaction.editReply({ embeds: [embed], files: [attachment] });
+
+            await interaction.editReply({
+                flags: MessageFlags.IsComponentsV2,
+                components: [
+                    new TextDisplayBuilder().setContent('## Home Run Derby Weekly Leaderboard'),
+                    new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('attachment://hrd_leaderboard.png')
+                    ),
+                    new TextDisplayBuilder().setContent('-# Keep smashing to climb the standings')
+                ],
+                files: [attachment]
+            });
         } catch (error) {
             console.error(error);
-            await interaction.editReply({ content: 'Failed to fetch leaderboard.', ephemeral: true });
+            const errorContainer = buildNoticeContainer({
+                title: 'Leaderboard Error',
+                subtitle: 'Home Run Derby',
+                lines: ['Failed to fetch leaderboard.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

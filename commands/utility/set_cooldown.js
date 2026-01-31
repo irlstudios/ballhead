@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 
 // Authorized role IDs
 const AUTHORIZED_ROLES = [
@@ -61,25 +61,33 @@ module.exports = {
         // Role authorization
         const hasRole = interaction.member?.roles?.cache?.some(r => AUTHORIZED_ROLES.includes(r.id));
         if (!hasRole) {
-            return interaction.reply({ content: 'You do not have permission to use this command.', ephemeral: true });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have permission to use this command.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         // Ensure the command runs in a guild text-based channel that supports slowmode
         const channel = interaction.channel;
         if (!channel || interaction.guildId == null) {
-            return interaction.reply({ content: 'This command can only be used in a server channel.', ephemeral: true });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Server Only\nThis command can only be used in a server channel.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         // Check capability: setRateLimitPerUser is available on text-based guild channels (not DMs)
         if (typeof channel.setRateLimitPerUser !== 'function') {
-            return interaction.reply({ content: 'This channel type does not support cooldown (slowmode).', ephemeral: true });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Unsupported Channel\nThis channel type does not support cooldown (slowmode).'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         const cooldownSeconds = interaction.options.getInteger('cooldown', true);
         const lengthInput = interaction.options.getString('length', true);
         const durationMs = parseDuration(lengthInput);
         if (durationMs == null) {
-            return interaction.reply({ content: 'Invalid length. Use formats like 30m, 1h, or 1d.', ephemeral: true });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Invalid Length\nInvalid length. Use formats like 30m, 1h, or 1d.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         try {
@@ -102,17 +110,13 @@ module.exports = {
             }, durationMs);
             scheduledResets.set(channel.id, { timeout, expiresAt, cooldownSeconds, appliedBy: interaction.user.id });
 
-            const embed = new EmbedBuilder()
-                .setTitle(previous ? 'Channel Cooldown Updated' : 'Channel Cooldown Set')
-                .setDescription(`Slowmode ${previous ? 'updated' : 'applied'} for <#${channel.id}>`)
-                .addFields(
-                    { name: 'Cooldown', value: `${cooldownSeconds} seconds`, inline: true },
-                    { name: 'Length', value: lengthInput, inline: true },
-                    { name: 'Expires', value: `<t:${Math.floor(expiresAt/1000)}:R>`, inline: true },
-                )
-                .setColor(0x2ECC71);
+            const title = previous ? 'Channel Cooldown Updated' : 'Channel Cooldown Set';
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                    `## ${title}\n**Cooldown:** ${cooldownSeconds} seconds\n**Length:** ${lengthInput}\n**Expires:** <t:${Math.floor(expiresAt / 1000)}:R>`
+                ));
 
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
 
             // Log this action to the specified log channel
             try {
@@ -120,29 +124,29 @@ module.exports = {
                 const logChannel = await interaction.client.channels.fetch(logChannelId).catch(() => null);
                 if (logChannel && typeof logChannel.send === 'function') {
                     const expiresUnix = Math.floor(expiresAt / 1000);
-                    const logEmbed = new EmbedBuilder()
-                        .setTitle(previous ? 'Cooldown Updated' : 'Cooldown Applied')
-                        .setColor(0x3498DB)
-                        .setDescription(`A channel cooldown has been ${previous ? 'updated' : 'applied'}.`)
-                        .addFields(
-                            { name: 'Channel', value: `<#${channel.id}>`, inline: true },
-                            { name: 'Cooldown', value: `${cooldownSeconds} seconds`, inline: true },
-                            { name: 'Applied By', value: `<@${interaction.user.id}>`, inline: true },
-                            { name: 'Expires', value: `<t:${expiresUnix}:R> (<t:${expiresUnix}:F>)`, inline: false },
-                        )
-                        .setTimestamp(new Date(expiresAt));
+                    const logTitle = previous ? 'Cooldown Updated' : 'Cooldown Applied';
+                    let logLines = [
+                        `**Channel:** <#${channel.id}>`,
+                        `**Cooldown:** ${cooldownSeconds} seconds`,
+                        `**Applied By:** <@${interaction.user.id}>`,
+                        `**Expires:** <t:${expiresUnix}:R> (<t:${expiresUnix}:F>)`
+                    ];
                     if (previous?.expiresAt) {
                         const prevUnix = Math.floor(previous.expiresAt / 1000);
-                        logEmbed.addFields({ name: 'Previous Expires', value: `<t:${prevUnix}:R> (<t:${prevUnix}:F>)`, inline: false });
+                        logLines.push(`**Previous Expires:** <t:${prevUnix}:R> (<t:${prevUnix}:F>)`);
                     }
-                    await logChannel.send({ embeds: [logEmbed] });
+                    const logContainer = new ContainerBuilder()
+                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${logTitle}\n${logLines.join('\n')}`));
+                    await logChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 }
             } catch (logErr) {
                 console.error('Failed to log cooldown action:', logErr?.message || logErr);
             }
         } catch (error) {
             console.error('Error setting channel slowmode:', error);
-            return interaction.reply({ content: 'Failed to set cooldown. Ensure I have permission to manage this channel.', ephemeral: true });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Cooldown Failed\nFailed to set cooldown. Ensure I have permission to manage this channel.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
     },
 };
