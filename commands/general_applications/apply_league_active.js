@@ -1,6 +1,33 @@
 require('dotenv').config();
-const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { Client } = require('pg');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
+
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -14,8 +41,7 @@ module.exports = {
             user: process.env.DB_USER,
             database: process.env.DB_DATABASE_NAME,
             password: process.env.DB_PASSWORD,
-            ssl: { rejectUnauthorized: false },
-        };        
+            ssl: { rejectUnauthorized: false } };        
 
         const pgClient = new Client(clientConfig);
         await pgClient.connect();
@@ -28,20 +54,24 @@ module.exports = {
             );
 
             if (res.rows.length === 0) {
-                await interaction.editReply({
-                    content: 'You do not own a Base League. You cannot proceed.',
-                    ephemeral: true,
+                const errorContainer = buildNoticeContainer({
+                    title: 'Base League Required',
+                    subtitle: 'Active League Application',
+                    lines: ['You do not own a Base League. You cannot proceed.']
                 });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
                 return;
             }
 
             const leagueInfo = res.rows[0];
 
             if (!leagueInfo.league_invite) {
-                await interaction.editReply({
-                    content: 'Your league does not have an invite link associated with it. Please update your league information.',
-                    ephemeral: true,
+                const errorContainer = buildNoticeContainer({
+                    title: 'Invite Link Missing',
+                    subtitle: 'Active League Application',
+                    lines: ['Your league does not have an invite link associated with it.', 'Please update your league information.']
                 });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
                 return;
             }
 
@@ -61,17 +91,16 @@ module.exports = {
 
             const channel = await interaction.client.channels.fetch('1298997780303315016');
 
-            const embed = new EmbedBuilder()
-                .setTitle('Active League Application')
-                .addFields(
-                    { name: 'League Name', value: leagueInfo.league_name, inline: true },
-                    { name: 'Server Name', value: leagueInfo.server_name, inline: true },
-                    { name: 'Owner', value: `<@${userId}>`, inline: true },
-                    { name: 'Applied League Level', value: 'Active', inline: true },
-                    { name: 'League Invite', value: leagueInfo.league_invite, inline: true },
-                    { name: 'Member Count', value: memberCount !== 'Unknown' ? memberCount.toString() : 'Unknown', inline: true },
-                )
-                .setTimestamp();
+            const applicationContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Active League Application',
+                subtitle: leagueInfo.league_name, lines: [
+                `**Server Name:** ${leagueInfo.server_name}`,
+                `**Owner:** <@${userId}>`,
+                '**Applied League Level:** Active',
+                `**League Invite:** ${leagueInfo.league_invite}`,
+                `**Member Count:** ${memberCount !== 'Unknown' ? memberCount.toString() : 'Unknown'}`
+            ] });
+            if (block) applicationContainer.addTextDisplayComponents(block);
 
             const approveButton = new ButtonBuilder()
                 .setCustomId('approveLeague')
@@ -85,7 +114,10 @@ module.exports = {
 
             const actionRow = new ActionRowBuilder().addComponents(approveButton, denyButton);
 
-            const applicationMessage = await channel.send({ embeds: [embed], components: [actionRow] });
+            const applicationMessage = await channel.send({
+                flags: MessageFlags.IsComponentsV2,
+                components: [applicationContainer, actionRow]
+            });
 
             await pgClient.query(
                 `INSERT INTO "League Applications" 
@@ -104,12 +136,21 @@ module.exports = {
                 ]
             );
 
-            await interaction.editReply({ content: 'Your application has been submitted for review.', ephemeral: true });
+            const successContainer = buildNoticeContainer({
+                title: 'Application Submitted',
+                subtitle: 'Active League Application',
+                lines: ['Your application has been submitted for review.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
             console.error('Error in /apply-active-league command:', error);
-            await interaction.editReply({ content: 'An error occurred while processing your application.', ephemeral: true });
+            const errorContainer = buildNoticeContainer({
+                title: 'Application Failed',
+                subtitle: 'Active League Application',
+                lines: ['An error occurred while processing your application.']
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         } finally {
             await pgClient.end();
         }
-    },
-};
+    } };

@@ -1,12 +1,39 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont, loadImage } = require('canvas');
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
+const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const sheetId = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
 const BACKGROUND_IMAGE_URL = 'https://cdn.ballhead.app/web_assets/IMG_0421.png';
 const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
 const ERROR_LOG_GUILD_ID = '1233740086839869501';
+
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
@@ -109,13 +136,23 @@ module.exports = {
             const rows = response.data.values;
 
             if (!rows || rows.length < 1) {
-                return interaction.editReply({ content: 'No leaderboard data found.', ephemeral: true });
+                const emptyContainer = buildNoticeContainer({
+                    title: 'No Leaderboard Data',
+                    subtitle: 'Ranked Sessions',
+                    lines: ['No leaderboard data found.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
             }
 
             const data = rows.filter(row => row[0] && row[1] && !row[0].startsWith('#'));
 
             if (data.length === 0) {
-                return interaction.editReply({ content: 'No leaderboard data found for this month.', ephemeral: true });
+                const emptyContainer = buildNoticeContainer({
+                    title: 'No Data This Month',
+                    subtitle: 'Ranked Sessions',
+                    lines: ['No leaderboard data found for this month.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
             }
 
             const sortedData = data
@@ -324,15 +361,18 @@ module.exports = {
             ctx.restore();
 
             const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'ranked-session-leaderboard.png' });
-            const leaderboardEmbed = new EmbedBuilder()
-                .setTitle('Ranked Session Leaderboard')
-                .setDescription('Top players earning points through coaching sessions')
-                .setColor('#14B8A6')
-                .setImage('attachment://ranked-session-leaderboard.png')
-                .setTimestamp()
-                .setFooter({ text: 'Ballhead Coaching', iconURL: 'https://ballhead.app/favicon.ico' });
 
-            await interaction.editReply({ embeds: [leaderboardEmbed], files: [attachment] });
+            await interaction.editReply({
+                flags: MessageFlags.IsComponentsV2,
+                components: [
+                    new TextDisplayBuilder().setContent('## Ranked Session Leaderboard'),
+                    new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('attachment://ranked-session-leaderboard.png')
+                    ),
+                    new TextDisplayBuilder().setContent('You can earn points by participating in a ranked skills sessions')
+                ],
+                files: [attachment]
+            });
 
         } catch (error) {
             console.error('Error fetching ranked session leaderboard:', error);
@@ -340,20 +380,22 @@ module.exports = {
             try {
                 const errorGuild = await interaction.client.guilds.fetch(ERROR_LOG_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOG_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder()
-                    .setTitle('Error')
-                    .setDescription(`An error occurred while fetching the ranked session leaderboard: ${error.message}`)
-                    .setColor('#FF0000');
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Leaderboard Error',
+                    subtitle: 'Ranked session leaderboard failed', lines: [`**Error:** ${error.message}`] });
+            if (block) errorContainer.addTextDisplayComponents(block);
 
-                await errorChannel.send({ embeds: [errorEmbed] });
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 console.error('Failed to log error:', logError);
             }
 
-            await interaction.editReply({
-                content: 'An error occurred while fetching the leaderboard. The admins have been notified.',
-                ephemeral: true
+            const errorContainer = buildNoticeContainer({
+                title: 'Leaderboard Error',
+                subtitle: 'Ranked Sessions',
+                lines: ['An error occurred while fetching the leaderboard.', 'The admins have been notified.']
             });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

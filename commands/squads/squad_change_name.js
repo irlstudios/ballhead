@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 module.exports = {
@@ -18,10 +18,12 @@ module.exports = {
 
         const squadNamePattern = /^[A-Z0-9]{1,4}$/;
         if (!squadNamePattern.test(newSquadName)) {
-            return interaction.editReply({
-                content: 'Invalid squad name. The name must be between 1 and 4 alphanumeric characters.',
-                ephemeral: true
-            });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Invalid Squad Name'),
+                new TextDisplayBuilder().setContent('The name must be between 1 and 4 alphanumeric characters.')
+            );
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         const sheets = await getSheetsClient();
@@ -49,20 +51,24 @@ module.exports = {
 
             const leaderRowIndex = squadLeaders.findIndex(row => row && row.length > 1 && row[1] === userId);
             if (leaderRowIndex === -1) {
-                return interaction.editReply({
-                    content: 'You do not own a squad, so you cannot change the squad name.',
-                    ephemeral: true
-                });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## No Squad Owned'),
+                    new TextDisplayBuilder().setContent('You do not own a squad, so you cannot change the squad name.')
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
             const userSquadLeaderRow = squadLeaders[leaderRowIndex];
             const currentSquadName = userSquadLeaderRow[2];
 
             const isSquadNameTaken = squadLeaders.some((row, index) => row && row.length > 2 && row[2] === newSquadName && index !== leaderRowIndex);
             if (isSquadNameTaken) {
-                return interaction.editReply({
-                    content: `The squad name ${newSquadName} is already in use. Please choose a different name.`,
-                    ephemeral: true
-                });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Name Already Used'),
+                    new TextDisplayBuilder().setContent(`The squad name ${newSquadName} is already in use.\nPlease choose a different name.`)
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
 
             const updatedSquadLeaders = squadLeaders.map(row => {
@@ -117,11 +123,12 @@ module.exports = {
                 try {
                     const member = await guild.members.fetch(memberId);
                     if (member) {
-                        const dmEmbed = new EmbedBuilder()
-                            .setTitle('Squad Name Changed')
-                            .setDescription(`The squad name has been changed from **${currentSquadName}** to **${newSquadName}** by the squad leader.`)
-                            .setColor(0x00FF00);
-                        await member.send({ embeds: [dmEmbed] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        const dmContainer = new ContainerBuilder();
+                        dmContainer.addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent('## Squad Name Changed'),
+                            new TextDisplayBuilder().setContent(`The squad name has been changed from **${currentSquadName}** to **${newSquadName}** by the squad leader.`)
+                        );
+                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
 
                         try {
                             await member.setNickname(`[${newSquadName}] ${member.user.username}`);
@@ -158,18 +165,24 @@ module.exports = {
 
             if (loggingChannel) {
                 try {
-                    await loggingChannel.send(`The squad **${currentSquadName}** has been renamed to **${newSquadName}** by **${interaction.user.tag}** (${interaction.user.id}).`);
+                    const logContainer = new ContainerBuilder();
+                    logContainer.addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent('## Squad Name Changed'),
+                        new TextDisplayBuilder().setContent(`The squad **${currentSquadName}** has been renamed to **${newSquadName}** by **${interaction.user.tag}** (${interaction.user.id}).`)
+                    );
+                    await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
                     console.error('Failed to send log message:', logError);
                 }
             }
 
-            const successEmbed = new EmbedBuilder()
-                .setTitle('Squad Name Changed')
-                .setDescription(`Your squad name has been successfully changed from **${currentSquadName}** to **${newSquadName}**. All members have been notified and nicknames updated (where possible).`)
-                .setColor(0x00FF00);
+            const successContainer = new ContainerBuilder();
+            successContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Squad Name Changed'),
+                new TextDisplayBuilder().setContent(`Your squad name has been successfully changed from **${currentSquadName}** to **${newSquadName}**.\nAll members have been notified and nicknames updated (where possible).`)
+            );
 
-            await interaction.editReply({ embeds: [successEmbed], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
             console.error('Error during the change-squad-name command execution:', error);
@@ -179,10 +192,12 @@ module.exports = {
             } else if (error.message) {
                 errorMessage += ` (Details: ${error.message})`;
             }
-            await interaction.editReply({
-                content: errorMessage,
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            errorContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Rename Failed'),
+                new TextDisplayBuilder().setContent(errorMessage)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

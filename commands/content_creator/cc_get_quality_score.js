@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
@@ -365,7 +365,9 @@ module.exports = {
             const byPlatform = creatorIds.get(lookupKey);
 
             if (!byPlatform || (byPlatform instanceof Map && byPlatform.size === 0)) {
-                await interaction.editReply({ content: 'No creator profile found for this user.' });
+                const container = new ContainerBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Profile Not Found\nNo creator profile found for this user.'));
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 return;
             }
 
@@ -384,24 +386,28 @@ module.exports = {
 
             if (userData.posts.length === 0) {
                 const platformText = platformOption ? `on ${platformOption}` : 'across all platforms';
-                await interaction.editReply({ content: `No posts found for this user ${platformText}.` });
+                const container = new ContainerBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## No Posts Found\nNo posts found for this user ${platformText}.`));
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 return;
             }
 
             const currentPage = 1;
             const totalPages = userData.posts.length + 1;
-            const overviewEmbed = new EmbedBuilder()
-                .setTitle(`${userData.username}'s Quality Scores - Overview`)
-                .setThumbnail(userAvatar)
-                .setColor(userData.embedColor)
-                .addFields(
-                    { name: '📈 Running Average (Season)', value: userData.runningAverage.toString(), inline: true },
-                    { name: '📊 Total Posts', value: userData.posts.length.toString(), inline: true },
-                    { name: '🚀 Season Start', value: seasonStart.display || 'N/A', inline: true }
-                );
+            const colorHex = typeof userData.embedColor === 'string'
+                ? parseInt(userData.embedColor.replace('#', ''), 16)
+                : (userData.embedColor || 0x0099ff);
+
+            const overviewContainer = new ContainerBuilder().setAccentColor(colorHex);
+            const subtitleText = userData.selectedPlatform ? `${userData.selectedPlatform} overview` : 'Season overview';
+            let summaryLines = [
+                `**Running Average (Season):** ${userData.runningAverage}`,
+                `**Total Posts:** ${userData.posts.length}`,
+                `**Season Start:** ${seasonStart.display || 'N/A'}`
+            ];
 
             if (userData.selectedPlatform) {
-                overviewEmbed.addFields({ name: '🪪 Platform', value: userData.selectedPlatform, inline: true });
+                summaryLines.push(`**Platform:** ${userData.selectedPlatform}`);
             }
 
             const formattedWeeklyFields = Object.entries(userData.weeklyAverages)
@@ -422,23 +428,17 @@ module.exports = {
                 .map(([week, score]) => {
                     const weekNumber = parseInt(week, 10);
                     const label = Number.isNaN(weekNumber) ? week : weekNumber;
-                    return {
-                        name: `📅 Week ${label}`,
-                        value: `Average Score: ${score}`,
-                        inline: true
-                    };
+                    return `**Week ${label}:** ${score}`;
                 });
 
-            // Cap weekly fields to stay within Discord's 25 field limit
-            const baseFields = 3 + (userData.selectedPlatform ? 1 : 0);
-            const maxWeekly = Math.max(0, 25 - baseFields);
-            const weeklyToAdd = formattedWeeklyFields.slice(0, maxWeekly);
+            const weeklyFields = formattedWeeklyFields.slice(0, 20);
+            const weeklyText = weeklyFields.length > 0
+                ? weeklyFields.join('\n')
+                : '**Weekly Averages:** No weekly data available.';
 
-            if (weeklyToAdd.length > 0) {
-                overviewEmbed.addFields(weeklyToAdd);
-            } else {
-                overviewEmbed.addFields({ name: '📅 Weekly Averages', value: 'No weekly data available.', inline: false });
-            }
+            overviewContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## ${userData.username}'s Quality Scores\n${subtitleText}\n\n${summaryLines.join('\n')}\n\n${weeklyText}`)
+            );
 
 
             const prevButton = new ButtonBuilder()
@@ -456,8 +456,8 @@ module.exports = {
             const actionRow = new ActionRowBuilder().addComponents(prevButton, nextButton);
 
             const reply = await interaction.editReply({
-                embeds: [overviewEmbed],
-                components: [actionRow],
+                flags: MessageFlags.IsComponentsV2,
+                components: [overviewContainer, actionRow],
             });
 
             if (!reply) {
@@ -491,10 +491,12 @@ module.exports = {
         } catch (error) {
             console.error(`Error fetching posts: ${error.message}`);
 
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Fetch Failed\nAn error occurred while fetching posts.'));
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'An error occurred while fetching posts.', ephemeral: true });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             } else {
-                await interaction.editReply({ content: 'An error occurred while fetching posts.' });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             }
         }
     },

@@ -1,5 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const SQUAD_OWNER_ROLES = ['1218468103382499400', '1288918946258489354', '1290803054140199003'];
@@ -23,6 +43,13 @@ const SL_EVENT_SQUAD = 3;
 const AD_SQUAD_NAME = 2;
 const AD_SQUAD_TYPE = 3;
 const AD_PREFERENCE = 7;
+
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -49,11 +76,21 @@ module.exports = {
 
             const userSquadLeaderRow = squadLeaders.find(row => row && row.length > SL_ID && row[SL_ID] === userId);
             if (!userSquadLeaderRow) {
-                return interaction.editReply({ content: 'You do not own a squad, so you cannot disband one.', ephemeral: true });
+                const infoContainer = buildNoticeContainer({
+                    title: 'No Squad Owned',
+                    subtitle: 'Disband Squad',
+                    lines: ['You do not own a squad, so you cannot disband one.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
             const squadName = userSquadLeaderRow[SL_SQUAD_NAME];
             if (!squadName || squadName === 'N/A') {
-                return interaction.editReply({ content: 'Could not determine your squad name.', ephemeral: true });
+                const errorContainer = buildNoticeContainer({
+                    title: 'Squad Name Missing',
+                    subtitle: 'Disband Squad',
+                    lines: ['Could not determine your squad name.']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             const squadTypeRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[AD_SQUAD_NAME] === squadName);
@@ -82,11 +119,10 @@ module.exports = {
                 try {
                     const member = await guild.members.fetch(memberId);
                     if (member) {
-                        const dmEmbed = new EmbedBuilder()
-                            .setTitle('Squad Disbanded')
-                            .setDescription(`The squad **${squadName}** you were in has been disbanded by the squad leader.`)
-                            .setColor(0xFF0000);
-                        await member.send({ embeds: [dmEmbed] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        const dmContainer = new ContainerBuilder();
+                        const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Squad Update', lines: [`The squad **${squadName}** you were in has been disbanded by the squad leader.`] });
+            if (block) dmContainer.addTextDisplayComponents(block);
+                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
 
                         if (member.nickname && member.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
                             await member.setNickname(member.user.username).catch(nickError => {
@@ -178,20 +214,34 @@ module.exports = {
 
             const loggingChannel = await interaction.client.guilds.fetch('1233740086839869501') /* ... */ .then(guild => guild?.channels.fetch('1233853415952748645')).catch(() => null);
             if (loggingChannel) { /* ... send log message ... */
-                try { await loggingChannel.send(`The squad **${squadName}** was disbanded by **${userTag}** (${userId}).`); } catch (logError) { console.error('Failed to send log message:', logError); }
+                try {
+                    const logContainer = new ContainerBuilder();
+                    const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Moderator Log', lines: [`The squad **${squadName}** was disbanded by **${userTag}** (${userId }).`] });
+            if (block) logContainer.addTextDisplayComponents(block);
+                    await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+                } catch (logError) {
+                    console.error('Failed to send log message:', logError);
+                }
             }
 
-            const successEmbed = new EmbedBuilder()
-                .setTitle('Squad Disbanded')
-                .setDescription(`Your squad **${squadName}** has been successfully disbanded. Members have been notified, roles removed (including squad level and mascot roles), and nicknames reset (where possible).`)
-                .setColor(0x00FF00);
-            await interaction.editReply({ embeds: [successEmbed], ephemeral: true });
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Disband Squad', lines: [
+                `Your squad **${squadName}** has been successfully disbanded.`,
+                'Members have been notified, roles removed (including squad level and mascot roles), and nicknames reset (where possible).'
+            ] });
+            if (block) successContainer.addTextDisplayComponents(block);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
             console.error('Error during the disband-squad command execution:', error);
             let errorMessage = 'An error occurred while disbanding the squad. Please try again later.';
             if (error.response?.data?.error) { errorMessage += ` (Details: ${error.response.data.error.message})`; } else if (error.message) { errorMessage += ` (Details: ${error.message})`; }
-            await interaction.editReply({ content: errorMessage, ephemeral: true }).catch(console.error);
+            const errorContainer = buildNoticeContainer({
+                title: 'Disband Failed',
+                subtitle: 'Disband Squad',
+                lines: [errorMessage]
+            });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(console.error);
         }
     }
 };

@@ -1,4 +1,4 @@
-const { Events, EmbedBuilder } = require('discord.js');
+const { Events, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 
 module.exports = {
     name: Events.GuildBanAdd,
@@ -17,28 +17,31 @@ module.exports = {
         }
 
         const banReason = reason || 'No reason provided';
-        const dmEmbed = new EmbedBuilder()
-            .setTitle('You have been banned')
-            .setDescription(`Hello ${user.username}, you have been banned from ${guild.name} by a moderator due to ${banReason}. If you wish to appeal, please message support@gymclassvr.com and/or fill out this form: [Appeal Form](https://forms.gle/neDffHLRg9kjcWbs6)`)
-            .setColor(0xFF0000);
+        const dmContainer = new ContainerBuilder();
+        dmContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## You have been banned'));
+        dmContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+            `Hello ${user.username}, you have been banned by a moderator.`,
+            `**Reason:** ${banReason}`,
+            'If you wish to appeal, please message support@gymclassvr.com or use the appeal form:',
+            'https://forms.gle/neDffHLRg9kjcWbs6'
+        ].join('\n')));
+        dmContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('-# Appeals handled by Gym Class VR'));
 
-        const logEmbed = new EmbedBuilder().setColor(0xFF0000);
+        let logContainer = new ContainerBuilder();
 
         try {
-            await user.send({ embeds: [dmEmbed] });
-            logEmbed
-                .setTitle('Ban Notification Sent')
-                .setDescription(`Successfully notified ${user.id} about their ban and how to appeal`);
+            await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
+            logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Ban Notification Sent'));
+            logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Successfully notified ${user.id} about their ban and appeal options.`));
             console.log(`Successfully sent ban notification to ${user.tag}`);
         } catch (error) {
-            logEmbed
-                .setTitle('Ban Notification Failed')
-                .setDescription(`Was not able to message ${user.id} about their ban. Error: ${error.message}`);
+            logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Ban Notification Failed'));
+            logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Was not able to message ${user.id}. Error: ${error.message}`));
             console.error(`Failed to send ban notification to ${user.tag}: ${error.message}`);
         }
 
         try {
-            await logChannel.send({ embeds: [logEmbed] });
+            await logChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             console.log(`Logged ban notification status to channel ${logChannelId}`);
         } catch (error) {
             console.error(`Failed to send log message to channel ${logChannelId}: ${error.message}`);
