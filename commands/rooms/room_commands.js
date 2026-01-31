@@ -1,6 +1,16 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
 const { pool } = require('../../db');
 
+const BLACKLIST_USER_IDS = new Set();
+const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
+const BLACKLIST_DENY_OVERWRITE = {
+    Connect: false,
+    Speak: false,
+    Stream: false,
+    UseEmbeddedActivities: false,
+    SendMessages: false
+};
+
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
     if (title) {
@@ -21,9 +31,38 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
+const applyBlacklistPermissions = async (channel) => {
+    if (!channel?.permissionOverwrites) return;
+    const targets = new Set([...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]);
+    for (const targetId of targets) {
+        try {
+            await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
+        } catch (error) {
+            if (error?.code !== 10003) throw error;
+        }
+    }
+};
+
+const isUserBlacklisted = async (guild, userId) => {
+    if (BLACKLIST_USER_IDS.has(userId)) return true;
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) return false;
+    return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
+};
+
+function buildRoomNotice({ title, subtitle, lines } = {}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+    if (block) container.addTextDisplayComponents(block);
+    return container;
+}
+
 function replyRoomNotice(interaction, notice) {
     const container = buildRoomNotice(notice);
-    return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+    return interaction.reply({
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+        components: [container]
+    });
 }
 
 module.exports = {
@@ -167,7 +206,10 @@ module.exports = {
             ] });
             if (block) roomContainer.addTextDisplayComponents(block);
 
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [roomContainer], ephemeral: true });
+            return interaction.reply({
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [roomContainer]
+            });
         }
         case 'rename': {
             const roomChannel = interaction.member.voice.channel;
