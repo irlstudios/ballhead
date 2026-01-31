@@ -1,3 +1,4 @@
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const forumChannelId = '1149459026304827442';
 let forumChannel;
 let guildId;
@@ -805,7 +806,13 @@ module.exports = {
                 const randomMessageIndex = Math.floor(Math.random() * randomPostMessages.length);
                 const randomPostMessage = randomPostMessages[randomMessageIndex];
 
-                await message.channel.send(`What do you think about this post?: ${randomPostLink} ${randomPostMessage}`);
+                const suggestionContainer = new ContainerBuilder();
+                suggestionContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Spark a Conversation'));
+                suggestionContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                    `What do you think about this post?`,
+                    `${randomPostLink} ${randomPostMessage}`
+                ].join('\n')));
+                await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [suggestionContainer] });
 
             } catch (error) {
                 console.error('Failed to send random forum post link:', error);

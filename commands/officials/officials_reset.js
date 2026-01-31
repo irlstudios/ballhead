@@ -1,5 +1,25 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const roleHierarchy = {
     '1286098187223957617': 3,
@@ -19,8 +39,7 @@ async function updateGoogleSheet(sheets, officials, spreadsheetId) {
 
         await sheets.spreadsheets.values.clear({
             spreadsheetId: spreadsheetId,
-            range: 'Officials - ALL!A:C',
-        });
+            range: 'Officials - ALL!A:C' });
 
         const rows = [
             ['Discord Username', 'Discord ID', 'Officials Role'],
@@ -50,7 +69,10 @@ module.exports = {
         try {
             const guild = interaction.guild;
             if (!guild) {
-                await interaction.reply({ content: 'Bot is not in the server.', ephemeral: true });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Guild Missing', subtitle: 'Officials Sync', lines: ['Bot is not in the server.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
                 return;
             }
 
@@ -75,16 +97,25 @@ module.exports = {
                 });
 
             if (officials.length === 0) {
-                await interaction.reply({ content: 'No officials found.', ephemeral: true });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'No Officials Found', subtitle: 'Officials Sync', lines: ['No officials found.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
                 return;
             }
 
             await updateGoogleSheet(sheets, officials, spreadsheetId);
 
-            await interaction.reply({ content: 'Officials list has been updated in Google Sheets.', ephemeral: true });
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Officials Updated', subtitle: 'Google Sheets Sync', lines: ['Officials list has been updated in Google Sheets.'] });
+            if (block) successContainer.addTextDisplayComponents(block);
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
             console.log('Error executing the list_officials command', { error });
-            await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Officials Sync', lines: ['An error occurred while processing your request.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

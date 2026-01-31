@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
@@ -45,7 +45,12 @@ module.exports = {
             console.log(`[Squads] Interaction ${interaction.id}: fetched squadList with ${squadList.length} items`);
 
             if (squadList.length === 0) {
-                await interaction.editReply({ content: 'No squads found in the registry.', ephemeral: true });
+                const emptyContainer = new ContainerBuilder();
+                emptyContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Registered Squads'),
+                    new TextDisplayBuilder().setContent('No squads found in the registry.')
+                );
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
                 return;
             }
 
@@ -53,17 +58,18 @@ module.exports = {
             const totalPages = Math.ceil(squadList.length / ITEMS_PER_PAGE);
             console.log(`[Squads] ITEMS_PER_PAGE=${ITEMS_PER_PAGE}, totalPages=${totalPages}`);
             let currentPage = 1;
-            const generateEmbed = (page) => {
+            const generateContainer = (page) => {
                 const start = (page - 1) * ITEMS_PER_PAGE;
                 const end = start + ITEMS_PER_PAGE;
                 const pageItems = squadList.slice(start, Math.min(end, squadList.length));
 
-                return new EmbedBuilder()
-                    .setColor('#0099ff') // Blue theme
-                    .setTitle('Registered Squads')
-                    .setDescription(pageItems.length > 0 ? pageItems.join('\n') : 'No squads on this page.')
-                    .setFooter({ text: `Page ${page} of ${totalPages}` })
-                    .setTimestamp();
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Registered Squads'),
+                    new TextDisplayBuilder().setContent(pageItems.length > 0 ? pageItems.join('\n') : 'No squads on this page.'),
+                    new TextDisplayBuilder().setContent(`-# Page ${page} of ${totalPages}`)
+                );
+                return container;
             };
 
             const generateButtons = (page) => {
@@ -91,18 +97,20 @@ module.exports = {
             }, 900000);
 
             await interaction.editReply({
-                embeds: [generateEmbed(currentPage)],
-                components: [generateButtons(currentPage)],
+                flags: MessageFlags.IsComponentsV2,
+                components: [generateContainer(currentPage), generateButtons(currentPage)],
                 ephemeral: true
             });
 
         } catch (error) {
             console.error('Error executing /squads command:', error);
 
-            await interaction.editReply({
-                content: `An error occurred: ${error.message || 'Please try again later.'}`,
-                ephemeral: true
-            });
+            const errorContainer = new ContainerBuilder();
+            errorContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Request Failed'),
+                new TextDisplayBuilder().setContent(`An error occurred: ${error.message || 'Please try again later.'}`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         }
     }
 };

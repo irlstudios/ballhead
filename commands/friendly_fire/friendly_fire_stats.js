@@ -1,7 +1,34 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
+
 const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
+
+function buildNoticeContainer({ title, subtitle, lines}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -12,7 +39,20 @@ module.exports = {
                 .setDescription('The user to look up')
                 .setRequired(false)),
     async execute(interaction) {
-        await interaction.deferReply();
+        const interactionAgeMs = Date.now() - interaction.createdTimestamp;
+        if (interactionAgeMs > 2500) {
+            console.warn(`[ff-stats] Interaction too old to defer (${interactionAgeMs}ms).`);
+            return;
+        }
+        try {
+            await interaction.deferReply();
+        } catch (error) {
+            if (error?.code === 10062) {
+                console.warn('[ff-stats] Interaction expired before deferReply.');
+                return;
+            }
+            throw error;
+        }
 
         const user = interaction.options.getUser('user') || interaction.user;
         const discordId = user.id;
@@ -27,19 +67,28 @@ module.exports = {
             .sort((a, b) => b.num - a.num);
 
         if (seasonTabs.length === 0) {
-            return interaction.editReply('No valid season sheets found.');
+            const emptyContainer = buildNoticeContainer({
+                title: 'No Season Data',
+
+                lines: ['No valid season sheets found.']
+            });
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
         }
 
         const latestSeason = seasonTabs[0].title;
         const range = `'${latestSeason}'!A:H`;
         const sheet = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,
-            range,
-        });
+            range });
 
         const rows = sheet.data.values;
         if (!rows || rows.length < 2) {
-            return interaction.editReply('The stats sheet is empty or invalid.');
+            const emptyContainer = buildNoticeContainer({
+                title: 'Stats Unavailable',
+
+                lines: ['The stats sheet is empty or invalid.']
+            });
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
         }
 
         const headers = rows[0];
@@ -52,21 +101,32 @@ module.exports = {
             // Check the "Discord IDs" tab for pending signups
             const idSheet = await sheets.spreadsheets.values.get({
                 spreadsheetId: sheetId,
-                range: '\'Discord IDs\'!A:C',
-            });
+                range: '\'Discord IDs\'!A:C' });
             const idRows = idSheet.data.values || [];
             const idIndex = 1;
             const pendingEntry = idRows.find(row => row[idIndex] === discordId);
             if (pendingEntry) {
-                return interaction.editReply({
-                    content: 'Your stats haven\'t been paired with your discord id yet, but we have received your sign up submission',
-                    flags: 64,
+                const pendingContainer = buildNoticeContainer({
+                    title: 'Signup Received',
+    
+                    lines: ['Your stats have not been paired with your Discord ID yet, but we received your signup submission.']
                 });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [pendingContainer], ephemeral: true });
             }
             if (user.id === interaction.user.id) {
-                return interaction.editReply({ content: 'You haven\'t signed up yet. Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7', flags: 64 });
+                const noticeContainer = buildNoticeContainer({
+                    title: 'Signup Required',
+    
+                    lines: ['You have not signed up yet.', 'Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7']
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
             } else {
-                return interaction.editReply({ content: `${user.username} hasn't signed up yet.`, flags: 64 });
+                const noticeContainer = buildNoticeContainer({
+                    title: 'No Signup Found',
+    
+                    lines: [`${user.username} has not signed up yet.`]
+                });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
             }
         }
 
@@ -78,18 +138,17 @@ module.exports = {
         const gamesPlayed = userRow[5] || '0';
         const mmr = userRow[6] || '0';
 
-        const embed = new EmbedBuilder()
-            .setTitle(`${name}'s Stats - ${latestSeason}`)
-            .addFields(
-                { name: 'MMR', value: mmr, inline: true },
-                { name: 'Points', value: points, inline: true },
-                { name: 'Blocks', value: blocks, inline: true },
-                { name: 'Steals', value: steals, inline: true },
-                { name: 'Wins', value: wins, inline: true },
-                { name: 'Games Played', value: gamesPlayed, inline: true },
-            )
-            .setFooter({ text: `Stats from "${latestSeason}"` });
+        const statsContainer = new ContainerBuilder();
+        const block = buildTextBlock({ title: `${name}'s Stats`,
+            subtitle: `Friendly Fire ${latestSeason}`, lines: [
+            `**MMR:** ${mmr}`,
+            `**Points:** ${points}`,
+            `**Blocks:** ${blocks}`,
+            `**Steals:** ${steals}`,
+            `**Wins:** ${wins}`,
+            `**Games Played:** ${gamesPlayed}`
+        ] });
+            if (block) statsContainer.addTextDisplayComponents(block);
 
-        await interaction.editReply({ embeds: [embed] });
-    },
-};
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [statsContainer] });
+    } };

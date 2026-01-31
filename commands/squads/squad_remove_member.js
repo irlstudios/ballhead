@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
@@ -46,18 +46,33 @@ module.exports = {
         const guild = interaction.guild;
 
         if (!targetUser) {
-            await interaction.editReply({ content: 'Could not find the specified user.', ephemeral: true });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## User Not Found'),
+                new TextDisplayBuilder().setContent('Could not find the specified user.')
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
         }
         const targetUserID = targetUser.id;
         const targetUserTag = targetUser.tag;
 
         if (commandUserID === targetUserID) {
-            await interaction.editReply({ content: 'You can\'t remove yourself from your own squad. Use `/leave-squad` or `/disband-squad`.', ephemeral: true });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Invalid Target'),
+                new TextDisplayBuilder().setContent('You cannot remove yourself from your own squad.\nUse `/leave-squad` or `/disband-squad`.')
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
         }
         if (targetUser.bot) {
-            await interaction.editReply({ content: 'You cannot remove bots from squads.', ephemeral: true });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Invalid Target'),
+                new TextDisplayBuilder().setContent('You cannot remove bots from squads.')
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
         }
 
@@ -80,12 +95,22 @@ module.exports = {
 
             const leaderRow = squadLeadersData.find(row => row && row.length > SL_ID && row[SL_ID] === commandUserID);
             if (!leaderRow) {
-                await interaction.editReply({ content: 'You must be a squad leader to use this command.', ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Access Denied'),
+                    new TextDisplayBuilder().setContent('You must be a squad leader to use this command.')
+                );
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
             }
             const leaderSquadName = leaderRow[SL_SQUAD_NAME];
             if (!leaderSquadName || leaderSquadName === 'N/A') {
-                await interaction.editReply({ content: 'Could not determine your squad name.', ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Squad Name Missing'),
+                    new TextDisplayBuilder().setContent('Could not determine your squad name.')
+                );
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
             }
 
@@ -99,7 +124,12 @@ module.exports = {
             });
 
             if (!targetMemberRow || targetMemberRowIndex === -1) {
-                await interaction.editReply({ content: `<@${targetUserID}> is not currently a member of your squad **${leaderSquadName}**.`, ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Member Not Found'),
+                    new TextDisplayBuilder().setContent(`<@${targetUserID}> is not currently a member of your squad **${leaderSquadName}**.`)
+                );
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
             }
 
@@ -191,7 +221,12 @@ module.exports = {
                 } else {
                     console.error(`Error updating Discord member ${targetUserTag}:`, discordError.message);
                 }
-                await interaction.followUp({ content: `Warning: Could not reset nickname or remove roles for ${targetUserTag}. They may have left the server.`, ephemeral: true }).catch(followUpError => {
+                const warningContainer = new ContainerBuilder();
+                warningContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Partial Cleanup'),
+                    new TextDisplayBuilder().setContent(`Could not reset nickname or remove roles for ${targetUserTag}.\nThey may have left the server.`)
+                );
+                await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true }).catch(followUpError => {
                     console.error('Failed to send follow-up warning after remove-from-squad:', followUpError);
                 });
             }
@@ -199,35 +234,46 @@ module.exports = {
             try {
                 const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
-                const logMessage = `❌ Member Removed: **${commandUserTag}** (<@${commandUserID}>) removed **${targetUserTag}** (<@${targetUserID}>) from squad **${leaderSquadName}**.`;
-                await loggingChannel.send(logMessage);
+                const logContainer = new ContainerBuilder();
+                logContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Member Removed'),
+                    new TextDisplayBuilder().setContent(`**${commandUserTag}** (<@${commandUserID}>) removed **${targetUserTag}** (<@${targetUserID}>) from squad **${leaderSquadName}**.`)
+                );
+                await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
                 console.error('Failed to send removal log message:', logError);
             }
 
-            await interaction.editReply({
-                content: `<@${targetUserID}> has been successfully removed from **${leaderSquadName}**. Their roles and nickname have been reset.`,
-                ephemeral: true
-            });
+            const successContainer = new ContainerBuilder();
+            successContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Member Removed'),
+                new TextDisplayBuilder().setContent([
+                    `<@${targetUserID}> has been successfully removed from **${leaderSquadName}**.`,
+                    'Their roles and nickname have been reset.'
+                ].join('\n'))
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
             console.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder()
-                    .setTitle('Remove From Squad Command Error')
-                    .setDescription(`**User:** ${commandUserTag} (${commandUserID})\n**Target:** ${targetUserTag} (${targetUserID})\n**Error:** ${error.message}`)
-                    .setColor('#FF0000')
-                    .setTimestamp();
-                await errorChannel.send({ embeds: [errorEmbed] });
+                const errorContainer = new ContainerBuilder();
+                errorContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Remove From Squad Error'),
+                    new TextDisplayBuilder().setContent(`**User:** ${commandUserTag} (${commandUserID})\n**Target:** ${targetUserTag} (${targetUserID})\n**Error:** ${error.message}`)
+                );
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 console.error('Failed to log removal command error:', logError);
             }
-            await interaction.editReply({
-                content: `An error occurred: ${error.message || 'Please try again later.'}`,
-                ephemeral: true
-            }).catch(console.error);
+            const replyContainer = new ContainerBuilder();
+            replyContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Request Failed'),
+                new TextDisplayBuilder().setContent(`An error occurred: ${error.message || 'Please try again later.'}`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(console.error);
         }
     }
 };

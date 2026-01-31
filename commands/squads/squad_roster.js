@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
@@ -14,7 +14,12 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
 
         const squadMembersData = squadMembersResponse.data.values || [];
         if (squadMembersData.length < 1) {
-            await interaction.editReply({ content: `Could not read headers from the competitive members sheet for "${squadNameInput}".` });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Competitive Roster Unavailable\n' + squadNameInput),
+                new TextDisplayBuilder().setContent(`Could not read headers from the competitive members sheet for "${squadNameInput}".`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             return;
         }
         const squadMembersHeaders = squadMembersData.shift() || [];
@@ -27,7 +32,12 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
         const relevantMembers = squadMembersData.filter(row => row && row.length > 1 && row[1]?.trim().toLowerCase() === squadNameNormalized);
 
         if (relevantMembers.length === 0) {
-            await interaction.editReply({ content: `No members found listed in the competitive tracking sheet for squad "${squadNameInput}".` });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## No Competitive Members\n' + squadNameInput),
+                new TextDisplayBuilder().setContent(`No members found listed in the competitive tracking sheet for squad "${squadNameInput}".`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             return;
         }
 
@@ -64,22 +74,7 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
             return b.totalWins - a.totalWins;
         });
 
-        const rosterEmbed = new EmbedBuilder()
-            .setColor(0x0099ff)
-            .setTitle(`${squadNameInput.toUpperCase()} - Roster (Competitive)`)
-            .addFields(
-                { name: 'Squad Level', value: `Level ${squadLevel} (${totalSquadWins} Total Wins)`, inline: false }
-            );
-
         const leader = membersWithWins.find(member => member.isLeader);
-        if (leaderId) {
-            rosterEmbed.addFields(
-                { name: 'Squad Leader', value: `<@${leaderId}> (${leader ? leader.totalWins + ' Wins' : 'Wins N/A'})`, inline: false }
-            );
-        } else {
-            rosterEmbed.addFields( { name: 'Squad Leader', value: 'Not found', inline: false });
-        }
-
         const members = membersWithWins.filter(member => !member.isLeader);
         let memberContributions = 'No other members found in competitive tracking.';
         if (members.length > 0) {
@@ -87,18 +82,28 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
                 .map(member => `<@${member.discordId}> (${member.totalWins} Wins)`)
                 .join('\n');
         }
-        rosterEmbed.addFields( { name: 'Squad Members', value: memberContributions, inline: false });
 
-        rosterEmbed.addFields(
-            { name: 'Squad Type', value: 'Competitive', inline: true },
-            { name: 'Squad Formed', value: squadMade || 'Unknown', inline: true }
-        ).setTimestamp();
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\nCompetitive`),
+            new TextDisplayBuilder().setContent([
+                `**Squad Level:** Level ${squadLevel} (${totalSquadWins} Total Wins)`,
+                `**Squad Leader:** ${leaderId ? `<@${leaderId}> (${leader ? leader.totalWins + ' Wins' : 'Wins N/A'})` : 'Not found'}`,
+                `**Squad Members:**\n${memberContributions}`,
+                `**Squad Type:** Competitive | **Squad Formed:** ${squadMade || 'Unknown'}`
+            ].join('\n'))
+        );
 
-        await interaction.editReply({ embeds: [rosterEmbed] });
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
         console.error(`Error in fetchCompetitiveRoster for ${squadNameInput}:`, error);
-        await interaction.editReply({ content: 'An error occurred while fetching the competitive squad roster.' });
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## Roster Error\nCompetitive Squad'),
+            new TextDisplayBuilder().setContent('An error occurred while fetching the competitive squad roster.')
+        );
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
     }
 }
 
@@ -112,7 +117,12 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
 
         const individualPostsData = individualPostsResponse.data.values || [];
         if (individualPostsData.length < 1) {
-            await interaction.editReply({ content: `Could not read headers from the content posts sheet for "${squadNameInput}".` });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Content Roster Unavailable\n' + squadNameInput),
+                new TextDisplayBuilder().setContent(`Could not read headers from the content posts sheet for "${squadNameInput}".`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             return;
         }
         const individualPostsHeaders = individualPostsData.shift() || [];
@@ -124,7 +134,12 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
         const relevantPosts = individualPostsData.filter(row => row && row.length > 1 && row[1]?.trim().toLowerCase() === squadNameNormalized);
 
         if (relevantPosts.length === 0) {
-            await interaction.editReply({ content: `No members found listed in the content tracking sheet for squad "${squadNameInput}".` });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## No Content Members\n' + squadNameInput),
+                new TextDisplayBuilder().setContent(`No members found listed in the content tracking sheet for squad "${squadNameInput}".`)
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             return;
         }
 
@@ -185,22 +200,7 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
             return b.totalPosts - a.totalPosts;
         });
 
-        const rosterEmbed = new EmbedBuilder()
-            .setColor(0x00ff00)
-            .setTitle(`${squadNameInput.toUpperCase()} - Roster (Content)`)
-            .addFields(
-                { name: 'Total Posts Tracked', value: `${totalSquadPosts} (Since Joining)`, inline: false }
-            );
-
         const leader = membersWithPosts.find(member => member.isLeader);
-        if (leaderId) {
-            rosterEmbed.addFields(
-                { name: 'Squad Leader', value: `<@${leaderId}> (${leader ? leader.totalPosts + ' Posts' : 'Posts N/A'})`, inline: false }
-            );
-        } else {
-            rosterEmbed.addFields( { name: 'Squad Leader', value: 'Not found', inline: false });
-        }
-
         const members = membersWithPosts.filter(member => !member.isLeader);
         let memberContributions = 'No other members found in content tracking.';
         if (members.length > 0) {
@@ -208,18 +208,28 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
                 .map(member => `<@${member.discordId}> (${member.totalPosts} Posts)`)
                 .join('\n');
         }
-        rosterEmbed.addFields( { name: 'Squad Members', value: memberContributions, inline: false });
 
-        rosterEmbed.addFields(
-            { name: 'Squad Type', value: 'Content', inline: true },
-            { name: 'Squad Formed', value: squadMade || 'Unknown', inline: true }
-        ).setTimestamp();
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\nContent`),
+            new TextDisplayBuilder().setContent([
+                `**Total Posts Tracked:** ${totalSquadPosts} (Since Joining)`,
+                `**Squad Leader:** ${leaderId ? `<@${leaderId}> (${leader ? leader.totalPosts + ' Posts' : 'Posts N/A'})` : 'Not found'}`,
+                `**Squad Members:**\n${memberContributions}`,
+                `**Squad Type:** Content | **Squad Formed:** ${squadMade || 'Unknown'}`
+            ].join('\n'))
+        );
 
-        await interaction.editReply({ embeds: [rosterEmbed] });
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
         console.error(`Error in fetchContentRoster for ${squadNameInput}:`, error);
-        await interaction.editReply({ content: 'An error occurred while fetching the content squad roster.' });
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## Roster Error\nContent Squad'),
+            new TextDisplayBuilder().setContent('An error occurred while fetching the content squad roster.')
+        );
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
     }
 }
 
@@ -232,16 +242,6 @@ async function fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, sq
         const membersData = (membersResponse.data.values || []).slice(1);
         const relevantMembers = membersData.filter(row => row && row.length > 2 && row[2]?.trim().toLowerCase() === squadNameNormalized);
 
-        const rosterEmbed = new EmbedBuilder()
-            .setColor(0x808080)
-            .setTitle(`${squadNameInput.toUpperCase()} - Roster (${squadType || 'Unknown Type'})`);
-
-        if (leaderId) {
-            rosterEmbed.addFields( { name: 'Squad Leader', value: `<@${leaderId}>`, inline: false });
-        } else {
-            rosterEmbed.addFields( { name: 'Squad Leader', value: 'Not found', inline: false });
-        }
-
         let memberList = 'No members found.';
         if (relevantMembers.length > 0) {
             memberList = relevantMembers
@@ -251,18 +251,27 @@ async function fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, sq
                 .join('\n');
             if (!memberList) memberList = 'No valid member IDs found.';
         }
-        rosterEmbed.addFields( { name: 'Squad Members', value: memberList, inline: false });
 
-        rosterEmbed.addFields(
-            { name: 'Squad Type', value: squadType || 'Unknown', inline: true },
-            { name: 'Squad Formed', value: squadMade || 'Unknown', inline: true }
-        ).setTimestamp();
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\n${squadType || 'Unknown Type'}`),
+            new TextDisplayBuilder().setContent([
+                `**Squad Leader:** ${leaderId ? `<@${leaderId}>` : 'Not found'}`,
+                `**Squad Members:**\n${memberList}`,
+                `**Squad Type:** ${squadType || 'Unknown'} | **Squad Formed:** ${squadMade || 'Unknown'}`
+            ].join('\n'))
+        );
 
-        await interaction.editReply({ embeds: [rosterEmbed] });
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
         console.error(`Error in fetchNonCompetitiveRoster for ${squadNameInput}:`, error);
-        await interaction.editReply({ content: 'An error occurred while fetching the non-competitive squad roster.' });
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## Roster Error\nSquad Roster'),
+            new TextDisplayBuilder().setContent('An error occurred while fetching the non-competitive squad roster.')
+        );
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
     }
 }
 
@@ -293,12 +302,15 @@ module.exports = {
             const squadLeadersData = (squadLeadersResponse.data.values || []).slice(1);
             const leaderRow = squadLeadersData.find(row => row && row.length > 2 && row[2]?.trim().toLowerCase() === squadNameNormalized);
             if (!leaderRow) {
-                const notFoundEmbed = new EmbedBuilder()
-                    .setColor(0xFF0000)
-                    .setTitle('Squad Not Found')
-                    .setDescription(`Could not find a squad named "**${squadNameInput}**". Please ensure the spelling is correct (case-insensitive).`)
-                    .setTimestamp();
-                await interaction.editReply({ embeds: [notFoundEmbed] });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Squad Not Found\n' + squadNameInput),
+                    new TextDisplayBuilder().setContent([
+                        `Could not find a squad named "**${squadNameInput}**".`,
+                        'Please ensure the spelling is correct (case-insensitive).'
+                    ].join('\n'))
+                );
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 return;
             }
 
@@ -323,7 +335,12 @@ module.exports = {
 
         } catch (error) {
             console.error(`Error fetching roster for ${squadNameInput}:`, error);
-            await interaction.editReply({ content: 'An unexpected error occurred while trying to fetch the squad roster. Please try again later or contact an admin.' });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Roster Error\nSquad Roster'),
+                new TextDisplayBuilder().setContent('An unexpected error occurred while trying to fetch the squad roster.\nPlease try again later or contact an admin.')
+            );
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
         }
     },
 };
