@@ -1,5 +1,5 @@
 const { schedule } = require('node-cron');
-const { EmbedBuilder } = require('discord.js');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
 
 const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
@@ -39,18 +39,18 @@ async function postUngradedVideoCount(client) {
         }
 
         if (ungradedCount > 0) {
-            const embed = new EmbedBuilder()
-                .setTitle('Ungraded Video Count')
-                .setDescription(`There are currently **${ungradedCount}** videos in the queue waiting for grading.`)
-                .setColor(0x00FF00)
-                .setTimestamp();
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Ungraded Video Queue'));
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`There are currently **${ungradedCount}** videos waiting for grading.`));
 
-            await channel.send({embeds: [embed]});
+            await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] });
         }
 
         if (ungradedCount < 100) {
-            let alert = 'Hey <@&> please ensure to catch up on posts that are missing grades';
-            await channel.send(alert);
+            const alertContainer = new ContainerBuilder();
+            alertContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Grading Catch-Up Needed'));
+            alertContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Hey <@&> please ensure to catch up on posts that are missing grades.'));
+            await channel.send({ flags: MessageFlags.IsComponentsV2, components: [alertContainer] });
         }
     } catch (error) {
         console.error('Error posting ungraded video count:', error);

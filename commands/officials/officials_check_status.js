@@ -1,5 +1,25 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 const FORM_RESPONSES_TAB = 'Form Responses 1';
@@ -59,16 +79,15 @@ module.exports = {
             const requirementMet = statsInfo ? statsInfo[currentWeekIndex] || 'N/A' : 'N/A';
             const average = statsInfo ? statsInfo[currentWeekIndex + 1] || 'N/A' : 'N/A';
 
-            const embed = new EmbedBuilder()
-                .setTitle(`${interaction.user.username}'s Grade & Requirement Status`)
-                .setColor(0x00FF00)
-                .addFields(
-                    { name: 'Grading Information', value: hostedInfo, inline: true },
-                    { name: `Requirement Information (Week of ${dateRow[currentWeekIndex] || 'N/A'})`, value: `Requirement Met: ${requirementMet}\nAverage: ${average}`, inline: true }
-                )
-                .setTimestamp();
+            const statusContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: `${interaction.user.username}'s Officials Status`,
+                subtitle: 'Grades and weekly requirements', lines: [
+                `**Grading Information**\n${hostedInfo}`,
+                `**Requirement Information (Week of ${dateRow[currentWeekIndex] || 'N/A' })**\nRequirement Met: ${requirementMet}\nAverage: ${average}`
+            ] });
+            if (block) statusContainer.addTextDisplayComponents(block);
 
-            await interaction.reply({ embeds: [embed] });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [statusContainer] });
         } catch (error) {
             console.error('Error fetching grade or requirement data:', error);
             if (!interaction.replied && !interaction.deferred) {

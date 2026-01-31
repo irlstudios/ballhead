@@ -1,4 +1,4 @@
-const {SlashCommandBuilder, ChannelType, PermissionsBitField, EmbedBuilder} = require('discord.js');
+const {SlashCommandBuilder, ChannelType, PermissionsBitField, MessageFlags, ContainerBuilder, TextDisplayBuilder} = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 const fs = require('fs');
 const path = require('path');
@@ -51,10 +51,9 @@ module.exports = {
     async execute(interaction) {
         const hasRequiredRole = interaction.member.roles.cache.some(role => REQUIRED_ROLES.includes(role.id));
         if (!hasRequiredRole) {
-            return interaction.reply({
-                content: 'You do not have the required role to use this command.',
-                ephemeral: true
-            });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have the required role to use this command.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         await interaction.deferReply({ephemeral: true});
@@ -131,30 +130,26 @@ module.exports = {
 
             fs.unlinkSync(filePath);
 
-            await interaction.editReply({
-                content: 'Permissions have been uploaded to the Google Sheet and CSV generated.',
-                ephemeral: true
-            });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Export Complete\nPermissions have been uploaded to the Google Sheet and CSV generated.'));
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         } catch (error) {
             console.error('Error during command execution:', error);
 
             try {
                 const errorGuild = await interaction.client.guilds.fetch(ERROR_LOG_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOG_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder()
-                    .setTitle('Error')
-                    .setDescription(`An error occurred while executing the command: ${error.message}`)
-                    .setColor('#FF0000');
+                const logContainer = new ContainerBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Permissions Export Failed\n**Error:** ${error.message}\n-# Admins notified`));
 
-                await errorChannel.send({embeds: [errorEmbed]});
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
                 console.error('Failed to log error:', logError);
             }
 
-            await interaction.editReply({
-                content: 'There was an error uploading to the Google Sheet or generating the CSV. The admins have been notified.',
-                ephemeral: true
-            });
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Export Failed\nThere was an error uploading to the Google Sheet or generating the CSV.\nThe admins have been notified.'));
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
     }
 };

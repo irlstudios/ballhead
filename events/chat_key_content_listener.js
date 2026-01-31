@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const ITEM_URL_RE = /https?:\/\/(?:www\.)?ballhead\.app\/items\/([0-9a-f-]{36})/i;
 console.log('[UGC-LISTENER] module loaded');
 
@@ -9,7 +10,17 @@ const endpoint = 'https://api.ballhead.app/v1/private/gym-class-item-category/{i
 async function notifyAndDelete(message) {
     console.log('[UGC-LISTENER] notifyAndDelete', message.id);
     try {
-        await message.author.send('Please include the item link from ballhead.app with your screenshot.\n\nSteps:\n1. Visit https://ballhead.app/items\n2. Search for, or find the item you\'re wanting to post.\n3. Click the item\n4. In the top right of the item card, press the link emoji. The link will now be copied to your clipboard.');
+        const noticeContainer = new ContainerBuilder();
+        noticeContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Missing Item Link'));
+        noticeContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+            'Please include the item link from ballhead.app with your screenshot.',
+            'Steps:',
+            '1. Visit https://ballhead.app/items',
+            '2. Find the item you want to post',
+            '3. Click the item',
+            '4. Use the link icon to copy the URL'
+        ].join('\n')));
+        await message.author.send({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer] });
     } catch (error) {
         console.error('[UGC-LISTENER] failed to DM user about missing item link:', error);
     }

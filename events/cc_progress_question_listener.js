@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const moment = require('moment');
 const { getSheetsClient, getCachedValues } = require('../utils/sheets_cache');
 
@@ -572,48 +572,57 @@ module.exports = {
 
             if (Object.keys(platformResults).length === 0) {
                 if (existingCCPlatforms.length > 0) {
-                    await message.reply({
-                        content: 'Hey <@' + userId + '>! Looks like you\'re already a CC, silly! 😄\n\n' +
-                                 'You\'re a Content Creator for: **' + existingCCPlatforms.join(', ') + '**\n\n' +
-                                 'You also don\'t have any open applications to other platforms.'
-                    });
+                    const alreadyCcContainer = new ContainerBuilder();
+                    alreadyCcContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Status'));
+                    alreadyCcContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                        `Hey <@${userId}>! Looks like you're already a CC.`,
+                        `You're a Content Creator for: **${existingCCPlatforms.join(', ')}**`,
+                        'You also don\'t have any open applications to other platforms.'
+                    ].join('\n')));
+                    await message.reply({ flags: MessageFlags.IsComponentsV2, components: [alreadyCcContainer] });
                 } else {
-                    await message.reply({
-                        content: 'Hey <@' + userId + '>! You haven\'t applied for any CC programs yet.\n\nUse `/instagram-cc-apply` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
-                    });
+                    const noAppsContainer = new ContainerBuilder();
+                    noAppsContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Applications'));
+                    noAppsContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                        `Hey <@${userId}>! You haven't applied for any CC programs yet.`,
+                        'Use `/instagram-cc-apply` to get started.',
+                        'TikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
+                    ].join('\n')));
+                    await message.reply({ flags: MessageFlags.IsComponentsV2, components: [noAppsContainer] });
                 }
                 return;
             }
 
-            const embed = new EmbedBuilder()
-                .setTitle('📊 Your Content Creator Progress')
-                .setDescription(`Hey <@${userId}>! Here's why you may not have CC yet:`)
-                .setColor('#0099ff')
-                .setTimestamp()
-                .setFooter({ text: 'Data updates every Monday' });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Progress'));
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hey <@${userId}>! Here's why you may not have CC yet:`));
+            container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
 
             for (const [platform, data] of Object.entries(platformResults)) {
                 const field = formatPlatformEmbed(platform, data);
-                embed.addFields(field);
+                container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${field.name}**\n${field.value}`));
+                container.addSeparatorComponents(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Small));
             }
 
-            embed.addFields({
-                name: '💡 Tips',
-                value: 'Use `/cc-check-progress` anytime to check your progress!\n' +
-                       'Make sure your posts use the required hashtags and meet quality standards.',
-                inline: false
-            });
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                '**Tips**',
+                'Use `/cc-check-progress` anytime to check your progress.',
+                'Make sure your posts use the required hashtags and meet quality standards.'
+            ].join('\n')));
+            container.addTextDisplayComponents(new TextDisplayBuilder().setContent('-# Data updates every Monday'));
 
-            await message.reply({ embeds: [embed] });
+            await message.reply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
             const totalTime = Date.now() - eventStartTime;
             const processingTime = Date.now() - processingStartTime;
             console.log(`[CC Question Listener] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
             console.error('Error in CC progress question listener:', error);
-            await message.reply({
-                content: 'Sorry, I encountered an error while checking your CC progress. Please try using `/cc-check-progress` instead.'
-            }).catch(err => console.error('Failed to send error message:', err));
+            const errorContainer = new ContainerBuilder();
+            errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Check Failed'));
+            errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Sorry, I encountered an error while checking your CC progress. Please try using `/cc-check-progress` instead.'));
+            await message.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] })
+                .catch(err => console.error('Failed to send error message:', err));
         }
     }
 };

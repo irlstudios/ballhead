@@ -1,7 +1,26 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { createCanvas, registerFont } = require('canvas');
-const { AttachmentBuilder, EmbedBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
 
@@ -44,13 +63,15 @@ module.exports = {
 
             const squadWinsResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: compWinSheetId,
-                range: '\'Squads + Aggregate Wins\'!A1:ZZ',
-            });
+                range: '\'Squads + Aggregate Wins\'!A1:ZZ' });
 
             const squadWinsData = squadWinsResponse.data.values;
             if (!squadWinsData || squadWinsData.length < 2) {
                 console.error('No data found in the Squad Wins sheet.');
-                await interaction.editReply({ content: 'No squads have wins to display.' });
+                const emptyContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Competitive Squad Leaderboard', subtitle: 'No Results', lines: ['No squads have wins to display.'] });
+            if (block) emptyContainer.addTextDisplayComponents(block);
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
                 return;
             }
 
@@ -70,14 +91,16 @@ module.exports = {
                     squadTotalWinsMap[squadName] = {
                         totalWins,
                         squadType,
-                        squadMade,
-                    };
+                        squadMade };
                     console.log(`Squad: ${squadName} - Total Wins: ${totalWins} - Type: ${squadType}`);
                 }
             });
 
             if (Object.keys(squadTotalWinsMap).length === 0) {
-                await interaction.editReply({ content: 'No competitive squads have wins to display.' });
+                const emptyContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Competitive Squad Leaderboard', subtitle: 'No Results', lines: ['No competitive squads have wins to display.'] });
+            if (block) emptyContainer.addTextDisplayComponents(block);
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
                 return;
             }
 
@@ -94,7 +117,10 @@ module.exports = {
             const squadsWithWins = squadDataArray.sort((a, b) => b.totalWins - a.totalWins).slice(0, 10);
 
             if (squadsWithWins.length === 0) {
-                await interaction.editReply({ content: 'No competitive squads have wins to display.' });
+                const emptyContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Competitive Squad Leaderboard', subtitle: 'No Results', lines: ['No competitive squads have wins to display.'] });
+            if (block) emptyContainer.addTextDisplayComponents(block);
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
                 return;
             }
 
@@ -132,22 +158,22 @@ module.exports = {
             });
 
             const leaderboardImage = canvas.toBuffer();
-            const leaderboardEmbed = new EmbedBuilder()
-                .setTitle('Competitive Squad Leaderboard')
-                .setColor('#0099ff')
-                .setImage('attachment://squad_leaderboard.png')
-                .setTimestamp()
-                .setFooter({ text: 'Squad Leaderboard', iconURL: 'https://ballhead.app/squad-leaderboard' });
 
             await interaction.editReply({
-                embeds: [leaderboardEmbed],
-                files: [new AttachmentBuilder(leaderboardImage, { name: 'squad_leaderboard.png' })],
-            });
+                flags: MessageFlags.IsComponentsV2,
+                components: [
+                    new TextDisplayBuilder().setContent('## Competitive Squad Leaderboard'),
+                    new MediaGalleryBuilder().addItems(
+                        new MediaGalleryItemBuilder().setURL('attachment://squad_leaderboard.png')
+                    ),
+                    new TextDisplayBuilder().setContent('-# Top squads ranked by total wins')
+                ],
+                files: [new AttachmentBuilder(leaderboardImage, { name: 'squad_leaderboard.png' })] });
         } catch (error) {
             console.error('Error fetching squad leaderboard:', error);
-            await interaction.editReply({
-                content: 'An error occurred while fetching the squad leaderboard. Please try again later.',
-            });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Leaderboard Error', subtitle: 'Competitive Squads', lines: ['An error occurred while fetching the squad leaderboard. Please try again later.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
-    },
-};
+    } };
