@@ -1,5 +1,25 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -19,9 +39,13 @@ module.exports = {
         const member = await interaction.guild.members.fetch(interaction.user.id);
 
         if (!levelRoles.some(roleId => member.roles.cache.has(roleId))) {
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Role Required', subtitle: 'Official Application', lines: ['You must have <@&924522770057031740>+ to apply for official.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                content: 'You must have <@&924522770057031740>+ to apply for official',
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2,
+                components: [errorContainer],
+                ephemeral: true
             });
             return;
         }
@@ -30,7 +54,14 @@ module.exports = {
         if (modal) {
             await interaction.showModal(modal);
         } else {
-            await interaction.reply({ content: 'Error loading the application form.', ephemeral: true });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Form Unavailable', subtitle: 'Try Again Soon', lines: ['Error loading the application form.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await interaction.reply({
+                flags: MessageFlags.IsComponentsV2,
+                components: [errorContainer],
+                ephemeral: true
+            });
         }
     }
 };

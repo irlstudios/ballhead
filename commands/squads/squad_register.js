@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
@@ -41,7 +41,12 @@ module.exports = {
 
         const hasRequiredRole = interaction.member.roles.cache.has(REQUIRED_ROLE_ID);
         if (!hasRequiredRole) {
-            return interaction.editReply({ content: `You must have the <@&${REQUIRED_ROLE_ID}> role to register a squad!`, ephemeral: true });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Role Required'),
+                new TextDisplayBuilder().setContent(`You must have the <@&${REQUIRED_ROLE_ID}> role to register a squad.`)
+            );
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         const squadName = interaction.options.getString('squadname').toUpperCase();
@@ -51,7 +56,12 @@ module.exports = {
         const userTag = interaction.user.tag;
 
         if (!/^[A-Z0-9]{1,4}$/.test(squadName)) {
-            return interaction.editReply({ content: 'Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).', ephemeral: true });
+            const container = new ContainerBuilder();
+            container.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Invalid Squad Name'),
+                new TextDisplayBuilder().setContent('Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).')
+            );
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         const sheets = await getSheetsClient();
@@ -72,19 +82,39 @@ module.exports = {
             const squadNameTaken = squadLeaders.find(row => row && row.length > 2 && row[2]?.toUpperCase() === squadName);
             const isMarkedLeaderInAllData = userInAllData && userInAllData.length > 6 && userInAllData[6] === 'Yes';
             if (userInSquadLeaders || isMarkedLeaderInAllData) {
-                return interaction.editReply({ content: 'You appear to already own a squad.', ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Already a Leader'),
+                    new TextDisplayBuilder().setContent('You appear to already own a squad.')
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
             if (userInAllData && userInAllData.length > 2 && userInAllData[2] !== 'N/A' && userInAllData[2]?.toUpperCase() !== squadName) {
-                return interaction.editReply({ content: `You are already listed as a member of squad **${userInAllData[2]}**.`, ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Already in a Squad'),
+                    new TextDisplayBuilder().setContent(`You are already listed as a member of squad **${userInAllData[2]}**.`)
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
             if (squadNameTaken) {
-                return interaction.editReply({ content: `The squad tag **${squadName}** is already taken.`, ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Squad Tag Taken'),
+                    new TextDisplayBuilder().setContent(`The squad tag **${squadName}** is already taken.`)
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
             const squadLeaderRole = interaction.guild.roles.cache.get(SQUAD_LEADER_ROLE_ID);
             const competitiveRole = interaction.guild.roles.cache.get(COMPETITIVE_ROLE_ID);
             const contentRole = interaction.guild.roles.cache.get(CONTENT_ROLE_ID);
             if (!squadLeaderRole || !competitiveRole || !contentRole) {
-                return interaction.editReply({ content: 'Configuration error: required squad leader roles are missing.', ephemeral: true });
+                const container = new ContainerBuilder();
+                container.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Configuration Error'),
+                    new TextDisplayBuilder().setContent('Required squad leader roles are missing.')
+                );
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
 
             const dateString = formatDate();
@@ -146,26 +176,45 @@ module.exports = {
                 if (squadType === 'Content') await interaction.member.roles.add(contentRole);
             } catch (roleError) {
                 console.warn(`Failed to add roles to ${username} (${userId}): ${roleError.message}`);
-                await interaction.followUp({ content: 'Warning: squad created, but some roles could not be assigned. Please check permissions and assign manually.', ephemeral: true });
+                const warningContainer = new ContainerBuilder();
+                warningContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Role Assignment Failed'),
+                    new TextDisplayBuilder().setContent('Squad created, but some roles could not be assigned.\nPlease check permissions and assign manually.')
+                );
+                await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
             }
 
             try {
                 await interaction.member.setNickname(`[${squadName}] ${interaction.member.user.username}`);
             } catch (nickError) {
                 console.warn(`Failed to set nickname for ${username}: ${nickError.message}`);
-                await interaction.followUp({ content: 'Warning: squad created, but nickname could not be updated due to permissions.', ephemeral: true });
+                const warningContainer = new ContainerBuilder();
+                warningContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent('## Nickname Update Failed'),
+                    new TextDisplayBuilder().setContent('Squad created, but nickname could not be updated due to permissions.')
+                );
+                await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true });
             }
 
             try {
-                await interaction.user.send({
-                    embeds: [new EmbedBuilder().setTitle('Squad Registered').setDescription(`Your squad **${squadName}** (${squadType}) has been registered!`).setColor(0x00FF00)]
-                });
+                const dmContainer = new ContainerBuilder();
+                dmContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## Squad Registered\n${squadName}`),
+                    new TextDisplayBuilder().setContent(`Your squad **${squadName}** (${squadType}) has been registered.`)
+                );
+                await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
                 console.warn(`Failed to send registration DM to ${username}: ${dmError.message}`);
             }
 
+            const successContainer = new ContainerBuilder();
+            successContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## Squad Registered\n${squadName}`),
+                new TextDisplayBuilder().setContent(`Squad **${squadName}** (${squadType}) has been registered and configured.`)
+            );
             await interaction.editReply({
-                content: `✅ Squad **${squadName}** (${squadType}) has been registered and configured.`,
+                flags: MessageFlags.IsComponentsV2,
+                components: [successContainer],
                 ephemeral: true
             });
 
@@ -174,17 +223,23 @@ module.exports = {
             try {
                 const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
-                const errorEmbed = new EmbedBuilder()
-                    .setTitle('Squad Registration Command Error')
-                    .setDescription(`**User:** ${userTag} (${userId})\n**Error:** ${error.message}`)
-                    .setColor('#FF0000')
-                    .setTimestamp();
-                await errorChannel.send({ embeds: [errorEmbed] });
+                const errorContainer = new ContainerBuilder();
+                errorContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## Squad Registration Error\n${userTag}`),
+                    new TextDisplayBuilder().setContent(`**User:** ${userTag} (${userId})\n**Error:** ${error.message}`)
+                );
+                await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 console.error('Failed to log registration error to Discord:', logError);
             }
+            const errorContainer = new ContainerBuilder();
+            errorContainer.addTextDisplayComponents(
+                new TextDisplayBuilder().setContent('## Registration Failed'),
+                new TextDisplayBuilder().setContent(`An error occurred while registering your squad: ${error.message || 'Please try again later or contact an admin.'}`)
+            );
             await interaction.editReply({
-                content: `An error occurred while registering your squad: ${error.message || 'Please try again later or contact an admin.'}`,
+                flags: MessageFlags.IsComponentsV2,
+                components: [errorContainer],
                 ephemeral: true
             }).catch(console.error);
         }

@@ -16,8 +16,12 @@ function createModal(type) {
         const textInput = new TextInputBuilder()
             .setCustomId(field.id)
             .setLabel(field.label)
-            .setPlaceholder(field.placeholder)
-            .setStyle(TextInputStyle[field.style]);
+            .setStyle(TextInputStyle[field.style] ?? TextInputStyle.Short)
+            .setRequired(Boolean(field.required));
+
+        if (field.placeholder) {
+            textInput.setPlaceholder(field.placeholder);
+        }
 
         const actionRow = new ActionRowBuilder().addComponents(textInput);
         modal.addComponents(actionRow);

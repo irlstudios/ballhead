@@ -1,5 +1,5 @@
 const { schedule } = require('node-cron');
-const { EmbedBuilder } = require('discord.js');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
 
 const SHEET_ID = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
@@ -88,10 +88,9 @@ module.exports = {
                     lines.push('', 'Invalid Discord IDs:', invalidIds.join(', '));
                 }
                 const description = lines.join('\n');
-                const embed = new EmbedBuilder()
-                    .setTitle('Rank Change Log')
-                    .setDescription(description)
-                    .setTimestamp();
+                const logContainer = new ContainerBuilder();
+                logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Rank Change Log'));
+                logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
                 let thread;
                 try {
                     thread = await client.channels.fetch(THREAD_ID);
@@ -104,7 +103,7 @@ module.exports = {
                 }
                 if (thread.archived) await thread.setArchived(false);
                 try {
-                    await thread.send({ embeds: [embed] });
+                    await thread.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (e) {
                     console.log('thread send error', e);
                 }

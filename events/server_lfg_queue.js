@@ -1,4 +1,4 @@
-const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, Events, Collection, ThreadAutoArchiveDuration } = require('discord.js');
+const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, Events, Collection, ThreadAutoArchiveDuration } = require('discord.js');
 const { Client } = require('pg');
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
@@ -41,17 +41,39 @@ function buildButtons(key) {
     );
 }
 
-function buildEmbed(queue, members, imageName) {
+function buildContainer(queue, members, imageName) {
     const list = members.size ? [...members].map(id => `<@${id}>`).join(' \u2022 ') : 'None';
-    const e = new EmbedBuilder()
-        .setTitle(`${queue.name} Queue`)
-        .setDescription(queue.description)
-        .addFields(
-            { name: 'Players Needed', value: `${members.size}/${queue.size}`, inline: true },
-            { name: 'Waiting', value: list, inline: false }
+    const container = new ContainerBuilder();
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${queue.name} Queue`));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+        `**Players Needed:** ${members.size}/${queue.size}`,
+        `**Waiting:** ${list}`,
+        'Use the buttons below to join or leave the queue.'
+    ].join('\n')));
+    if (imageName) {
+        container.addMediaGalleryComponents(
+            new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${imageName}`))
         );
-    if (imageName) e.setImage(`attachment://${imageName}`);
-    return e;
+    }
+    return container;
+}
+
+async function ensureV2StarterMessage(starter, options) {
+    if (!starter) return null;
+    const isV2 = starter?.flags?.has?.(MessageFlags.IsComponentsV2);
+    if (!isV2) {
+        try {
+            starter = await starter.edit({ embeds: [] });
+        } catch (error) {
+            console.warn('Failed to clear legacy embeds before v2 update:', error?.message || error);
+            return null;
+        }
+    }
+    const editOptions = { ...options };
+    if (isV2) {
+        delete editOptions.flags;
+    }
+    return starter.edit(editOptions);
 }
 
 async function fetchBuffer(url) {
@@ -232,7 +254,7 @@ async function ensureQueueThreads(client) {
             const created = await forum.threads.create({
                 name: q.name,
                 autoArchiveDuration: ThreadAutoArchiveDuration.OneWeek,
-                message: { files: [img], embeds: [buildEmbed(q, ensureQueueState(q.key), img.name)], components: [buildButtons(q.key)] }
+                message: { files: [img], flags: MessageFlags.IsComponentsV2, components: [buildContainer(q, ensureQueueState(q.key), img.name), buildButtons(q.key)] }
             });
             thread = created;
             try { await thread.pin(); } catch (error) { console.error('Failed to pin queue thread:', error); }
@@ -241,7 +263,11 @@ async function ensureQueueThreads(client) {
             const starter = await thread.fetchStarterMessage().catch(() => null);
             if (starter) {
                 const img = await generateQueueImage(client, q, ensureQueueState(q.key));
-                await starter.edit({ files: [img], embeds: [buildEmbed(q, ensureQueueState(q.key), img.name)], components: [buildButtons(q.key)] });
+                await ensureV2StarterMessage(starter, {
+                    files: [img],
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [buildContainer(q, ensureQueueState(q.key), img.name), buildButtons(q.key)]
+                });
             }
             if (!q.id || q.id !== thread.id) await updateThreadIdForQueue(q.key, thread.id);
         }
@@ -269,7 +295,11 @@ module.exports = {
                 const starter = await thread.fetchStarterMessage().catch(() => null);
                 if (starter) {
                     const img = await generateQueueImage(thread.client, q, members);
-                    await starter.edit({ files: [img], embeds: [buildEmbed(q, members, img.name)], components: [buildButtons(q.key)] });
+                    await ensureV2StarterMessage(starter, {
+                        files: [img],
+                        flags: MessageFlags.IsComponentsV2,
+                        components: [buildContainer(q, members, img.name), buildButtons(q.key)]
+                    });
                 }
                 await updateThreadIdForQueue(q.key, thread.id);
                 await persistQueueThread(thread.id, q, members);
@@ -290,7 +320,11 @@ module.exports = {
                 const starter = await newThread.fetchStarterMessage().catch(() => null);
                 if (starter) {
                     const img = await generateQueueImage(newThread.client, q, members);
-                    await starter.edit({ files: [img], embeds: [buildEmbed(q, members, img.name)], components: [buildButtons(q.key)] });
+                    await ensureV2StarterMessage(starter, {
+                        files: [img],
+                        flags: MessageFlags.IsComponentsV2,
+                        components: [buildContainer(q, members, img.name), buildButtons(q.key)]
+                    });
                 }
                 await updateThreadIdForQueue(q.key, newThread.id);
                 await persistQueueThread(newThread.id, q, members);

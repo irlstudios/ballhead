@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 
 const pool = new Pool({
     host: process.env.DB_HOST,
@@ -142,7 +143,14 @@ module.exports = {
                 if (lfgPosts.length > 0) {
                     const randomPostIndex = Math.floor(Math.random() * lfgPosts.length);
                     const lfgPostLink = lfgPosts[randomPostIndex];
-                    await message.channel.send(`Hey <@${message.author.id}>! It looks like someone is currently looking for a group ${lfgPostLink}! Why not hop in and join them?`);
+                    const suggestionContainer = new ContainerBuilder();
+                    suggestionContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Looking for a Group'));
+                    suggestionContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+                        `Hey <@${message.author.id}>! Someone is looking for a group.`,
+                        lfgPostLink,
+                        'Why not hop in and join them?'
+                    ].join('\n')));
+                    await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [suggestionContainer] });
                 } else {
                     // we ignore unless debugging
                 }

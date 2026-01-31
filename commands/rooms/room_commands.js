@@ -1,50 +1,30 @@
-const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
-const { Pool } = require('pg');
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-};
-const pool = new Pool(clientConfig);
-const BLACKLIST_USER_IDS = new Set();
-const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
-const BLACKLIST_DENY_OVERWRITE = {
-    Connect: false,
-    Speak: false,
-    Stream: false,
-    UseEmbeddedActivities: false,
-    SendMessages: false
-};
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
+const { pool } = require('../../db');
 
-const isUserBlacklisted = async (guild, userId) => {
-    if (BLACKLIST_USER_IDS.has(userId)) return true;
-    const member = await guild.members.fetch(userId).catch(() => null);
-    if (!member) return false;
-    return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
-};
-
-const enforceBlacklistForUser = async (channel, userId) => {
-    try {
-        await channel.permissionOverwrites.edit(userId, BLACKLIST_DENY_OVERWRITE);
-    } catch (error) {
-        if (error?.code !== 10003) throw error;
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
     }
-};
-
-const applyBlacklistPermissions = async (channel) => {
-    // Only apply overwrites to the blacklist role(s) and explicit user IDs.
-    // Expanding to every member in the role can exceed Discord's max overwrite limit and
-    // prevent other room actions (lock/invite/block) from working.
-    for (const targetId of [...BLACKLIST_USER_IDS, ...BLACKLIST_ROLE_IDS]) {
-        try {
-            await channel.permissionOverwrites.edit(targetId, BLACKLIST_DENY_OVERWRITE);
-        } catch (error) {
-            if (error?.code !== 10003) throw error;
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
         }
+        parts.push(...lines.filter(Boolean));
     }
-};
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
+
+function replyRoomNotice(interaction, notice) {
+    const container = buildRoomNotice(notice);
+    return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -136,7 +116,11 @@ module.exports = {
         case 'view': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Room View',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -145,38 +129,54 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Room View',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room View',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const members = Array.from(roomChannel.members.values()).map(member => ({
                 id: member.id,
-                isMuted: member.voice.serverMute || !roomChannel.permissionsFor(member).has('Speak'),
-            }));
+                isMuted: member.voice.serverMute || !roomChannel.permissionsFor(member).has('Speak') }));
             const invited = Array.from(roomChannel.permissionOverwrites.cache.values())
                 .filter(overwrite => overwrite.allow.has('Connect') && !overwrite.deny.has('Connect'))
                 .map(overwrite => `<@${overwrite.id}>`);
             const mutedMembers = members.filter(m => m.isMuted).map(m => `<@${m.id}>`);
             const nonMutedMembers = members.filter(m => !m.isMuted).map(m => `<@${m.id}>`);
-            const embed = new EmbedBuilder()
-                .setTitle(`Room Details: ${roomChannel.name}`)
-                .setDescription(`Host: <@${hostId}>`)
-                .addFields(
-                    { name: 'Members', value: members.map(m => `<@${m.id}>`).join('\n') || 'None', inline: true },
-                    { name: 'Muted', value: mutedMembers.join('\n') || 'None', inline: true },
-                    { name: 'Unmuted', value: nonMutedMembers.join('\n') || 'None', inline: true },
-                    { name: 'Invited', value: invited.join('\n') || 'None', inline: false }
-                )
-                .setColor(0x00FF00)
-                .setTimestamp();
-            return interaction.reply({ embeds: [embed], ephemeral: true });
+            const membersList = members.map(m => `<@${m.id}>`).join('\n') || 'None';
+            const mutedList = mutedMembers.join('\n') || 'None';
+            const unmutedList = nonMutedMembers.join('\n') || 'None';
+            const invitedList = invited.join('\n') || 'None';
+
+            const roomContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Room Details',
+                subtitle: `Room: ${roomChannel.name}`, lines: [
+                `**Host:** <@${hostId}>`,
+                `**Members:**\n${membersList}`,
+                `**Muted:**\n${mutedList}`,
+                `**Unmuted:**\n${unmutedList}`,
+                `**Invited:**\n${invitedList}`
+            ] });
+            if (block) roomContainer.addTextDisplayComponents(block);
+
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [roomContainer], ephemeral: true });
         }
         case 'rename': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Room Rename',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -185,20 +185,36 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Room Rename',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room Rename',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const newName = interaction.options.getString('name');
             await roomChannel.setName(newName);
-            return interaction.reply({ content: `Room renamed to **${newName}**.`, ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Room Renamed',
+                subtitle: newName,
+                lines: [`Room renamed to **${newName}**.`]
+            });
         }
         case 'invite': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Room Invite',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -207,28 +223,52 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Room Invite',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room Invite',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const inviteUser = interaction.options.getUser('user');
             if (inviteUser) {
                 if (await isUserBlacklisted(interaction.guild, inviteUser.id)) {
                     await enforceBlacklistForUser(roomChannel, inviteUser.id);
-                    return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
+                    return replyRoomNotice(interaction, {
+                        title: 'Invite Blocked',
+                        subtitle: 'Room Invite',
+                        lines: ['That user is blacklisted from joining rooms.']
+                    });
                 }
                 await roomChannel.permissionOverwrites.edit(inviteUser.id, { Connect: true });
                 await applyBlacklistPermissions(roomChannel);
-                return interaction.reply({ content: `<@${inviteUser.id}> invited.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Invite Sent',
+                    subtitle: 'Room Invite',
+                    lines: [`<@${inviteUser.id}> invited.`]
+                });
             }
-            return interaction.reply({ content: 'No user specified.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'User Missing',
+                subtitle: 'Room Invite',
+                lines: ['No user specified.']
+            });
         }
         case 'uninvite': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Room Uninvite',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -237,24 +277,44 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Room Uninvite',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room Uninvite',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const uninviteUser = interaction.options.getUser('user');
             if (uninviteUser) {
                 await roomChannel.permissionOverwrites.delete(uninviteUser.id);
                 await applyBlacklistPermissions(roomChannel);
-                return interaction.reply({ content: `<@${uninviteUser.id}> uninvited.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Invite Removed',
+                    subtitle: 'Room Uninvite',
+                    lines: [`<@${uninviteUser.id}> uninvited.`]
+                });
             }
-            return interaction.reply({ content: 'No user specified.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'User Missing',
+                subtitle: 'Room Uninvite',
+                lines: ['No user specified.']
+            });
         }
         case 'host': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Transfer Host',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -263,10 +323,18 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Transfer Host',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Transfer Host',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const newHost = interaction.options.getUser('user');
@@ -274,12 +342,20 @@ module.exports = {
                 'UPDATE vc_hosts SET host_id = $2 WHERE channel_id = $1',
                 [roomChannel.id, newHost.id]
             );
-            return interaction.reply({ content: `<@${newHost.id}> is now host.`, ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Host Updated',
+                subtitle: 'Transfer Host',
+                lines: [`<@${newHost.id}> is now host.`]
+            });
         }
         case 'mute': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Mute Room',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -288,24 +364,44 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Mute Room',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Mute Room',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const muteUser = interaction.options.getUser('user');
             if (muteUser) {
                 await roomChannel.permissionOverwrites.edit(muteUser.id, { Speak: false });
-                return interaction.reply({ content: `<@${muteUser.id}> muted.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'User Muted',
+                    subtitle: 'Mute Room',
+                    lines: [`<@${muteUser.id}> muted.`]
+                });
             }
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Speak: false });
-            return interaction.reply({ content: 'Everyone muted.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Room Muted',
+                subtitle: 'Mute Room',
+                lines: ['Everyone muted.']
+            });
         }
         case 'unmute': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Unmute Room',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -314,24 +410,44 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Unmute Room',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Unmute Room',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const unmuteUser = interaction.options.getUser('user');
             if (unmuteUser) {
                 await roomChannel.permissionOverwrites.edit(unmuteUser.id, { Speak: true });
-                return interaction.reply({ content: `<@${unmuteUser.id}> unmuted.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'User Unmuted',
+                    subtitle: 'Unmute Room',
+                    lines: [`<@${unmuteUser.id}> unmuted.`]
+                });
             }
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Speak: true });
-            return interaction.reply({ content: 'Everyone unmuted.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Room Unmuted',
+                subtitle: 'Unmute Room',
+                lines: ['Everyone unmuted.']
+            });
         }
         case 'lock': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Lock Room',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -340,20 +456,36 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Lock Room',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Lock Room',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: false });
             await applyBlacklistPermissions(roomChannel);
-            return interaction.reply({ content: 'Room locked.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Room Locked',
+                subtitle: 'Lock Room',
+                lines: ['Room locked.']
+            });
         }
         case 'unlock': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Unlock Room',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -362,20 +494,36 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Unlock Room',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Unlock Room',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: true });
             await applyBlacklistPermissions(roomChannel);
-            return interaction.reply({ content: 'Room unlocked.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Room Unlocked',
+                subtitle: 'Unlock Room',
+                lines: ['Room unlocked.']
+            });
         }
         case 'kick': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Kick User',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -384,24 +532,44 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Kick User',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Kick User',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const kickUser = interaction.options.getUser('user');
             const kickMember = roomChannel.members.get(kickUser.id);
             if (kickMember) {
                 await kickMember.voice.disconnect();
-                return interaction.reply({ content: `<@${kickUser.id}> kicked.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'User Kicked',
+                    subtitle: 'Kick User',
+                    lines: [`<@${kickUser.id}> kicked.`]
+                });
             }
-            return interaction.reply({ content: 'User not in room.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'User Not In Room',
+                subtitle: 'Kick User',
+                lines: ['User not in room.']
+            });
         }
         case 'block': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Block User',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -410,28 +578,52 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Block User',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Block User',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const blockUser = interaction.options.getUser('user');
             if (blockUser) {
                 if (await isUserBlacklisted(interaction.guild, blockUser.id)) {
                     await enforceBlacklistForUser(roomChannel, blockUser.id);
-                    return interaction.reply({ content: 'That user is blacklisted from joining rooms.', ephemeral: true });
+                    return replyRoomNotice(interaction, {
+                        title: 'Block Enforced',
+                        subtitle: 'Block User',
+                        lines: ['That user is blacklisted from joining rooms.']
+                    });
                 }
                 await roomChannel.permissionOverwrites.edit(blockUser.id, { Connect: false });
                 await applyBlacklistPermissions(roomChannel);
-                return interaction.reply({ content: `<@${blockUser.id}> blocked.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'User Blocked',
+                    subtitle: 'Block User',
+                    lines: [`<@${blockUser.id}> blocked.`]
+                });
             }
-            return interaction.reply({ content: 'No user specified.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'User Missing',
+                subtitle: 'Block User',
+                lines: ['No user specified.']
+            });
         }
         case 'unblock': {
             const roomChannel = interaction.member.voice.channel;
             if (!roomChannel) {
-                return interaction.reply({ content: 'You are not in a voice channel.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Room Required',
+                    subtitle: 'Unblock User',
+                    lines: ['You are not in a voice channel.']
+                });
             }
             const { rows } = await pool.query(
                 'SELECT host_id FROM vc_hosts WHERE channel_id = $1',
@@ -440,41 +632,77 @@ module.exports = {
             const hostId = rows[0]?.host_id;
             const isHost = interaction.user.id === hostId;
             if (!hostId) {
-                return interaction.reply({ content: 'This channel is not managed by the bot.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Unmanaged Room',
+                    subtitle: 'Unblock User',
+                    lines: ['This channel is not managed by the bot.']
+                });
             }
             if (!isHost && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only the room host or moderators can execute this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Unblock User',
+                    lines: ['Only the room host or moderators can execute this command.']
+                });
             }
             await applyBlacklistPermissions(roomChannel);
             const unblockUser = interaction.options.getUser('user');
             if (unblockUser) {
                 if (await isUserBlacklisted(interaction.guild, unblockUser.id)) {
                     await enforceBlacklistForUser(roomChannel, unblockUser.id);
-                    return interaction.reply({ content: 'That user is blacklisted from joining rooms and cannot be unblocked.', ephemeral: true });
+                    return replyRoomNotice(interaction, {
+                        title: 'Unblock Not Allowed',
+                        subtitle: 'Unblock User',
+                        lines: ['That user is blacklisted from joining rooms and cannot be unblocked.']
+                    });
                 }
                 await roomChannel.permissionOverwrites.edit(unblockUser.id, { Connect: true });
                 await applyBlacklistPermissions(roomChannel);
-                return interaction.reply({ content: `<@${unblockUser.id}> unblocked.`, ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'User Unblocked',
+                    subtitle: 'Unblock User',
+                    lines: [`<@${unblockUser.id}> unblocked.`]
+                });
             }
-            return interaction.reply({ content: 'No user specified.', ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'User Missing',
+                subtitle: 'Unblock User',
+                lines: ['No user specified.']
+            });
         }
         case 'list': {
             if (!interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only moderators can use this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room List',
+                    lines: ['Only moderators can use this command.']
+                });
             }
             const { rows } = await pool.query('SELECT channel_id, host_id FROM vc_hosts');
             const channels = rows
                 .map(({ channel_id }) => interaction.guild.channels.cache.get(channel_id))
                 .filter(ch => ch);
             if (!channels.length) {
-                return interaction.reply({ content: 'No managed rooms found.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'No Managed Rooms',
+                    subtitle: 'Room List',
+                    lines: ['No managed rooms found.']
+                });
             }
             const list = channels.map(ch => `• ${ch.name} (<#${ch.id}>)`).join('\n');
-            return interaction.reply({ content: `Managed rooms:\n${list}`, ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Managed Rooms',
+                subtitle: `Total: ${channels.length}`,
+                lines: [`Managed rooms:\n${list}`]
+            });
         }
         case 'clean': {
             if (!interaction.member.roles.cache.has(MOD_ROLE_ID)) {
-                return interaction.reply({ content: 'Only moderators can use this command.', ephemeral: true });
+                return replyRoomNotice(interaction, {
+                    title: 'Access Denied',
+                    subtitle: 'Room Cleanup',
+                    lines: ['Only moderators can use this command.']
+                });
             }
             const VC_CATEGORY_ID = '752216589792706623';
             const IGNORE_CHANNEL_IDS = new Set([
@@ -495,7 +723,11 @@ module.exports = {
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [ch.id]);
                 deleted++;
             }
-            return interaction.reply({ content: `Cleanup complete. Deleted ${deleted} empty room(s) in the category.`, ephemeral: true });
+            return replyRoomNotice(interaction, {
+                title: 'Cleanup Complete',
+                subtitle: 'Room Cleanup',
+                lines: [`Deleted ${deleted} empty room(s) in the category.`]
+            });
         }
         }
     }

@@ -1,7 +1,27 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
-const {EmbedBuilder} = require('discord.js');
+const {MessageFlags, ContainerBuilder, TextDisplayBuilder} = require('discord.js');
 const {fetchCreatorData} = require('../../API/apifyClient');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 function formatDate(value) {
     if (value === undefined || value === null) {
@@ -99,6 +119,13 @@ function isApifyLimitError(error) {
     return typeof message === 'string' && message.toLowerCase().includes('hard limit exceeded');
 }
 
+function buildNoticeContainer({ title, subtitle, lines } = {}) {
+    const container = new ContainerBuilder();
+    const block = buildTextBlock({ title, subtitle, lines });
+            if (block) container.addTextDisplayComponents(block);
+    return container;
+}
+
 async function logPendingApplication({sheets, platformLabel, username, interaction, profileUrl, logChannelId}) {
     const nowStamp = formatDate(new Date());
     try {
@@ -115,11 +142,11 @@ async function logPendingApplication({sheets, platformLabel, username, interacti
     if (logChannelId) {
         const logChannel = interaction.client.channels.cache.get(logChannelId);
         if (logChannel) {
-            const logEmbed = new EmbedBuilder()
-                .setTitle(`${platformLabel} CC Application (Queued)`)
-                .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\n${platformLabel}: ${profileUrl}\nStatus: Pending - Apify monthly limit reached`)
-                .setColor('#FFA500');
-            logChannel.send({embeds: [logEmbed]});
+            const logContainer = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                    `## ${platformLabel} CC Application (Queued)\n**User:** ${interaction.user.username} (${interaction.user.id})\n**${platformLabel}:** ${profileUrl}\n**Status:** Pending - Apify monthly limit reached`
+                ));
+            logChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
         }
     }
 }
@@ -149,17 +176,19 @@ module.exports = {
         ];
 
         if (!requiredRoles.some(role => userRoles.has(role))) {
-            return interaction.reply({content: 'You do not have the required role to apply.', ephemeral: true});
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have the required role to apply.'));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         const instagramRegex = /^(?:https?:\/\/(?:www\.)?instagram\.com\/([\w.-]+)\/?|([\w.-]+))$/;
         const match = usernameOrLink.match(instagramRegex);
         if (!match) {
-            const embed = new EmbedBuilder()
-                .setTitle('Invalid Format')
-                .setDescription('Invalid Instagram username or link format. Accepted formats are:\n`yourusername`\n`https://instagram.com/yourusername/`\n`https://www.instagram.com/yourusername/`')
-                .setColor('#FF0000');
-            return interaction.reply({embeds: [embed], ephemeral: true});
+            const container = new ContainerBuilder()
+                .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                    '## Invalid Instagram Format\nAccepted formats:\n`yourusername`\n`https://instagram.com/yourusername/`\n`https://www.instagram.com/yourusername/`'
+                ));
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
 
         let instagramUsername = match[1] || match[2];
@@ -220,27 +249,46 @@ module.exports = {
                 return !normalizedUsername || normalizedUsername === cleanUsernameLower;
             });
             if (duplicate) {
-                await interaction.editReply({
-                    content: 'We already have your Instagram application on file. No need to reapply—keep posting quality content and use `/check-reels-account` plus `/quality-score` to track your progress.',
-                    ephemeral: true
+                const noticeContainer = buildNoticeContainer({
+                    title: 'Application Already Submitted',
+                    lines: [
+                        'We already have your Instagram application on file.',
+                        'No need to reapply. Keep posting quality content and use `/check-reels-account` plus `/quality-score` to track your progress.'
+                    ]
                 });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
                 return;
             }
         } catch (lookupError) {
             console.error('Failed to check for existing Instagram application:', lookupError);
-            await interaction.editReply({
-                content: 'We had trouble verifying whether you already applied. Please try again later or contact staff if the issue persists.',
-                ephemeral: true
+            const errorContainer = buildNoticeContainer({
+                title: 'Verification Failed',
+                lines: [
+                    'We had trouble verifying whether you already applied.',
+                    'Please try again later or contact staff if the issue persists.'
+                ]
             });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             return;
         }
 
-        await interaction.editReply({content: 'Your application is being processed. We will follow up in your DMs once verification finishes.'});
+        const progressContainer = buildNoticeContainer({
+            title: 'Application Processing',
+            
+            lines: ['Your application is being processed.', 'We will follow up in your DMs once verification finishes.']
+        });
+        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [progressContainer] });
         await interaction.member.roles.add(prospect_role);
 
         const notifyUser = async (message) => {
             try {
-                await interaction.user.send({content: message});
+                const lines = Array.isArray(message) ? message : String(message || '').split('\n');
+                const dmContainer = buildNoticeContainer({
+                    title: 'Instagram Application',
+                    subtitle: interaction.user.username,
+                    lines: lines.filter(Boolean)
+                });
+                await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
                 console.error('Failed to send Instagram application DM:', dmError);
             }
@@ -309,11 +357,14 @@ module.exports = {
 
                     const logChannel = interaction.client.channels.cache.get('1128804307261718568');
                     if (logChannel) {
-                        const logEmbed = new EmbedBuilder()
-                            .setTitle('New Instagram CC Application')
-                            .setDescription(`User: ${interaction.user.username} (${interaction.user.id})\nInstagram: ${instagramUrl}`)
-                            .setColor('#00ff00');
-                        logChannel.send({embeds: [logEmbed]});
+                        const logContainer = new ContainerBuilder();
+                        const block = buildTextBlock({ title: 'New Instagram CC Application',
+                            subtitle: cleanUsername, lines: [
+                            `**User:** ${interaction.user.username} (${interaction.user.id })`,
+                            `**Instagram:** ${instagramUrl}`
+                        ] });
+            if (block) logContainer.addTextDisplayComponents(block);
+                        logChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                     }
 
                     // Fill remaining columns with values and formulas

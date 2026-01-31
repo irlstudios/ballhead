@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { EmbedBuilder } = require('discord.js');
+const { MessageFlags, TextDisplayBuilder } = require('discord.js');
 const { getCacheStats, clearCache } = require('../../utils/sheets_cache');
 
 // Admin role IDs who can clear cache
@@ -30,7 +30,11 @@ module.exports = {
             // Check admin permission if trying to clear
             if (shouldClear && !isAdmin(interaction.member)) {
                 await interaction.reply({
-                    content: 'You don\'t have permission to clear the cache.',
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [
+                        new TextDisplayBuilder().setContent('## Access Denied'),
+                        new TextDisplayBuilder().setContent('You do not have permission to clear the cache.')
+                    ],
                     ephemeral: true
                 });
                 return;
@@ -43,26 +47,33 @@ module.exports = {
 
             const stats = getCacheStats();
 
-            const embed = new EmbedBuilder()
-                .setTitle('📊 Google Sheets Cache Statistics')
-                .setColor(shouldClear ? '#ff9900' : '#00ff00')
-                .addFields(
-                    { name: '🎯 Cache Hit Rate', value: stats.hitRate, inline: true },
-                    { name: '✅ Cache Hits', value: stats.hits.toString(), inline: true },
-                    { name: '❌ Cache Misses', value: stats.misses.toString(), inline: true },
-                    { name: '🌐 API Calls', value: stats.apiCalls.toString(), inline: true },
-                    { name: '⚡ Avg API Time', value: stats.avgApiTime, inline: true },
-                    { name: '💾 Cache Size', value: `${stats.cacheSize} ranges`, inline: true },
-                    { name: '⏱️ Uptime', value: stats.uptime, inline: true }
-                )
-                .setTimestamp()
-                .setFooter({ text: shouldClear ? 'Cache cleared!' : 'Cache warming runs every 15 minutes' });
+            const statsLines = [
+                `**Cache Hit Rate:** ${stats.hitRate}`,
+                `**Cache Hits:** ${stats.hits}`,
+                `**Cache Misses:** ${stats.misses}`,
+                `**API Calls:** ${stats.apiCalls}`,
+                `**Avg API Time:** ${stats.avgApiTime}`,
+                `**Cache Size:** ${stats.cacheSize} ranges`,
+                `**Uptime:** ${stats.uptime}`
+            ];
 
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await interaction.reply({
+                flags: MessageFlags.IsComponentsV2,
+                components: [
+                    new TextDisplayBuilder().setContent('## Cache Statistics'),
+                    new TextDisplayBuilder().setContent(statsLines.join('\n')),
+                    new TextDisplayBuilder().setContent(`-# ${shouldClear ? 'Cache cleared' : 'Cache warming every 15 minutes'}`)
+                ],
+                ephemeral: true
+            });
         } catch (error) {
             console.error('Error in cache-stats command:', error);
             await interaction.reply({
-                content: 'An error occurred while fetching cache statistics.',
+                flags: MessageFlags.IsComponentsV2,
+                components: [
+                    new TextDisplayBuilder().setContent('## Cache Stats Failed'),
+                    new TextDisplayBuilder().setContent('An error occurred while fetching cache statistics.')
+                ],
                 ephemeral: true
             });
         }

@@ -1,14 +1,33 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { Client } = require('pg');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+
+function buildTextBlock({ title, subtitle, lines } = {}) {
+    const parts = [];
+    if (title) {
+        parts.push(`## ${title}`);
+    }
+    if (subtitle) {
+        parts.push(subtitle);
+    }
+    if (Array.isArray(lines) && lines.length > 0) {
+        if (parts.length > 0) {
+            parts.push('');
+        }
+        parts.push(...lines.filter(Boolean));
+    }
+    if (parts.length === 0) {
+        return null;
+    }
+    return new TextDisplayBuilder().setContent(parts.join('\n'));
+}
 
 const clientConfig = {
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     database: process.env.DB_DATABASE_NAME,
     password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-};  
+    ssl: { rejectUnauthorized: false } };  
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -58,21 +77,27 @@ module.exports = {
             }
 
             if (!postDetails) {
-                return interaction.reply({ content: 'You do not have any active posts.', ephemeral: true });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'No Active Post', subtitle: 'Remove Participant', lines: ['You do not have any active posts.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             const { discord_thread_id: threadId, participants } = postDetails;
 
             if (!participants.includes(user.id)) {
-                return interaction.reply({
-                    content: `<@${user.id}> is not a participant in your post.`,
-                    ephemeral: true
-                });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Participant Not Found', subtitle: 'Remove Participant', lines: [`<@${user.id}> is not a participant in your post.`] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             const thread = interaction.guild.channels.cache.get(threadId);
             if (!thread) {
-                return interaction.reply({ content: 'The post thread could not be found.', ephemeral: true });
+                const errorContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Thread Not Found', subtitle: 'Remove Participant', lines: ['The post thread could not be found.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
             await thread.members.remove(user.id);
@@ -89,8 +114,7 @@ module.exports = {
 
                 const sheetData = await sheets.spreadsheets.values.get({
                     spreadsheetId: sheetId,
-                    range: `${sheetTabName}!A:E`,
-                });
+                    range: `${sheetTabName}!A:E` });
 
                 const rows = sheetData.data.values || [];
                 const userRowIndex = rows.findIndex(row => row[1] === user.id);
@@ -101,21 +125,25 @@ module.exports = {
                         range: `${sheetTabName}!E${userRowIndex + 1}`,
                         valueInputOption: 'USER_ENTERED',
                         requestBody: {
-                            values: [['TRUE']],
-                        },
-                    });
+                            values: [['TRUE']] } });
                 }
             }
 
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Participant Removed', subtitle: 'Remove Participant', lines: [`<@${user.id}> has been removed from your post.`] });
+            if (block) successContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                content: `<@${user.id}> has been removed from your post`,
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2,
+                components: [successContainer],
+                ephemeral: true
             });
         } catch (error) {
             console.error('Error handling interaction or updating Google Sheet:', error);
-            await interaction.reply({ content: 'An error occurred while processing your request.', ephemeral: true });
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Remove Participant', lines: ['An error occurred while processing your request.'] });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
         } finally {
             await client.end();
         }
-    },
-};
+    } };
