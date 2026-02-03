@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
@@ -83,16 +83,25 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
                 .join('\n');
         }
 
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\nCompetitive`),
-            new TextDisplayBuilder().setContent([
-                `**Squad Level:** Level ${squadLevel} (${totalSquadWins} Total Wins)`,
-                `**Squad Leader:** ${leaderId ? `<@${leaderId}> (${leader ? leader.totalWins + ' Wins' : 'Wins N/A'})` : 'Not found'}`,
-                `**Squad Members:**\n${memberContributions}`,
-                `**Squad Type:** Competitive | **Squad Formed:** ${squadMade || 'Unknown'}`
-            ].join('\n'))
-        );
+        const container = new ContainerBuilder()
+            .setAccentColor(0x14B8A6)
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()}`),
+                new TextDisplayBuilder().setContent(`Level ${squadLevel} • ${totalSquadWins} Total Wins`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`**Leader**\n${leaderId ? `<@${leaderId}> (${leader ? leader.totalWins + ' Wins' : 'N/A'})` : 'Not found'}`),
+                new TextDisplayBuilder().setContent(`**Members**\n${memberContributions}`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# Competitive • Formed ${squadMade || 'Unknown'}`)
+            );
 
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
@@ -209,16 +218,25 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
                 .join('\n');
         }
 
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\nContent`),
-            new TextDisplayBuilder().setContent([
-                `**Total Posts Tracked:** ${totalSquadPosts} (Since Joining)`,
-                `**Squad Leader:** ${leaderId ? `<@${leaderId}> (${leader ? leader.totalPosts + ' Posts' : 'Posts N/A'})` : 'Not found'}`,
-                `**Squad Members:**\n${memberContributions}`,
-                `**Squad Type:** Content | **Squad Formed:** ${squadMade || 'Unknown'}`
-            ].join('\n'))
-        );
+        const container = new ContainerBuilder()
+            .setAccentColor(0xFF6B00)
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()}`),
+                new TextDisplayBuilder().setContent(`${totalSquadPosts} Total Posts`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`**Leader**\n${leaderId ? `<@${leaderId}> (${leader ? leader.totalPosts + ' Posts' : 'N/A'})` : 'Not found'}`),
+                new TextDisplayBuilder().setContent(`**Members**\n${memberContributions}`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# Content • Formed ${squadMade || 'Unknown'}`)
+            );
 
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
@@ -252,15 +270,24 @@ async function fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, sq
             if (!memberList) memberList = 'No valid member IDs found.';
         }
 
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()} Roster\n${squadType || 'Unknown Type'}`),
-            new TextDisplayBuilder().setContent([
-                `**Squad Leader:** ${leaderId ? `<@${leaderId}>` : 'Not found'}`,
-                `**Squad Members:**\n${memberList}`,
-                `**Squad Type:** ${squadType || 'Unknown'} | **Squad Formed:** ${squadMade || 'Unknown'}`
-            ].join('\n'))
-        );
+        const container = new ContainerBuilder()
+            .setAccentColor(0x3498DB)
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()}`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`**Leader**\n${leaderId ? `<@${leaderId}>` : 'Not found'}`),
+                new TextDisplayBuilder().setContent(`**Members**\n${memberList}`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# ${squadType || 'Unknown'} • Formed ${squadMade || 'Unknown'}`)
+            );
 
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 

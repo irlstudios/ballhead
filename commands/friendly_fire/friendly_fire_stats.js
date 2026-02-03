@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -106,27 +106,27 @@ module.exports = {
             const idIndex = 1;
             const pendingEntry = idRows.find(row => row[idIndex] === discordId);
             if (pendingEntry) {
-                const pendingContainer = buildNoticeContainer({
-                    title: 'Signup Received',
-    
-                    lines: ['Your stats have not been paired with your Discord ID yet, but we received your signup submission.']
+                return interaction.editReply({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [new TextDisplayBuilder().setContent('Your signup was received! Stats will be linked to your Discord ID soon.')],
+                    ephemeral: true
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [pendingContainer], ephemeral: true });
             }
             if (user.id === interaction.user.id) {
-                const noticeContainer = buildNoticeContainer({
-                    title: 'Signup Required',
-    
-                    lines: ['You have not signed up yet.', 'Please register here: https://forms.gle/DKLWrwU9BzBMiT9X7']
+                return interaction.editReply({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [
+                        new TextDisplayBuilder().setContent('You haven\'t signed up yet.'),
+                        new TextDisplayBuilder().setContent('Register here: https://forms.gle/DKLWrwU9BzBMiT9X7')
+                    ],
+                    ephemeral: true
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
             } else {
-                const noticeContainer = buildNoticeContainer({
-                    title: 'No Signup Found',
-    
-                    lines: [`${user.username} has not signed up yet.`]
+                return interaction.editReply({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [new TextDisplayBuilder().setContent(`${user.username} hasn't signed up yet.`)],
+                    ephemeral: true
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
             }
         }
 
@@ -138,17 +138,32 @@ module.exports = {
         const gamesPlayed = userRow[5] || '0';
         const mmr = userRow[6] || '0';
 
-        const statsContainer = new ContainerBuilder();
-        const block = buildTextBlock({ title: `${name}'s Stats`,
-            subtitle: `Friendly Fire ${latestSeason}`, lines: [
-            `**MMR:** ${mmr}`,
-            `**Points:** ${points}`,
-            `**Blocks:** ${blocks}`,
-            `**Steals:** ${steals}`,
-            `**Wins:** ${wins}`,
-            `**Games Played:** ${gamesPlayed}`
-        ] });
-            if (block) statsContainer.addTextDisplayComponents(block);
+        const statsContainer = new ContainerBuilder()
+            .setAccentColor(0xFF6B00)
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`## ${name}`),
+                new TextDisplayBuilder().setContent(`MMR: **${mmr}**`)
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent([
+                    `**Points:** ${points}`,
+                    `**Blocks:** ${blocks}`,
+                    `**Steals:** ${steals}`
+                ].join('\n')),
+                new TextDisplayBuilder().setContent([
+                    `**Wins:** ${wins}`,
+                    `**Games:** ${gamesPlayed}`
+                ].join('\n'))
+            )
+            .addSeparatorComponents(
+                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
+            )
+            .addTextDisplayComponents(
+                new TextDisplayBuilder().setContent(`-# Friendly Fire ${latestSeason}`)
+            );
 
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [statsContainer] });
     } };

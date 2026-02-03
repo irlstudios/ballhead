@@ -8,7 +8,7 @@ const {
     ERROR_LOG_CHANNEL_ID: FF_LEADERBOARD_ERROR_LOG_CHANNEL_ID,
     ERROR_LOG_GUILD_ID: FF_LEADERBOARD_ERROR_LOG_GUILD_ID
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection, MessageFlags, TextDisplayBuilder, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, Collection, MessageFlags, TextDisplayBuilder, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { createModal } = require('./modals/modalFactory');
 const { Client } = require('pg');
 const BALLHEAD_GUILD_ID = '1233740086839869501';
@@ -1025,24 +1025,25 @@ const handleInviteButton = async (interaction, action) => {
             }
         }
 
-            const acceptanceContainer = new ContainerBuilder();
-            const acceptanceBlock = buildTextBlock({ title: 'Invite Accepted',
-                subtitle: squadName, lines: [
-                `**${member.user.username}** has accepted the invite to join **${squadName}**.`
-            ] });
-            if (acceptanceBlock) acceptanceContainer.addTextDisplayComponents(acceptanceBlock);
-            const acceptedComponents = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accepted').setStyle(ButtonStyle.Success).setDisabled(true),
-                new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger).setDisabled(true)
-            );
-            await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [acceptanceContainer, acceptedComponents] }).catch(console.error);
+            const acceptanceContainer = new ContainerBuilder()
+                .setAccentColor(0x2ECC71)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## Welcome to ${squadName}!`),
+                    new TextDisplayBuilder().setContent(`You've joined the squad. Good luck!`)
+                );
+            await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [acceptanceContainer] }).catch(console.error);
 
-            let inviterDmDescription = `Your invite to **${member.user.username}** for squad **${squadName}** has been accepted!`;
-            if (assignedMascotRoleName) { inviterDmDescription += `\nThey were assigned the **${assignedMascotRoleName}** role.`; }
-            const dmContainer = new ContainerBuilder();
-            const dmBlock = buildTextBlock({ title: 'Invite Accepted',
-                subtitle: squadName, lines: [inviterDmDescription] });
-            if (dmBlock) dmContainer.addTextDisplayComponents(dmBlock);
+            const dmContainer = new ContainerBuilder()
+                .setAccentColor(0x2ECC71)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## ${member.user.username} Joined!`),
+                    new TextDisplayBuilder().setContent(`They accepted your invite to **${squadName}**.`)
+                );
+            if (assignedMascotRoleName) {
+                dmContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`-# Assigned role: ${assignedMascotRoleName}`)
+                );
+            }
             await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => { console.log(`Failed to DM command user ${commandUserID}: ${err.message}`); });
 
             try { await deleteInvite(interaction.message.id); } catch (apiError) { console.error('API Error deleting invite:', apiError.message); }
@@ -1064,21 +1065,19 @@ const handleInviteButton = async (interaction, action) => {
                 await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [trackingContainer] }).catch(console.error);
             }
             try { await updateInviteStatus(interaction.message.id, 'Rejected'); } catch (apiError) { console.error('API Error updating status to \'Rejected\':', apiError.message); }
-            const rejectionContainer = new ContainerBuilder();
-            const rejectionBlock = buildTextBlock({ title: 'Invite Rejected',
-                subtitle: squadName, lines: [`Invite rejected by ${interaction.user.username}.`] });
-            if (rejectionBlock) rejectionContainer.addTextDisplayComponents(rejectionBlock);
-            const rejectedComponents = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`invite_accept_${interaction.message.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success).setDisabled(true),
-                new ButtonBuilder().setCustomId(`invite_reject_${interaction.message.id}`).setLabel('Rejected').setStyle(ButtonStyle.Danger).setDisabled(true)
-            );
-            await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [rejectionContainer, rejectedComponents] }).catch(console.error);
-            const dmRejectionContainer = new ContainerBuilder();
-            const dmRejectionBlock = buildTextBlock({ title: 'Invite Rejected',
-                subtitle: squadName, lines: [
-                `Your invite to **${interaction.user.username}** for **${squadName}** was rejected.`
-            ] });
-            if (dmRejectionBlock) dmRejectionContainer.addTextDisplayComponents(dmRejectionBlock);
+            const rejectionContainer = new ContainerBuilder()
+                .setAccentColor(0x95A5A6)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## Invite Declined`),
+                    new TextDisplayBuilder().setContent(`You declined the invite to **${squadName}**.`)
+                );
+            await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [rejectionContainer] }).catch(console.error);
+            const dmRejectionContainer = new ContainerBuilder()
+                .setAccentColor(0x95A5A6)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## Invite Declined`),
+                    new TextDisplayBuilder().setContent(`**${interaction.user.username}** declined your invite to **${squadName}**.`)
+                );
             await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmRejectionContainer] }).catch(err => { console.log(`Failed to DM command user about rejection: ${err.message}`); });
             try { await deleteInvite(interaction.message.id); } catch (apiError) { console.error('API Error deleting rejected invite:', apiError.message); }
         } else {
