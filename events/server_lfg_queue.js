@@ -1,4 +1,4 @@
-const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, Events, Collection, ThreadAutoArchiveDuration } = require('discord.js');
+const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, Events, Collection, ThreadAutoArchiveDuration, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { Client } = require('pg');
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
@@ -42,19 +42,28 @@ function buildButtons(key) {
 }
 
 function buildContainer(queue, members, imageName) {
-    const list = members.size ? [...members].map(id => `<@${id}>`).join(' \u2022 ') : 'None';
-    const container = new ContainerBuilder();
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${queue.name} Queue`));
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
-        `**Players Needed:** ${members.size}/${queue.size}`,
-        `**Waiting:** ${list}`,
-        'Use the buttons below to join or leave the queue.'
-    ].join('\n')));
+    const list = members.size ? [...members].map(id => `<@${id}>`).join(' • ') : 'No one yet';
+    const isFull = members.size >= queue.size;
+    const container = new ContainerBuilder()
+        .setAccentColor(isFull ? 0x2ECC71 : 0x14B8A6);
+
     if (imageName) {
         container.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL(`attachment://${imageName}`))
         );
     }
+
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`## ${queue.name}`),
+        new TextDisplayBuilder().setContent(`${members.size}/${queue.size} players`)
+    );
+    container.addSeparatorComponents(
+        new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+    );
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`**Waiting**\n${list}`)
+    );
+
     return container;
 }
 
