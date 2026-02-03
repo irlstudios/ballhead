@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { pool } = require('../../db');
 
 const BLACKLIST_USER_IDS = new Set();
@@ -50,15 +50,21 @@ const isUserBlacklisted = async (guild, userId) => {
     return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
 };
 
-function buildRoomNotice({ title, subtitle, lines } = {}) {
-    const container = new ContainerBuilder();
-    const block = buildTextBlock({ title, subtitle, lines });
-    if (block) container.addTextDisplayComponents(block);
-    return container;
+function replySimple(interaction, message) {
+    return interaction.reply({
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+        components: [new TextDisplayBuilder().setContent(message)]
+    });
 }
 
 function replyRoomNotice(interaction, notice) {
-    const container = buildRoomNotice(notice);
+    // For simple single-line messages, use plain text
+    if (notice.lines && notice.lines.length === 1 && !notice.lines[0].includes('\n')) {
+        return replySimple(interaction, notice.lines[0]);
+    }
+    const container = new ContainerBuilder();
+    const block = buildTextBlock(notice);
+    if (block) container.addTextDisplayComponents(block);
     return interaction.reply({
         flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         components: [container]
@@ -195,16 +201,30 @@ module.exports = {
             const unmutedList = nonMutedMembers.join('\n') || 'None';
             const invitedList = invited.join('\n') || 'None';
 
-            const roomContainer = new ContainerBuilder();
-            const block = buildTextBlock({ title: 'Room Details',
-                subtitle: `Room: ${roomChannel.name}`, lines: [
-                `**Host:** <@${hostId}>`,
-                `**Members:**\n${membersList}`,
-                `**Muted:**\n${mutedList}`,
-                `**Unmuted:**\n${unmutedList}`,
-                `**Invited:**\n${invitedList}`
-            ] });
-            if (block) roomContainer.addTextDisplayComponents(block);
+            const roomContainer = new ContainerBuilder()
+                .setAccentColor(0x14B8A6)
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`## ${roomChannel.name}`),
+                    new TextDisplayBuilder().setContent(`Host: <@${hostId}>`)
+                )
+                .addSeparatorComponents(
+                    new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
+                )
+                .addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**In Room** (${members.length})\n${membersList}`)
+                );
+
+            if (invited.length > 0) {
+                roomContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Invited**\n${invitedList}`)
+                );
+            }
+
+            if (mutedMembers.length > 0) {
+                roomContainer.addTextDisplayComponents(
+                    new TextDisplayBuilder().setContent(`**Muted**\n${mutedList}`)
+                );
+            }
 
             return interaction.reply({
                 flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
