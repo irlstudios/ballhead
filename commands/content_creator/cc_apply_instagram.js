@@ -194,6 +194,10 @@ module.exports = {
         let instagramUsername = match[1] || match[2];
         const instagramUrl = `https://www.instagram.com/${instagramUsername}/`;
 
+        if (instagramUsername === "gymclassvr") {
+            return interaction.reply({ content: 'You may not apply using an official gymclass social account.', ephemeral: true });
+        }
+
         await interaction.deferReply({ephemeral: true});
         const cleanUsername = instagramUsername.replace(/^@+/, '');
         const cleanUsernameLower = cleanUsername.toLowerCase();
