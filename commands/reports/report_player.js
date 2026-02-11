@@ -1,5 +1,5 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
-const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, FileBuilder, TextDisplayBuilder } = require('discord.js');
+const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -80,19 +80,17 @@ module.exports = {
             if (block) reportContainer.addTextDisplayComponents(block);
 
             const files = [];
-            let fileComponent;
             if (proof) {
                 const contentType = proof.contentType || '';
-                if (contentType.startsWith('image/')) {
+                if (contentType.startsWith('image/') || contentType.startsWith('video/')) {
                     reportContainer.addMediaGalleryComponents(
                     new MediaGalleryBuilder().addItems(
                         new MediaGalleryItemBuilder().setURL(proof.url)
                     )
                 );
-            } else {
+                } else {
                     const proofAttachment = new AttachmentBuilder(proof.url, {name: proof.name});
                     files.push(proofAttachment);
-                    fileComponent = new FileBuilder().setURL(`attachment://${proof.name}`);
                 }
             }
 
@@ -105,7 +103,7 @@ module.exports = {
                 name: `Report: ${reportedUser}`,
                 message: {
                     flags: MessageFlags.IsComponentsV2,
-                    components: fileComponent ? [reportContainer, fileComponent] : [reportContainer],
+                    components: [reportContainer],
                     files: files.length > 0 ? files : undefined }
             });
 
