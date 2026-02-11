@@ -194,6 +194,7 @@ module.exports = {
         let instagramUsername = match[1] || match[2];
         const instagramUrl = `https://www.instagram.com/${instagramUsername}/`;
 
+        // check to make sure user is not applying with official gymclass account
         if (instagramUsername === "gymclassvr") {
             return interaction.reply({ content: 'You may not apply using an official gymclass social account.', ephemeral: true });
         }
