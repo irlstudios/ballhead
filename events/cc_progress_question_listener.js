@@ -10,8 +10,7 @@ const PLATFORMS = {
         name: 'Instagram',
         appRange: 'CC Applications!A:G',
         dataRange: 'Reels Data!A:O',
-        activeCreatorsRange: 'Active Creators!A:K',
-        paidCreatorsRange: 'Paid Creators!A:F',
+        creatorsRange: 'Creators!A:K',
         platformKey: 'Reels',
         requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
         color: '#E1306C',
@@ -106,8 +105,7 @@ function getPlatformData(platform, discordId, valuesByRange) {
 
         const appRows = valuesByRange.get(config.appRange) || [];
         const dataRows = valuesByRange.get(config.dataRange) || [];
-        const activeRows = valuesByRange.get(config.activeCreatorsRange) || [];
-        const paidRows = valuesByRange.get(config.paidCreatorsRange) || [];
+        const creatorRows = valuesByRange.get(config.creatorsRange) || [];
 
         let appRow = null;
         for (const row of appRows) {
@@ -136,28 +134,16 @@ function getPlatformData(platform, discordId, valuesByRange) {
                    (platformId && postPlatformId === platformId);
         });
 
-        let activeCreatorRow = null;
-        let paidCreatorRow = null;
-
-        for (const row of activeRows) {
+        let creatorRow = null;
+        let creatorStatus = null;
+        for (const row of creatorRows) {
             if (row && row.length > 4) {
                 const rowPlatform = row[0]?.trim();
                 const rowDiscordId = row[3]?.trim();
                 if (rowPlatform?.toLowerCase() === config.platformKey.toLowerCase() &&
                     rowDiscordId === discordId) {
-                    activeCreatorRow = row;
-                    break;
-                }
-            }
-        }
-
-        for (const row of paidRows) {
-            if (row && row.length > 3) {
-                const rowPlatform = row[1]?.trim();
-                const rowDiscordId = row[3]?.trim();
-                if (rowPlatform?.toLowerCase() === config.platformKey.toLowerCase() &&
-                    rowDiscordId === discordId) {
-                    paidCreatorRow = row;
+                    creatorRow = row;
+                    creatorStatus = row[1]?.toString().trim() || null;
                     break;
                 }
             }
@@ -166,8 +152,8 @@ function getPlatformData(platform, discordId, valuesByRange) {
         return {
             appRow,
             userPosts,
-            activeCreatorRow,
-            paidCreatorRow,
+            creatorRow,
+            creatorStatus,
             platformId,
             config
         };
@@ -340,13 +326,13 @@ function analyzeWeeklyProgress(userPosts, config) {
 }
 
 function formatPlatformEmbed(platform, platformData) {
-    const { appRow, userPosts, activeCreatorRow, paidCreatorRow, config } = platformData;
+    const { appRow, userPosts, creatorRow, creatorStatus, config } = platformData;
 
-    const isActiveCreator = activeCreatorRow !== null;
-    const isPaidCreator = paidCreatorRow !== null;
-
-    if (isActiveCreator || isPaidCreator) {
-        const ccType = isPaidCreator ? 'Paid' : 'Active';
+    const normalizedStatus = creatorStatus ? creatorStatus.toLowerCase() : '';
+    if (creatorRow) {
+        const ccType = normalizedStatus.includes('paid')
+            ? 'Paid'
+            : (normalizedStatus.includes('active') ? 'Active' : 'Current');
         return {
             name: `${config.emoji} ${config.name}`,
             value: '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
@@ -542,8 +528,7 @@ module.exports = {
                 Object.values(PLATFORMS).flatMap(config => ([
                     config.appRange,
                     config.dataRange,
-                    config.activeCreatorsRange,
-                    config.paidCreatorsRange
+                    config.creatorsRange
                 ]))
             ));
 
@@ -565,7 +550,7 @@ module.exports = {
                 const data = getPlatformData(key, userId, valuesByRange);
                 if (data && data.appRow) {
                     platformResults[key] = data;
-                } else if (data && (data.activeCreatorRow || data.paidCreatorRow)) {
+                } else if (data && data.creatorRow) {
                     existingCCPlatforms.push(config.name);
                 }
             }

@@ -10,12 +10,9 @@ const COMMON_RANGES = [
     'CC Applications!A:G',
     'TikTok Data!A:O',
     'Reels Data!A:O',
-    'Active Creators!A:K',
-    'Paid Creators!A:F',
+    'Creators!A:K',
 
     // cc_get_quality_score ranges
-    'Base Creators!A:Z',
-
     // Season start date
     'Paid Creators!G2'
 ];
