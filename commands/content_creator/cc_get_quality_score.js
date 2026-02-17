@@ -13,8 +13,7 @@ const PLATFORM_COLORS = {
 };
 const CREATOR_LOOKUP_SHEETS = [
     { range: 'CC Applications!A:Z', platformIndex: 0, idIndex: 2, pIdIndex: 4 },
-    { range: 'Base Creators!A:Z', platformIndex: 0, idIndex: 3, pIdIndex: 4 },
-    { range: 'Active Creators!A:Z', platformIndex: 0, idIndex: 3, pIdIndex: 4 }
+    { range: 'Creators!A:K', platformIndex: 0, idIndex: 3, pIdIndex: 4 }
 ];
 
 // Season start date is stored at Paid Creators!G2 in MM/DD/YYYY format
