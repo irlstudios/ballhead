@@ -126,6 +126,14 @@ function buildNoticeContainer({ title, subtitle, lines } = {}) {
     return container;
 }
 
+function isReelsPlatform(value) {
+    if (!value) {
+        return false;
+    }
+    const normalized = value.toString().trim().toLowerCase();
+    return normalized === 'reels' || normalized === 'instagram' || normalized === 'ig';
+}
+
 async function logPendingApplication({sheets, platformLabel, username, interaction, profileUrl, logChannelId}) {
     const nowStamp = formatDate(new Date());
     try {
@@ -262,6 +270,34 @@ module.exports = {
                     ]
                 });
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
+                return;
+            }
+
+            const creatorsResponse = await sheets.spreadsheets.values.get({
+                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                range: '\'Creators\'!A:D'
+            });
+            const creatorRows = creatorsResponse.data?.values || [];
+            const creatorsOnly = creatorRows.length > 1 ? creatorRows.slice(1) : [];
+            const alreadyCreator = creatorsOnly.some(row => {
+                if (!row || row.length < 4) {
+                    return false;
+                }
+                const [platform, , , discordId] = row;
+                if (!isReelsPlatform(platform) || !discordId) {
+                    return false;
+                }
+                return discordId.toString().trim() === interaction.user.id;
+            });
+            if (alreadyCreator) {
+                const alreadyCreatorContainer = buildNoticeContainer({
+                    title: 'Already In Creators',
+                    lines: [
+                        'Your Discord ID is already listed in the `Creators` tab for Reels.',
+                        'You cannot apply for Reels again.'
+                    ]
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [alreadyCreatorContainer], ephemeral: true });
                 return;
             }
         } catch (lookupError) {
