@@ -2,9 +2,11 @@ const {SlashCommandBuilder} = require('@discordjs/builders');
 const {CommandInteraction, PermissionsBitField, AttachmentBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder} = require('discord.js');
 const {Buffer} = require('node:buffer');
 const axios = require('axios');
+const logger = require('../../utils/logger');
+const { BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
 
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
-const ERROR_LOG_GUILD_ID = '1233740086839869501';
+const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
+const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -58,7 +60,7 @@ module.exports = {
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## Role Members Exported\nUser IDs with role ${role.name} are attached.`));
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], files: [file] });
         } catch (error) {
-            console.error(error);
+            logger.error(error);
 
             try {
                 const errorGuild = await interaction.client.guilds.fetch(ERROR_LOG_GUILD_ID);
@@ -68,7 +70,7 @@ module.exports = {
 
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
-                console.error('Failed to log error:', logError);
+                logger.error('Failed to log error:', logError);
             }
 
             const container = new ContainerBuilder()

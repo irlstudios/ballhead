@@ -1,14 +1,12 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, SPREADSHEET_CONTENT_POSTS } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
-const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
-const infoSheetId = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const contentSheetId = '1TF-JPBZ62Jqxe0Ilb_-GAe5xcOjQz-lE6NSFlrmNRvI';
-
-async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
+async function fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
     try {
         const squadMembersResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: compWinSheetId,
+            spreadsheetId: SPREADSHEET_COMP_WINS,
             range: '\'Squad Members\'!A:ZZ',
         });
 
@@ -106,7 +104,7 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
-        console.error(`Error in fetchCompetitiveRoster for ${squadNameInput}:`, error);
+        logger.error(`Error in fetchCompetitiveRoster for ${squadNameInput}:`, error);
         const container = new ContainerBuilder();
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent('## Roster Error\nCompetitive Squad'),
@@ -117,10 +115,10 @@ async function fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squad
 }
 
 
-async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
+async function fetchContentRoster(sheets, SPREADSHEET_CONTENT_POSTS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
     try {
         const individualPostsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: contentSheetId,
+            spreadsheetId: SPREADSHEET_CONTENT_POSTS,
             range: '\'Individual # of Posts\'!A:Z',
         });
 
@@ -136,7 +134,7 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
         }
         const individualPostsHeaders = individualPostsData.shift() || [];
         const squadMembersResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: infoSheetId,
+            spreadsheetId: SPREADSHEET_SQUADS,
             range: '\'Squad Members\'!A:E',
         });
         const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
@@ -165,11 +163,11 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
                         squadMembersMap.set(discordId, joinedDate);
                     } else {
                         squadMembersMap.set(discordId, new Date(0));
-                        console.warn(`Invalid or missing join date for ${discordId} in squad ${squadNameInput}. Defaulting to epoch.`);
+                        logger.warn(`Invalid or missing join date for ${discordId} in squad ${squadNameInput}. Defaulting to epoch.`);
                     }
                 } catch (error) {
                     squadMembersMap.set(discordId, new Date(0));
-                    console.warn(`Error parsing join date for ${discordId} in squad ${squadNameInput}: ${joinedSquadStr}`, error);
+                    logger.warn(`Error parsing join date for ${discordId} in squad ${squadNameInput}: ${joinedSquadStr}`, error);
                 }
             }
         }
@@ -241,7 +239,7 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
-        console.error(`Error in fetchContentRoster for ${squadNameInput}:`, error);
+        logger.error(`Error in fetchContentRoster for ${squadNameInput}:`, error);
         const container = new ContainerBuilder();
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent('## Roster Error\nContent Squad'),
@@ -251,10 +249,10 @@ async function fetchContentRoster(sheets, contentSheetId, infoSheetId, squadName
     }
 }
 
-async function fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType) {
+async function fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType) {
     try {
         const membersResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: infoSheetId,
+            spreadsheetId: SPREADSHEET_SQUADS,
             range: '\'Squad Members\'!A:E',
         });
         const membersData = (membersResponse.data.values || []).slice(1);
@@ -292,7 +290,7 @@ async function fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, sq
         await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
 
     } catch (error) {
-        console.error(`Error in fetchNonCompetitiveRoster for ${squadNameInput}:`, error);
+        logger.error(`Error in fetchNonCompetitiveRoster for ${squadNameInput}:`, error);
         const container = new ContainerBuilder();
         container.addTextDisplayComponents(
             new TextDisplayBuilder().setContent('## Roster Error\nSquad Roster'),
@@ -322,7 +320,7 @@ module.exports = {
 
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: infoSheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: '\'Squad Leaders\'!A:F',
             });
 
@@ -345,7 +343,7 @@ module.exports = {
             const squadMade = leaderRow[5]?.trim();
 
             const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: infoSheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: '\'All Data\'!A:H',
             });
             const allData = (allDataResponse.data.values || []).slice(1);
@@ -353,15 +351,15 @@ module.exports = {
             const squadType = squadDataRow ? squadDataRow[3]?.trim() : 'Unknown';
 
             if (squadType === 'Competitive') {
-                await fetchCompetitiveRoster(sheets, compWinSheetId, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
+                await fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
             } else if (squadType === 'Content') {
-                await fetchContentRoster(sheets, contentSheetId, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
+                await fetchContentRoster(sheets, SPREADSHEET_CONTENT_POSTS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
             } else {
-                await fetchNonCompetitiveRoster(sheets, infoSheetId, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType);
+                await fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType);
             }
 
         } catch (error) {
-            console.error(`Error fetching roster for ${squadNameInput}:`, error);
+            logger.error(`Error fetching roster for ${squadNameInput}:`, error);
             const container = new ContainerBuilder();
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Roster Error\nSquad Roster'),

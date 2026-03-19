@@ -1,10 +1,11 @@
 const { ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const modalConfig = require('./modalConfig');
+const logger = require('../utils/logger');
 
 function createModal(type) {
     const config = modalConfig[type];
     if (!config) {
-        console.error(`No modal configuration found for type: ${type}`);
+        logger.error(`No modal configuration found for type: ${type}`);
         return null;
     }
 

@@ -1,8 +1,10 @@
 const { schedule } = require('node-cron');
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
+const logger = require('../utils/logger');
+const { SPREADSHEET_LFO, OFFICIAL_ROLE_IDS } = require('../config/constants');
 
-const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
+const SHEET_ID = SPREADSHEET_LFO;
 const SHEET_TAB_NAME = 'Form Responses 1';
 const CHANNEL_ID = '1285164801911427072';
 
@@ -46,14 +48,14 @@ async function postUngradedVideoCount(client) {
             await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] });
         }
 
-        if (ungradedCount < 100) {
+        if (ungradedCount > 100) {
             const alertContainer = new ContainerBuilder();
             alertContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Grading Catch-Up Needed'));
-            alertContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Hey <@&> please ensure to catch up on posts that are missing grades.'));
+            alertContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(`Hey ${OFFICIAL_ROLE_IDS.map(id => '<@&' + id + '>').join(' ')} please ensure to catch up on posts that are missing grades.`));
             await channel.send({ flags: MessageFlags.IsComponentsV2, components: [alertContainer] });
         }
     } catch (error) {
-        console.error('Error posting ungraded video count:', error);
+        logger.error('Error posting ungraded video count:', error);
     }
 }
 

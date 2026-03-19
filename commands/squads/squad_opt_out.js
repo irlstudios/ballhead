@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -21,10 +23,6 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const LOGGING_CHANNEL_ID = '1233853458092658749';
-const LOGGING_GUILD_ID = '1233740086839869501';
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('squad-opt-out')
@@ -41,7 +39,7 @@ module.exports = {
 
             try {
                 const response = await sheets.spreadsheets.values.get({
-                    spreadsheetId: SPREADSHEET_ID,
+                    spreadsheetId: SPREADSHEET_SQUADS,
                     range });
 
                 const rows = response.data.values || [];
@@ -62,9 +60,9 @@ module.exports = {
                         return { success: false, message: 'You are already opted out of squad invites.' };
                     } else {
                         const updateRange = `All Data!H${rowIndex}`;
-                        console.log(`Updating ${updateRange} to FALSE for user ${userID}`);
+                        logger.info(`Updating ${updateRange} to FALSE for user ${userID}`);
                         await sheets.spreadsheets.values.update({
-                            spreadsheetId: SPREADSHEET_ID,
+                            spreadsheetId: SPREADSHEET_SQUADS,
                             range: updateRange,
                             valueInputOption: 'RAW',
                             requestBody: {
@@ -72,7 +70,7 @@ module.exports = {
                         return { success: true, message: 'You have successfully opted out of squad invites.' };
                     }
                 } else {
-                    console.log(`User ${userID} not found in All Data, appending new row.`);
+                    logger.info(`User ${userID} not found in All Data, appending new row.`);
                     const newRowData = [
                         currentUsername,
                         userID.toString(),
@@ -84,7 +82,7 @@ module.exports = {
                         'FALSE'
                     ];
                     await sheets.spreadsheets.values.append({
-                        spreadsheetId: SPREADSHEET_ID,
+                        spreadsheetId: SPREADSHEET_SQUADS,
                         range: 'All Data!A1',
                         valueInputOption: 'RAW',
                         requestBody: {
@@ -95,7 +93,7 @@ module.exports = {
                     };
                 }
             } catch (error) {
-                console.error('The API returned an error:', error);
+                logger.error('The API returned an error:', error);
                 if (error.message.startsWith('Sheet')) {
                     throw error;
                 } else {
@@ -112,16 +110,16 @@ module.exports = {
             if (block) infoContainer.addTextDisplayComponents(block);
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
         } catch (error) {
-            console.error(`Error in /squad-opt-out for ${userId}:`, error);
+            logger.error(`Error in /squad-opt-out for ${userId}:`, error);
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
-                const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingChannel = await loggingGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Opt-Out Error', subtitle: 'Command Failure', lines: [`**User:** ${interaction.user.tag} (${userId })`, `**Error:** ${error.message}`] });
             if (block) errorContainer.addTextDisplayComponents(block);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
-                console.error('Failed to log error to Discord:', logError);
+                logger.error('Failed to log error to Discord:', logError);
             }
 
             const replyContainer = new ContainerBuilder();
@@ -131,7 +129,7 @@ module.exports = {
                 flags: MessageFlags.IsComponentsV2,
                 components: [replyContainer],
                 ephemeral: true
-            }).catch(console.error);
+            }).catch(logger.error);
         }
     }
 };

@@ -2,6 +2,7 @@ const { Client, Collection, GatewayIntentBits, Partials } = require('discord.js'
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: './resources/.env' });
+const logger = require('./utils/logger');
 
 const client = new Client({
     intents: [
@@ -46,17 +47,17 @@ try {
         try {
             const command = require(file);
             if (!command?.data?.name) {
-                console.error(`Error loading ${file}: 'data' or 'name' property is missing or invalid.`);
+                logger.error(`Error loading ${file}: 'data' or 'name' property is missing or invalid.`);
                 continue;
             }
-            console.log(`Registering Command: ${command.data.name}`);
+            logger.info(`Registering Command: ${command.data.name}`);
             client.commands.set(command.data.name, command);
         } catch (error) {
-            console.error(`Error loading ${file}: ${error}`);
+            logger.error(`Error loading ${file}: ${error}`);
         }
     }
 } catch (error) {
-    console.error('Error reading command files:', error);
+    logger.error('Error reading command files:', error);
 }
 
 try {
@@ -64,47 +65,61 @@ try {
     for (const file of eventFiles) {
         const event = require(`./events/${file}`);
         if (!event.name || !event.execute) {
-            console.error(`Error loading ${file}: Event does not properly export 'name' or 'execute'.`);
+            logger.error(`Error loading ${file}: Event does not properly export 'name' or 'execute'.`);
             continue;
         }
+        const safeExecute = async (...args) => {
+            try {
+                await event.execute(...args, client);
+            } catch (err) {
+                logger.error(`[Event] Unhandled error in ${event.name}:`, err);
+            }
+        };
         if (event.once) {
-            client.once(event.name, (...args) => event.execute(...args, client));
+            client.once(event.name, safeExecute);
         } else {
-            client.on(event.name, (...args) => event.execute(...args, client));
+            client.on(event.name, safeExecute);
         }
     }
 } catch (error) {
-    console.error('Error reading event files:', error);
+    logger.error('Error reading event files:', error);
 }
 
 const interactionHandler = require('./interactionHandler');
 client.on('interactionCreate', async (interaction) => {
     try {
-        console.log('[Global Interaction] type:', interaction.type, 'customId:', interaction.customId);
-        console.log('[Global Interaction] Button pressed:', interaction.customId);
         await interactionHandler(interaction, client);
     } catch (error) {
-        console.error('Error handling interaction:', error);
+        logger.error('Error handling interaction:', error);
     }
 });
 
 const token = process.env.TOKEN;
 if (!token) {
-    console.error('Bot token is missing. Please add your bot token to the .env file.');
+    logger.error('Bot token is missing. Please add your bot token to the .env file.');
     process.exit(1);
 }
 
 const { startCacheWarmer } = require('./utils/cache_warmer');
+const { ensureLfgTable } = require('./db');
 
-client.login(token).then(() => {
-    console.log('Bot logged in successfully.');
+client.login(token).then(async () => {
+    logger.info('Bot logged in successfully.');
+
+    // Run DB migrations
+    try {
+        await ensureLfgTable();
+        logger.info('[DB] LFG table ensured.');
+    } catch (error) {
+        logger.error('[DB] Failed to ensure LFG table:', error);
+    }
 
     // Start cache warming system
     startCacheWarmer().catch(error => {
-        console.error('[Cache Warmer] Error starting cache warmer:', error);
+        logger.error('[Cache Warmer] Error starting cache warmer:', error);
     });
 }).catch(error => {
-    console.error('Failed to login:', error);
+    logger.error('Failed to login:', error);
     process.exit(1);
 });
 
@@ -114,12 +129,12 @@ const { stopCacheWarmer } = require('./utils/cache_warmer');
 const { stopCacheMaintenance } = require('./utils/sheets_cache');
 
 async function gracefulShutdown(signal) {
-    console.log(`\n[Shutdown] Received ${signal}. Starting graceful shutdown...`);
+    logger.info(`\n[Shutdown] Received ${signal}. Starting graceful shutdown...`);
 
     try {
         // Stop accepting new interactions
         client.destroy();
-        console.log('[Shutdown] Discord client destroyed');
+        logger.info('[Shutdown] Discord client destroyed');
 
         // Stop cache warming
         stopCacheWarmer();
@@ -130,10 +145,10 @@ async function gracefulShutdown(signal) {
         // Close database pool
         await closePool();
 
-        console.log('[Shutdown] Graceful shutdown complete');
+        logger.info('[Shutdown] Graceful shutdown complete');
         process.exit(0);
     } catch (error) {
-        console.error('[Shutdown] Error during graceful shutdown:', error);
+        logger.error('[Shutdown] Error during graceful shutdown:', error);
         process.exit(1);
     }
 }

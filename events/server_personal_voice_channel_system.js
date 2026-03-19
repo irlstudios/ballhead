@@ -1,5 +1,7 @@
 const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { Pool } = require('pg');
+const { pool } = require('../db');
+const logger = require('../utils/logger');
+const { MODERATOR_ROLES } = require('../config/constants');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -48,14 +50,6 @@ const isBlacklisted = (member) => {
     return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
 };
 
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-};
-const pool = new Pool(clientConfig);
 const COOLDOWN_MS = Number(process.env.VC_CREATE_COOLDOWN_SECONDS || '60') * 1000;
 
 module.exports = {
@@ -76,7 +70,7 @@ module.exports = {
         }
 
         const specificVCID = '1321321682891178074';
-        const MOD_ROLE_ID = '805833778064130104';
+        const MOD_ROLE_ID = MODERATOR_ROLES[0];
         const VC_BLACK_LIST_ID = '1125497495678615582';
         const ADMIN_ID = '781397829808553994';
 
@@ -103,6 +97,12 @@ module.exports = {
                 await newState.setChannel(null);
                 return;
             }
+            // Set cooldown BEFORE channel creation to prevent race condition
+            client.vcCooldowns.set(newState.member.id, Date.now());
+            setTimeout(() => {
+                client.vcCooldowns.delete(newState.member.id);
+            }, COOLDOWN_MS);
+
             const guild = newState.guild;
             const newChannel = await guild.channels.create({
                 name: `${newState.member.displayName}'s Room`,
@@ -172,13 +172,6 @@ module.exports = {
                 client.vcCreated.delete(newChannel.id);
                 return;
             }
-            client.vcCooldowns.set(newState.member.id, Date.now());
-
-            // Clean up cooldown after it expires to prevent memory leak
-            setTimeout(() => {
-                client.vcCooldowns.delete(newState.member.id);
-            }, COOLDOWN_MS);
-
             client.vcHosts.set(newChannel.id, newState.member.id);
             await pool.query(
                 `INSERT INTO vc_hosts(channel_id, host_id, created_at)

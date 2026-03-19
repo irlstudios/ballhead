@@ -1,13 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const REQUIRED_ROLE_ID = '924522770057031740';
-const LOGGING_GUILD_ID = '1233740086839869501';
-const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
-const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
-const COMPETITIVE_ROLE_ID = '1288918946258489354';
-const CONTENT_ROLE_ID = '1290803054140199003';
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID, SQUAD_LEADER_ROLE_ID, COMPETITIVE_SQUAD_OWNER_ROLE_ID, CONTENT_SQUAD_OWNER_ROLE_ID, LEVEL_5_ROLE_ID } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 const formatDate = () => {
     const now = new Date();
@@ -39,12 +33,12 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const hasRequiredRole = interaction.member.roles.cache.has(REQUIRED_ROLE_ID);
+        const hasRequiredRole = interaction.member.roles.cache.has(LEVEL_5_ROLE_ID);
         if (!hasRequiredRole) {
             const container = new ContainerBuilder();
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Role Required'),
-                new TextDisplayBuilder().setContent(`You must have the <@&${REQUIRED_ROLE_ID}> role to register a squad.`)
+                new TextDisplayBuilder().setContent(`You must have the <@&${LEVEL_5_ROLE_ID}> role to register a squad.`)
             );
             return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
         }
@@ -68,10 +62,10 @@ module.exports = {
 
         try {
             const [allDataResponse, squadLeadersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' })
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' })
             ]).catch(err => {
-                console.error('Error fetching sheet data:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
+                logger.error('Error fetching sheet data:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
             });
 
             const allData = (allDataResponse.data.values || []).slice(1);
@@ -106,8 +100,8 @@ module.exports = {
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
             const squadLeaderRole = interaction.guild.roles.cache.get(SQUAD_LEADER_ROLE_ID);
-            const competitiveRole = interaction.guild.roles.cache.get(COMPETITIVE_ROLE_ID);
-            const contentRole = interaction.guild.roles.cache.get(CONTENT_ROLE_ID);
+            const competitiveRole = interaction.guild.roles.cache.get(COMPETITIVE_SQUAD_OWNER_ROLE_ID);
+            const contentRole = interaction.guild.roles.cache.get(CONTENT_SQUAD_OWNER_ROLE_ID);
             if (!squadLeaderRole || !competitiveRole || !contentRole) {
                 const container = new ContainerBuilder();
                 container.addTextDisplayComponents(
@@ -128,7 +122,7 @@ module.exports = {
             ];
 
             await sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
                 resource: { values: [newLeaderRow] }
@@ -146,7 +140,7 @@ module.exports = {
                     'Yes'
                 ];
                 await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_ID,
+                    spreadsheetId: SPREADSHEET_SQUADS,
                     range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
                     valueInputOption: 'RAW',
                     resource: { values: [valuesToUpdate] }
@@ -163,7 +157,7 @@ module.exports = {
                     'TRUE'
                 ];
                 await sheets.spreadsheets.values.append({
-                    spreadsheetId: SPREADSHEET_ID,
+                    spreadsheetId: SPREADSHEET_SQUADS,
                     range: 'All Data!A1',
                     valueInputOption: 'RAW',
                     resource: { values: [newAllDataRow] }
@@ -175,7 +169,7 @@ module.exports = {
                 if (squadType === 'Competitive') await interaction.member.roles.add(competitiveRole);
                 if (squadType === 'Content') await interaction.member.roles.add(contentRole);
             } catch (roleError) {
-                console.warn(`Failed to add roles to ${username} (${userId}): ${roleError.message}`);
+                logger.warn(`Failed to add roles to ${username} (${userId}): ${roleError.message}`);
                 const warningContainer = new ContainerBuilder();
                 warningContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Role Assignment Failed'),
@@ -187,7 +181,7 @@ module.exports = {
             try {
                 await interaction.member.setNickname(`[${squadName}] ${interaction.member.user.username}`);
             } catch (nickError) {
-                console.warn(`Failed to set nickname for ${username}: ${nickError.message}`);
+                logger.warn(`Failed to set nickname for ${username}: ${nickError.message}`);
                 const warningContainer = new ContainerBuilder();
                 warningContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Nickname Update Failed'),
@@ -204,7 +198,7 @@ module.exports = {
                 );
                 await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
-                console.warn(`Failed to send registration DM to ${username}: ${dmError.message}`);
+                logger.warn(`Failed to send registration DM to ${username}: ${dmError.message}`);
             }
 
             const successContainer = new ContainerBuilder();
@@ -219,10 +213,10 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error(`Error processing /register command for ${userTag} (${userId}):`, error);
+            logger.error(`Error processing /register command for ${userTag} (${userId}):`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
-                const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
+                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`## Squad Registration Error\n${userTag}`),
@@ -230,7 +224,7 @@ module.exports = {
                 );
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
-                console.error('Failed to log registration error to Discord:', logError);
+                logger.error('Failed to log registration error to Discord:', logError);
             }
             const errorContainer = new ContainerBuilder();
             errorContainer.addTextDisplayComponents(
@@ -241,7 +235,7 @@ module.exports = {
                 flags: MessageFlags.IsComponentsV2,
                 components: [errorContainer],
                 ephemeral: true
-            }).catch(console.error);
+            }).catch(logger.error);
         }
     }
 };

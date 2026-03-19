@@ -1,4 +1,5 @@
 const axios = require('axios');
+const logger = require('../utils/logger');
 
 const apiEndpoint = 'https://lyjm699n1i.execute-api.us-east-2.amazonaws.com/dev/meticHandlers/announcements';
 
@@ -10,9 +11,9 @@ async function trackMetrics({ userID, channelID, messageID, timestamp }) {
             messageID,
             timestamp,
         });
-        console.log('Metrics logged successfully:', response.data);
+        logger.info('Metrics logged successfully:', response.data);
     } catch (error) {
-        console.error('Error logging metrics:', error.response?.data || error.message);
+        logger.error('Error logging metrics:', error.response?.data || error.message);
     }
 }
 

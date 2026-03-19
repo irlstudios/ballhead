@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { pool } = require('../../db');
+const { MODERATOR_ROLES } = require('../../config/constants');
 
 const BLACKLIST_USER_IDS = new Set();
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
@@ -48,6 +49,14 @@ const isUserBlacklisted = async (guild, userId) => {
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member) return false;
     return member.roles.cache.some(role => BLACKLIST_ROLE_IDS.has(role.id));
+};
+
+const enforceBlacklistForUser = async (channel, userId) => {
+    try {
+        await channel.permissionOverwrites.edit(userId, { Connect: false, Speak: false });
+    } catch (error) {
+        if (error?.code !== 10003) throw error;
+    }
 };
 
 function replySimple(interaction, message) {
@@ -156,7 +165,7 @@ module.exports = {
         ),
     async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
-        const MOD_ROLE_ID = '805833778064130104';
+        const MOD_ROLE_ID = MODERATOR_ROLES[0];
         switch (subcommand) {
         case 'view': {
             const roomChannel = interaction.member.voice.channel;

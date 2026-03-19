@@ -1,6 +1,8 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, SQUAD_PRACTICE_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -22,10 +24,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const CHANNEL_ID = '1214781415670153266';
-const LOGGING_CHANNEL_ID = '1233854185276051516';
-const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
 const PRACTICE_DURATION_MS = 24 * 60 * 60 * 1000;
 
 module.exports = {
@@ -45,7 +44,7 @@ module.exports = {
 
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A:F'
             });
 
@@ -71,7 +70,7 @@ module.exports = {
 
             const channel = await interaction.client.channels.fetch(CHANNEL_ID);
             if (!channel || channel.type !== ChannelType.GuildText) {
-                console.error(`Practice channel ${CHANNEL_ID} not found or is not a text channel.`);
+                logger.error(`Practice channel ${CHANNEL_ID} not found or is not a text channel.`);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Channel Missing', subtitle: 'Practice Session', lines: ['Could not find the designated channel for practice sessions.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
@@ -85,7 +84,7 @@ module.exports = {
                 reason: `${userTag} started a practice session for squad ${squadName}`,
                 invitable: false
             }).catch(err => {
-                console.error(`Failed to create thread for ${squadName}: ${err.message}`);
+                logger.error(`Failed to create thread for ${squadName}: ${err.message}`);
                 throw new Error('Failed to create the practice thread. Please check bot permissions.');
             });
 
@@ -99,7 +98,7 @@ module.exports = {
             await thread.send({ flags: MessageFlags.IsComponentsV2, components: [threadContainer] });
 
             const squadMembersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Members!A:E'
             });
 
@@ -117,7 +116,7 @@ module.exports = {
             for (const memberId of squadMemberIds) {
                 if (memberId !== userId) {
                     invitePromises.push(thread.members.add(memberId).catch(err => {
-                        console.warn(`Could not add member ${memberId} to thread ${thread.id}: ${err.message}`);
+                        logger.warn(`Could not add member ${memberId} to thread ${thread.id}: ${err.message}`);
                     }));
                 }
             }
@@ -133,14 +132,14 @@ module.exports = {
                     interaction.client.users.fetch(memberId).then(user => {
                         return user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
                     }).catch(error => {
-                        console.log(`Could not send practice start DM to ${memberId}:`, error.message);
+                        logger.info(`Could not send practice start DM to ${memberId}:`, error.message);
                     })
                 );
             }
             await Promise.all(dmPromises);
 
             try {
-                const loggingChannel = await interaction.client.channels.fetch(LOGGING_CHANNEL_ID);
+                const loggingChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Practice Session Started', subtitle: 'Logging', lines: [
                     `**Squad:** ${squadName}`,
@@ -150,17 +149,17 @@ module.exports = {
             if (block) logContainer.addTextDisplayComponents(block);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
-                console.error(`Failed to send practice start log message: ${logError.message}`);
+                logger.error(`Failed to send practice start log message: ${logError.message}`);
             }
 
             setTimeout(async () => {
                 try {
-                    console.log(`Attempting to delete practice thread ${thread.id} for squad ${squadName}.`);
+                    logger.info(`Attempting to delete practice thread ${thread.id} for squad ${squadName}.`);
                     const fetchedThread = await channel.threads.fetch(thread.id).catch(() => null);
                     if (fetchedThread) {
                         await fetchedThread.delete(`Practice session ended after ${PRACTICE_DURATION_MS / (60*60*1000)} hours.`);
                     } else {
-                        console.log(`Practice thread ${thread.id} already deleted or not found.`);
+                        logger.info(`Practice thread ${thread.id} already deleted or not found.`);
                     }
 
                     const endDmPromises = [];
@@ -172,32 +171,32 @@ module.exports = {
                             interaction.client.users.fetch(memberId).then(user => {
                                 return user.send({ flags: MessageFlags.IsComponentsV2, components: [notificationContainer] });
                             }).catch(error => {
-                                console.log(`Could not send practice end DM to ${memberId}:`, error.message);
+                                logger.info(`Could not send practice end DM to ${memberId}:`, error.message);
                             })
                         );
                     }
                     await Promise.all(endDmPromises);
 
                     try {
-                        const loggingChannel = await interaction.client.channels.fetch(LOGGING_CHANNEL_ID);
+                        const loggingChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID);
                         const endLogContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Practice Session Ended', subtitle: 'Logging', lines: [`The practice session for squad **${squadName}** has concluded.`] });
             if (block) endLogContainer.addTextDisplayComponents(block);
                         await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [endLogContainer] });
                     } catch (logError) {
-                        console.error(`Failed to send practice end log message: ${logError.message}`);
+                        logger.error(`Failed to send practice end log message: ${logError.message}`);
                     }
 
                 } catch (error) {
-                    console.error(`Error during scheduled thread deletion/notification for ${thread.id}:`, error.message);
+                    logger.error(`Error during scheduled thread deletion/notification for ${thread.id}:`, error.message);
                     try {
-                        const errorLoggingChannel = await interaction.client.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
+                        const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
                         const errorContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Error During Practice Cleanup', subtitle: 'Automation Failure', lines: [`**Squad:** ${squadName}`, `**Thread ID:** ${thread.id}`, `**Error:** ${error.message}`] });
             if (block) errorContainer.addTextDisplayComponents(block);
                         await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                     } catch (logError) {
-                        console.error('Failed to log cleanup error:', logError);
+                        logger.error('Failed to log cleanup error:', logError);
                     }
                 }
             }, PRACTICE_DURATION_MS);
@@ -212,25 +211,25 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            console.error(`Error during /squad-practice for ${userTag} (${userId}):`, error);
+            logger.error(`Error during /squad-practice for ${userTag} (${userId}):`, error);
 
             if (thread) {
                 try {
                     await thread.delete(`Error during setup: ${error.message}`);
-                    console.log(`Cleaned up thread ${thread.id} due to error.`);
+                    logger.info(`Cleaned up thread ${thread.id} due to error.`);
                 } catch (cleanupError) {
-                    console.error(`Failed to clean up thread ${thread.id} after error: ${cleanupError.message}`);
+                    logger.error(`Failed to clean up thread ${thread.id} after error: ${cleanupError.message}`);
                 }
             }
 
             try {
-                const errorLoggingChannel = await interaction.client.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
+                const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorLogContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Practice Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (<@${userId}>)`, `**Error:** ${error.message}`] });
             if (block) errorLogContainer.addTextDisplayComponents(block);
                 await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorLogContainer] });
             } catch (logError) {
-                console.error('Failed to log error to Discord:', logError);
+                logger.error('Failed to log error to Discord:', logError);
             }
 
             if (!interaction.replied) {
@@ -241,7 +240,7 @@ module.exports = {
                     flags: MessageFlags.IsComponentsV2,
                     components: [replyContainer],
                     ephemeral: true
-                }).catch(console.error);
+                }).catch(logger.error);
             }
         }
     }

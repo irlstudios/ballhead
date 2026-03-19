@@ -2,6 +2,8 @@ const {SlashCommandBuilder} = require('@discordjs/builders');
 const {MessageFlags, ContainerBuilder, TextDisplayBuilder} = require('discord.js');
 const {fetchCreatorData} = require('../../API/apifyClient');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_CONTENT_CREATORS, LEVEL_5_ROLE_ID, HIGHER_LEVEL_ROLES } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -138,14 +140,14 @@ async function logPendingApplication({sheets, platformLabel, username, interacti
     const nowStamp = formatDate(new Date());
     try {
         await sheets.spreadsheets.values.append({
-            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+            spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
             range: `'CC Applications'!A:F`,
             valueInputOption: 'USER_ENTERED',
             insertDataOption: 'INSERT_ROWS',
             resource: {values: [[platformLabel, username, interaction.user.id, nowStamp, '', profileUrl]]}
         });
     } catch (appendError) {
-        console.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
+        logger.error(`Failed to log ${platformLabel} application after Apify limit hit:`, appendError);
     }
     if (logChannelId) {
         const logChannel = interaction.client.channels.cache.get(logChannelId);
@@ -172,16 +174,7 @@ module.exports = {
         const userRoles = interaction.member.roles.cache;
         const prospect_role = '1270464270722928700';
 
-        const requiredRoles = [
-            '924522770057031740',
-            '924522921370714152',
-            '924522979768016946',
-            '924523044268032080',
-            '1242262635223715971',
-            '925177626644058153',
-            '1087071951270453278',
-            '1223408044784746656'
-        ];
+        const requiredRoles = [LEVEL_5_ROLE_ID, ...HIGHER_LEVEL_ROLES];
 
         if (!requiredRoles.some(role => userRoles.has(role))) {
             const container = new ContainerBuilder()
@@ -230,16 +223,16 @@ module.exports = {
         } catch (error) {
             if (isApifyLimitError(error)) {
                 apifyLimitHit = true;
-                console.error('Apify Instagram fetch skipped due to monthly limit:', error.response?.data || error.message || error);
+                logger.error('Apify Instagram fetch skipped due to monthly limit:', error.response?.data || error.message || error);
             } else {
-                console.error('Apify Instagram fetch failed to start:', error.response?.data || error.message || error);
+                logger.error('Apify Instagram fetch failed to start:', error.response?.data || error.message || error);
             }
         }
 
         const sheets = await getSheetsClient();
         try {
             const existingResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                 range: '\'CC Applications\'!A:C'
             });
             const existingRows = existingResponse.data?.values || [];
@@ -274,7 +267,7 @@ module.exports = {
             }
 
             const creatorsResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                 range: '\'Creators\'!A:D'
             });
             const creatorRows = creatorsResponse.data?.values || [];
@@ -301,7 +294,7 @@ module.exports = {
                 return;
             }
         } catch (lookupError) {
-            console.error('Failed to check for existing Instagram application:', lookupError);
+            logger.error('Failed to check for existing Instagram application:', lookupError);
             const errorContainer = buildNoticeContainer({
                 title: 'Verification Failed',
                 lines: [
@@ -331,7 +324,7 @@ module.exports = {
                 });
                 await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
-                console.error('Failed to send Instagram application DM:', dmError);
+                logger.error('Failed to send Instagram application DM:', dmError);
             }
         };
 
@@ -384,7 +377,7 @@ module.exports = {
                     let appendedRange;
                     try {
                         const appendResponse = await sheets.spreadsheets.values.append({
-                            spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                            spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                             range: `'CC Applications'!A:D`,
                             valueInputOption: 'USER_ENTERED',
                             resource: { values: baseValues },
@@ -393,7 +386,7 @@ module.exports = {
                         });
                         appendedRange = appendResponse.data?.updates?.updatedRange;
                     } catch (error) {
-                        console.error('Error logging verified application to Google Sheets:', error);
+                        logger.error('Error logging verified application to Google Sheets:', error);
                     }
 
                     const logChannel = interaction.client.channels.cache.get('1128804307261718568');
@@ -440,7 +433,7 @@ module.exports = {
 
                             try {
                                 await sheets.spreadsheets.values.update({
-                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                                    spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                                     range: `'CC Applications'!E${rowNumber}:AA${rowNumber}`,
                                     valueInputOption: 'USER_ENTERED',
                                     resource: {
@@ -452,7 +445,7 @@ module.exports = {
                                     }
                                 });
                             } catch (updateError) {
-                                console.error('Failed to populate CC Applications formulas:', updateError);
+                                logger.error('Failed to populate CC Applications formulas:', updateError);
                             }
 
                             // AB: Last checked, AC: Latest post date
@@ -470,13 +463,13 @@ module.exports = {
                             const latestFormatted = latestTimestamp !== null ? formatDate(new Date(latestTimestamp)) : '';
                             try {
                                 await sheets.spreadsheets.values.update({
-                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                                    spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                                     range: `'CC Applications'!AB${rowNumber}:AC${rowNumber}`,
                                     valueInputOption: 'USER_ENTERED',
                                     resource: { values: [[nowFormatted, latestFormatted]] }
                                 });
                             } catch (dateUpdateError) {
-                                console.error('Failed to update CC application date columns:', dateUpdateError);
+                                logger.error('Failed to update CC application date columns:', dateUpdateError);
                             }
                         }
                     }
@@ -502,13 +495,13 @@ module.exports = {
                         let existingUrlSet = new Set();
                         try {
                             const existingResponse = await sheets.spreadsheets.values.get({
-                                spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                                spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                                 range: '\'Reels Data\'!D:D'
                             });
                             const existingValues = existingResponse.data?.values || [];
                             existingUrlSet = new Set(existingValues.map(row => (row[0] || '').trim().toLowerCase()));
                         } catch (existingError) {
-                            console.error('Failed to fetch existing Reels data URLs:', existingError);
+                            logger.error('Failed to fetch existing Reels data URLs:', existingError);
                         }
                         const uniqueRows = [];
                         for (const row of videoRows) {
@@ -522,7 +515,7 @@ module.exports = {
                         if (uniqueRows.length) {
                             try {
                                 const appendResp = await sheets.spreadsheets.values.append({
-                                    spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                                    spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                                     range: '\'Reels Data\'!A:I',
                                     valueInputOption: 'RAW',
                                     insertDataOption: 'INSERT_ROWS',
@@ -544,14 +537,14 @@ module.exports = {
                                     });
                                     const endRow = startRow + uniqueRows.length - 1;
                                     await sheets.spreadsheets.values.update({
-                                        spreadsheetId: '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI',
+                                        spreadsheetId: SPREADSHEET_CONTENT_CREATORS,
                                         range: `Reels Data!J${startRow}:O${endRow}`,
                                         valueInputOption: 'USER_ENTERED',
                                         resource: { values: formulas }
                                     });
                                 }
                             } catch (videoError) {
-                                console.error('Failed to append Instagram video data or formulas:', videoError);
+                                logger.error('Failed to append Instagram video data or formulas:', videoError);
                             }
                         }
                     }
@@ -574,7 +567,7 @@ module.exports = {
                     await handleApifyLimitExceeded();
                     return;
                 }
-                console.error('Apify Instagram fetch failed during run:', error.response?.data || error.message || error);
+                logger.error('Apify Instagram fetch failed during run:', error.response?.data || error.message || error);
                 await notifyUser(`We had trouble verifying ${instagramUrl}. Please try again later or contact a staff member.`);
             });
         } else {

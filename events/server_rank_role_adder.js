@@ -1,6 +1,7 @@
 const { schedule } = require('node-cron');
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
+const logger = require('../utils/logger');
 
 const SHEET_ID = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
 const ROLES = [
@@ -57,7 +58,7 @@ async function updateRoles (client) {
             changes.push({ id: member.id, old: currentRole?.id, now: targetRole.id });
         } catch (e) {
             if (e.code === 10007 || e?.rawError?.code === 10007) invalidIds.push(discordId);
-            console.log('member update error', e);
+            logger.info('member update error', e);
         }
     }
     return { changes, invalidIds };
@@ -69,20 +70,20 @@ module.exports = {
         schedule(
             '0 0 * * 3k',
             async () => {
-                console.log('Running rank task');
+                logger.info('Running rank task');
                 let result;
                 try {
                     result = await updateRoles(client);
                 } catch (e) {
-                    console.log('Rank task error during updateRoles()', e);
+                    logger.info('Rank task error during updateRoles()', e);
                     return;
                 }
                 const { changes = [], invalidIds = [] } = result || {};
                 if (!changes.length && !invalidIds.length) {
-                    console.log('Rank task: no changes detected; no rank updates made');
+                    logger.info('Rank task: no changes detected; no rank updates made');
                     return;
                 }
-                console.log(`Rank task: ${changes.length} change(s); ${invalidIds.length} invalid id(s)`);        
+                logger.info(`Rank task: ${changes.length} change(s); ${invalidIds.length} invalid id(s)`);        
                 const lines = changes.map(c => `<@${c.id}>, ${EMOJIS[c.old] || ''} --> ${EMOJIS[c.now]}`);
                 if (invalidIds.length) {
                     lines.push('', 'Invalid Discord IDs:', invalidIds.join(', '));
@@ -95,7 +96,7 @@ module.exports = {
                 try {
                     thread = await client.channels.fetch(THREAD_ID);
                 } catch (error) {
-                    console.error('Failed to fetch rank change log thread:', error);
+                    logger.error('Failed to fetch rank change log thread:', error);
                 }
                 if (!thread) {
                     const parent = await client.channels.fetch(PARENT_CHANNEL_ID);
@@ -105,7 +106,7 @@ module.exports = {
                 try {
                     await thread.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (e) {
-                    console.log('thread send error', e);
+                    logger.info('thread send error', e);
                 }
             },
             { timezone: 'America/Chicago' }

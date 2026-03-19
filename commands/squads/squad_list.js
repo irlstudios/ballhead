@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
+const { SPREADSHEET_SQUADS } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -16,7 +16,7 @@ module.exports = {
             const range = '\'Squad Leaders\'!A:F';
             try {
                 const response = await sheets.spreadsheets.values.get({
-                    spreadsheetId: SPREADSHEET_ID,
+                    spreadsheetId: SPREADSHEET_SQUADS,
                     range,
                 });
                 const rows = response.data.values || [];
@@ -35,14 +35,14 @@ module.exports = {
                     return [];
                 }
             } catch (error) {
-                console.error('The API returned an error while fetching squad leaders:', error);
+                logger.error('The API returned an error while fetching squad leaders:', error);
                 throw new Error('Failed to fetch squad list from the sheet.');
             }
         }
 
         try {
             const squadList = await getSquadList();
-            console.log(`[Squads] Interaction ${interaction.id}: fetched squadList with ${squadList.length} items`);
+            logger.info(`[Squads] Interaction ${interaction.id}: fetched squadList with ${squadList.length} items`);
 
             if (squadList.length === 0) {
                 const emptyContainer = new ContainerBuilder();
@@ -56,7 +56,7 @@ module.exports = {
 
             const ITEMS_PER_PAGE = 10;
             const totalPages = Math.ceil(squadList.length / ITEMS_PER_PAGE);
-            console.log(`[Squads] ITEMS_PER_PAGE=${ITEMS_PER_PAGE}, totalPages=${totalPages}`);
+            logger.info(`[Squads] ITEMS_PER_PAGE=${ITEMS_PER_PAGE}, totalPages=${totalPages}`);
             let currentPage = 1;
             const generateContainer = (page) => {
                 const start = (page - 1) * ITEMS_PER_PAGE;
@@ -103,7 +103,7 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error('Error executing /squads command:', error);
+            logger.error('Error executing /squads command:', error);
 
             const errorContainer = new ContainerBuilder();
             errorContainer.addTextDisplayComponents(

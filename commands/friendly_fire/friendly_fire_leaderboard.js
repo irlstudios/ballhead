@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -24,8 +26,8 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 }
 
 const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
-const ERROR_LOG_GUILD_ID = '1233740086839869501';
+const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
+const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
 const FF_LEADERBOARD_CATEGORIES = [
     { label: 'Player Rating (MMR)', value: 'MMR' },
     { label: 'Points', value: 'Points' },
@@ -47,7 +49,7 @@ try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (error) {
-    console.error('Error loading fonts:', error);
+    logger.error('Error loading fonts:', error);
 }
 
 function drawRoundedRect(ctx, x, y, width, height, radius, fillStyle, strokeStyle) {
@@ -224,7 +226,7 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error('Error fetching leaderboard:', error);
+            logger.error('Error fetching leaderboard:', error);
 
             try {
                 const errorGuild = await interaction.client.guilds.fetch(ERROR_LOG_GUILD_ID);
@@ -236,7 +238,7 @@ module.exports = {
 
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
-                console.error('Failed to log error:', logError);
+                logger.error('Failed to log error:', logError);
             }
 
             const errorContainer = buildNoticeContainer({

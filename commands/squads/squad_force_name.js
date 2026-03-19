@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -70,19 +72,18 @@ module.exports = {
 
 
         const sheets = await getSheetsClient();
-        const spreadsheetId = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A:F'
             });
             const squadMembersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Members!A:E'
             });
             const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'All Data!A:H'
             });
 
@@ -137,7 +138,7 @@ module.exports = {
             });
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A1:F' + updatedSquadLeaders.length,
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadLeaders }
@@ -145,7 +146,7 @@ module.exports = {
 
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Members!A1:E' + updatedSquadMembers.length,
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadMembers }
@@ -153,7 +154,7 @@ module.exports = {
 
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'All Data!A1:H' + updatedAllData.length,
                 valueInputOption: 'RAW',
                 resource: { values: updatedAllData }
@@ -172,19 +173,19 @@ module.exports = {
                         const dmContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Name Changed', subtitle: 'Moderator Update', lines: [`Your squad's name (**${currentSquadName}**) has been forcefully changed to **${newSquadName}** by a moderator.`] });
             if (block) dmContainer.addTextDisplayComponents(block);
-                        await guildMember.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        await guildMember.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.info(`Failed to DM ${memberId}: ${err.message}`));
 
                         try {
                             await guildMember.setNickname(`[${newSquadName}] ${guildMember.user.username}`);
                         } catch (nickError) {
                             if (nickError.code !== 50013) {
-                                console.log(`Could not update nickname for ${guildMember.user.tag} (${memberId}):`, nickError.message);
+                                logger.info(`Could not update nickname for ${guildMember.user.tag} (${memberId}):`, nickError.message);
                             }
                         }
                     }
                 } catch (fetchError) {
-                    if (fetchError.code === 10007) { console.log(`Member ${memberId} not found in guild, skipping nickname/DM.`); }
-                    else { console.log(`Could not fetch member ${memberId} for nickname/DM: ${fetchError.message}`); }
+                    if (fetchError.code === 10007) { logger.info(`Member ${memberId} not found in guild, skipping nickname/DM.`); }
+                    else { logger.info(`Could not fetch member ${memberId} for nickname/DM: ${fetchError.message}`); }
                 }
             }
 
@@ -196,19 +197,19 @@ module.exports = {
                             await leader.setNickname(`[${newSquadName}] ${leader.user.username}`);
                         } catch (nickError) {
                             if (nickError.code !== 50013) {
-                                console.log(`Could not update nickname for leader ${leader.user.tag} (${leaderId}):`, nickError.message);
+                                logger.info(`Could not update nickname for leader ${leader.user.tag} (${leaderId}):`, nickError.message);
                             }
                         }
                     }
                 } catch (fetchError) {
-                    if (fetchError.code === 10007) { console.log(`Leader ${leaderId} not found in guild, skipping nickname update.`); }
-                    else { console.log(`Could not fetch leader ${leaderId} for nickname update: ${fetchError.message}`); }
+                    if (fetchError.code === 10007) { logger.info(`Leader ${leaderId} not found in guild, skipping nickname update.`); }
+                    else { logger.info(`Could not fetch leader ${leaderId} for nickname update: ${fetchError.message}`); }
                 }
             }
 
 
-            const loggingChannel = await interaction.client.guilds.fetch('1233740086839869501')
-                .then(guild => guild.channels.fetch('1233853415952748645'))
+            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+                .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
                 .catch(() => null);
 
             if (loggingChannel) {
@@ -218,7 +219,7 @@ module.exports = {
             if (block) logContainer.addTextDisplayComponents(block);
                     await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
-                    console.error('Failed to send log message:', logError);
+                    logger.error('Failed to send log message:', logError);
                 }
             }
 
@@ -230,7 +231,7 @@ module.exports = {
 
 
         } catch (error) {
-            console.error('Error during the force-squad-name command execution:', error);
+            logger.error('Error during the force-squad-name command execution:', error);
             let errorMessage = 'An error occurred while changing the squad name. Please try again later.';
             if (error.response?.data?.error) { errorMessage += ` (Details: ${error.response.data.error.message})`; }
             else if (error.message) { errorMessage += ` (Details: ${error.message})`; }

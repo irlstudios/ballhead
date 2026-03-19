@@ -1,6 +1,7 @@
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const moment = require('moment');
 const { getSheetsClient, getCachedValues } = require('../utils/sheets_cache');
+const logger = require('../utils/logger');
 
 const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
@@ -158,7 +159,7 @@ function getPlatformData(platform, discordId, valuesByRange) {
             config
         };
     } catch (error) {
-        console.error(`Error fetching ${platform} data:`, error);
+        logger.error(`Error fetching ${platform} data:`, error);
         return null;
     }
 }
@@ -518,11 +519,11 @@ module.exports = {
 
         const eventStartTime = Date.now();
         try {
-            console.log(`[CC Question Listener] Triggered by message from ${message.author.tag}`);
+            logger.info(`[CC Question Listener] Triggered by message from ${message.author.tag}`);
 
             const sheetsStartTime = Date.now();
             const sheets = await getSheetsClient();
-            console.log(`[CC Question Listener] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
+            logger.info(`[CC Question Listener] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
 
             const rangesToFetch = Array.from(new Set(
                 Object.values(PLATFORMS).flatMap(config => ([
@@ -539,7 +540,7 @@ module.exports = {
                 ranges: rangesToFetch,
                 ttlMs: SHEET_CACHE_TTL_MS
             });
-            console.log(`[CC Question Listener] Data fetched in ${Date.now() - cacheStartTime}ms`);
+            logger.info(`[CC Question Listener] Data fetched in ${Date.now() - cacheStartTime}ms`);
 
             const processingStartTime = Date.now();
             const userId = message.author.id;
@@ -600,14 +601,14 @@ module.exports = {
 
             const totalTime = Date.now() - eventStartTime;
             const processingTime = Date.now() - processingStartTime;
-            console.log(`[CC Question Listener] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
+            logger.info(`[CC Question Listener] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
-            console.error('Error in CC progress question listener:', error);
+            logger.error('Error in CC progress question listener:', error);
             const errorContainer = new ContainerBuilder();
             errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Check Failed'));
             errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Sorry, I encountered an error while checking your CC progress. Please try using `/cc-check-progress` instead.'));
             await message.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] })
-                .catch(err => console.error('Failed to send error message:', err));
+                .catch(err => logger.error('Failed to send error message:', err));
         }
     }
 };

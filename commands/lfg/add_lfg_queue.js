@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { Client } = require('pg');
+const { executeQuery } = require('../../db');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -20,14 +21,6 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     }
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
-
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false }
-};
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -68,10 +61,8 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             return;
         }
-        const pgClient = new Client(clientConfig);
         try {
-            await pgClient.connect();
-            await pgClient.query(`CREATE TABLE IF NOT EXISTS lfg_queues (
+            await executeQuery(`CREATE TABLE IF NOT EXISTS lfg_queues (
                 thread_id TEXT PRIMARY KEY,
                 queue_key TEXT NOT NULL,
                 queue_name TEXT NOT NULL,
@@ -88,7 +79,7 @@ module.exports = {
             )`);
             const pendingThreadId = `pending:${key}`;
             const emptyParticipants = [];
-            const updateRes = await pgClient.query(
+            const updateRes = await executeQuery(
                 `UPDATE lfg_queues SET
            queue_name = $2,
            size = $3,
@@ -108,7 +99,7 @@ module.exports = {
             );
             let row = updateRes.rows[0];
             if (!row) {
-                const insertRes = await pgClient.query(
+                const insertRes = await executeQuery(
                     `INSERT INTO lfg_queues(
            thread_id, queue_key, queue_name, size, status, participants,
            lobby_display_name, lobby_id, description, play_type, play_rules, region, updated_at)
@@ -120,7 +111,6 @@ module.exports = {
                 );
                 row = insertRes.rows[0];
             }
-            await pgClient.end();
             const successContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Queue Saved', subtitle: 'LFG Queue Setup', lines: [
                 `**Queue:** ${row.queue_name} (${row.queue_key })`,
@@ -131,11 +121,6 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
             interaction.client.emit('lfg:refresh');
         } catch (e) {
-            try {
-                await pgClient.end();
-            } catch (closeError) {
-                console.error('Failed to close PG client:', closeError);
-            }
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Save Failed', subtitle: 'LFG Queue Setup', lines: [`Error saving queue: ${e.message}`] });
             if (block) errorContainer.addTextDisplayComponents(block);

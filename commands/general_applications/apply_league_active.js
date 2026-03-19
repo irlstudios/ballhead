@@ -1,6 +1,7 @@
-require('dotenv').config();
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { Client } = require('pg');
+const { executeQuery } = require('../../db');
+const logger = require('../../utils/logger');
+const { LEAGUE_LOG_CHANNEL_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -36,19 +37,9 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const clientConfig = {
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            database: process.env.DB_DATABASE_NAME,
-            password: process.env.DB_PASSWORD,
-            ssl: { rejectUnauthorized: false } };        
-
-        const pgClient = new Client(clientConfig);
-        await pgClient.connect();
-
         try {
             const userId = interaction.user.id;
-            const res = await pgClient.query(
+            const res = await executeQuery(
                 'SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = $2',
                 [userId, 'Base']
             );
@@ -82,14 +73,14 @@ module.exports = {
                 const guild = await interaction.client.guilds.fetch(serverId);
                 if (guild) {
                     memberCount = guild.memberCount || 'Unknown';
-                    console.log(`Fetched memberCount from guild: ${memberCount}`);
+                    logger.info(`Fetched memberCount from guild: ${memberCount}`);
                 }
             } catch (error) {
-                console.error('Error fetching guild by server_id:', error);
+                logger.error('Error fetching guild by server_id:', error);
                 memberCount = 'Unknown';
             }
 
-            const channel = await interaction.client.channels.fetch('1298997780303315016');
+            const channel = await interaction.client.channels.fetch(LEAGUE_LOG_CHANNEL_ID);
 
             const applicationContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Active League Application',
@@ -119,9 +110,9 @@ module.exports = {
                 components: [applicationContainer, actionRow]
             });
 
-            await pgClient.query(
-                `INSERT INTO "League Applications" 
-                (applicant_id, applicant_discord_name, league_name, league_invite, applied_league_level, application_message_id, review_status, application_type, applied_date, member_count) 
+            await executeQuery(
+                `INSERT INTO "League Applications"
+                (applicant_id, applicant_discord_name, league_name, league_invite, applied_league_level, application_message_id, review_status, application_type, applied_date, member_count)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
                 [
                     interaction.user.id,
@@ -143,14 +134,12 @@ module.exports = {
             });
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
-            console.error('Error in /apply-active-league command:', error);
+            logger.error('Error in /apply-active-league command:', error);
             const errorContainer = buildNoticeContainer({
                 title: 'Application Failed',
                 subtitle: 'Active League Application',
                 lines: ['An error occurred while processing your application.']
             });
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
-        } finally {
-            await pgClient.end();
         }
     } };

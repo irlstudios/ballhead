@@ -1,4 +1,5 @@
 const { SlashCommandBuilder, ChannelType, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const logger = require('../../utils/logger');
 
 // Authorized role IDs
 const AUTHORIZED_ROLES = [
@@ -103,7 +104,7 @@ module.exports = {
                     await channel.setRateLimitPerUser(0, 'Automatic reset after scheduled cooldown length');
                 } catch (err) {
                     // Swallow errors silently but could be logged to a central channel if desired
-                    console.error('Failed to reset slowmode:', err?.message || err);
+                    logger.error('Failed to reset slowmode:', err?.message || err);
                 } finally {
                     scheduledResets.delete(channel.id);
                 }
@@ -140,10 +141,10 @@ module.exports = {
                     await logChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 }
             } catch (logErr) {
-                console.error('Failed to log cooldown action:', logErr?.message || logErr);
+                logger.error('Failed to log cooldown action:', logErr?.message || logErr);
             }
         } catch (error) {
-            console.error('Error setting channel slowmode:', error);
+            logger.error('Error setting channel slowmode:', error);
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Cooldown Failed\nFailed to set cooldown. Ensure I have permission to manage this channel.'));
             return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });

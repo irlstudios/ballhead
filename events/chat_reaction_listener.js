@@ -1,15 +1,12 @@
 const { Events } = require('discord.js');
 const cron = require('node-cron');
+const logger = require('../utils/logger');
 
 module.exports = {
     name: Events.ClientReady,
     once: true,
     async execute(client) {
         const channelId = '1036677798187778100';
-
-        client.on('clientReady', () => {
-            client.options.partials = ['MESSAGE', 'CHANNEL', 'REACTION'];
-        });
 
         cron.schedule('0 * * * *', async () => {
             try {
@@ -30,11 +27,11 @@ module.exports = {
                             await message.delete();
                         }
                     } catch (messageError) {
-                        console.error(`Failed to process message ID ${messageId}:`, messageError);
+                        logger.error(`Failed to process message ID ${messageId}:`, messageError);
                     }
                 }
             } catch (error) {
-                console.error('Error fetching and cleaning messages from channel:', error);
+                logger.error('Error fetching and cleaning messages from channel:', error);
             }
         });
     },

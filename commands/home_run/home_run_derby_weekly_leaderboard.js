@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -37,7 +38,7 @@ try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (err) {
-    console.warn('Font load failed, using default fonts:', err);
+    logger.warn('Font load failed, using default fonts:', err);
 }
 
 function drawTrophy(ctx, x, y, size, color) {
@@ -349,7 +350,7 @@ module.exports = {
                 files: [attachment]
             });
         } catch (error) {
-            console.error(error);
+            logger.error(error);
             const errorContainer = buildNoticeContainer({
                 title: 'Leaderboard Error',
                 subtitle: 'Home Run Derby',

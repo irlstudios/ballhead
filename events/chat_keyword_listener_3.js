@@ -1,13 +1,6 @@
-const { Pool } = require('pg');
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-
-const pool = new Pool({
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false }
-});
+const { executeQuery } = require('../db');
+const logger = require('../utils/logger');
 
 const lfgPhrases = [
     'I want someone to play',
@@ -124,11 +117,11 @@ async function fetchLfgPosts() {
             FROM lfg_data
             WHERE COALESCE(array_length(participants, 1), 0) < 10;
         `;
-        const result = await pool.query(query);
+        const result = await executeQuery(query);
 
         return result.rows.map(row => `https://discord.com/channels/752216589792706621/807771981222641664/${row.post_message_id}`);
     } catch (error) {
-        console.error('Error fetching LFG posts from database:', error);
+        logger.error('Error fetching LFG posts from database:', error);
         return [];
     }
 }
@@ -156,7 +149,7 @@ module.exports = {
                 }
 
             } catch (error) {
-                console.error(`Could not send LFG suggestion: ${error}`);
+                logger.error(`Could not send LFG suggestion: ${error}`);
             }
         }
     }

@@ -1,4 +1,5 @@
 const { SlashCommandBuilder } = require('discord.js');
+const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -55,7 +56,7 @@ module.exports = {
                     ephemeral: true
                 });
             } catch (error) {
-                console.error(error);
+                logger.error(error);
                 return interaction.reply({
                     content: `Failed to add the role. Please check my permissions and try again.`,
                     ephemeral: true
@@ -75,7 +76,7 @@ module.exports = {
                     ephemeral: true
                 });
             } catch (error) {
-                console.error(error);
+                logger.error(error);
                 return interaction.reply({
                     content: `Failed to remove the role. Please check my permissions and try again.`,
                     ephemeral: true

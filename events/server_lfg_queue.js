@@ -1,14 +1,8 @@
 const { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, Events, Collection, ThreadAutoArchiveDuration, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
-const { Client } = require('pg');
+const { executeQuery, loadAllLfgParticipants } = require('../db');
+const logger = require('../utils/logger');
 const { createCanvas, loadImage } = require('canvas');
 const { request } = require('undici');
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false }
-};
 
 const FORUM_CHANNEL_ID = '1409691288307105822';
 
@@ -74,7 +68,7 @@ async function ensureV2StarterMessage(starter, options) {
         try {
             starter = await starter.edit({ embeds: [] });
         } catch (error) {
-            console.warn('Failed to clear legacy embeds before v2 update:', error?.message || error);
+            logger.warn('Failed to clear legacy embeds before v2 update:', error?.message || error);
             return null;
         }
     }
@@ -142,30 +136,21 @@ async function generateQueueImage(client, queue, members) {
 }
 
 async function persistQueueThread(threadId, q, members) {
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
     const participants = Array.from(members);
-    await pgClient.query(
+    await executeQuery(
         `INSERT INTO lfg_queues(thread_id, queue_key, queue_name, size, status, participants, updated_at)
      VALUES($1,$2,$3,$4,$5,$6,NOW())
      ON CONFLICT (thread_id) DO UPDATE SET queue_key=EXCLUDED.queue_key, queue_name=EXCLUDED.queue_name, size=EXCLUDED.size, status=EXCLUDED.status, participants=EXCLUDED.participants, updated_at=NOW()`,
         [threadId, q.key, q.name, q.size, 'waiting', participants]
     );
-    await pgClient.end();
 }
 
 async function deleteQueueRow(threadId) {
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
-    await pgClient.query('DELETE FROM lfg_queues WHERE thread_id = $1', [threadId]);
-    await pgClient.end();
+    await executeQuery('DELETE FROM lfg_queues WHERE thread_id = $1', [threadId]);
 }
 
 async function loadAllQueueDefs() {
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
-    const res = await pgClient.query('SELECT thread_id, queue_key, queue_name, size, \'Queue\' as description FROM lfg_queues ORDER BY updated_at DESC');
-    await pgClient.end();
+    const res = await executeQuery('SELECT thread_id, queue_key, queue_name, size, \'Queue\' as description FROM lfg_queues ORDER BY updated_at DESC');
     return res.rows.map(r => ({
         id: r.thread_id,
         key: r.queue_key,
@@ -176,17 +161,11 @@ async function loadAllQueueDefs() {
 }
 
 async function updateThreadIdForQueue(queueKey, threadId) {
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
-    await pgClient.query('UPDATE lfg_queues SET thread_id = $1, updated_at = NOW() WHERE queue_key = $2', [threadId, queueKey]);
-    await pgClient.end();
+    await executeQuery('UPDATE lfg_queues SET thread_id = $1, updated_at = NOW() WHERE queue_key = $2', [threadId, queueKey]);
 }
 
 async function getQueueByNameFromDb(name) {
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
-    const res = await pgClient.query('SELECT thread_id, queue_key, queue_name, size, \'Queue\' as description FROM lfg_queues WHERE queue_name = $1 LIMIT 1', [name]);
-    await pgClient.end();
+    const res = await executeQuery('SELECT thread_id, queue_key, queue_name, size, \'Queue\' as description FROM lfg_queues WHERE queue_name = $1 LIMIT 1', [name]);
     if (!res.rows[0]) return null;
     return { id: res.rows[0].thread_id, key: res.rows[0].queue_key, name: res.rows[0].queue_name, size: res.rows[0].size, description: res.rows[0].description };
 }
@@ -195,20 +174,17 @@ async function pruneStaleQueueRows(client) {
     const forum = await client.channels.fetch(FORUM_CHANNEL_ID);
     if (!forum || forum.type !== ChannelType.GuildForum) return;
     const active = await forum.threads.fetchActive();
-    const archived = await forum.threads.fetchArchived({ limit: 100 });
+    const archivedAll = await fetchAllArchivedThreads(forum);
     const existingIds = new Set([
         ...active.threads.map(t => t.id),
-        ...archived.threads.map(t => t.id)
+        ...archivedAll.map(t => t.id)
     ]);
-    const pgClient = new Client(clientConfig);
-    await pgClient.connect();
-    const res = await pgClient.query('SELECT thread_id FROM lfg_queues');
+    const res = await executeQuery('SELECT thread_id FROM lfg_queues');
     for (const row of res.rows) {
         if (!existingIds.has(row.thread_id)) {
-            await pgClient.query('DELETE FROM lfg_queues WHERE thread_id = $1', [row.thread_id]);
+            await executeQuery('DELETE FROM lfg_queues WHERE thread_id = $1', [row.thread_id]);
         }
     }
-    await pgClient.end();
 }
 
 async function getThreadById(client, threadId) {
@@ -248,6 +224,13 @@ async function ensureQueueThreads(client) {
     const forum = await client.channels.fetch(FORUM_CHANNEL_ID);
     if (!forum || forum.type !== ChannelType.GuildForum) return;
     const defs = await loadAllQueueDefs();
+    const allParticipants = await loadAllLfgParticipants();
+    for (const row of allParticipants) {
+        const members = ensureQueueState(row.queue_key);
+        for (const userId of (row.participants || [])) {
+            members.add(userId);
+        }
+    }
     queueDefinitions = [];
     for (const q of defs) {
         upsertQueueDefinition(q);
@@ -266,7 +249,7 @@ async function ensureQueueThreads(client) {
                 message: { files: [img], flags: MessageFlags.IsComponentsV2, components: [buildContainer(q, ensureQueueState(q.key), img.name), buildButtons(q.key)] }
             });
             thread = created;
-            try { await thread.pin(); } catch (error) { console.error('Failed to pin queue thread:', error); }
+            try { await thread.pin(); } catch (error) { logger.error('Failed to pin queue thread:', error); }
             await updateThreadIdForQueue(q.key, thread.id);
         } else {
             const starter = await thread.fetchStarterMessage().catch(() => null);
@@ -312,7 +295,7 @@ module.exports = {
                 }
                 await updateThreadIdForQueue(q.key, thread.id);
                 await persistQueueThread(thread.id, q, members);
-            } catch (error) { console.error('Failed to refresh queue thread after creation:', error); }
+            } catch (error) { logger.error('Failed to refresh queue thread after creation:', error); }
         });
         client.on(Events.ThreadDelete, async thread => {
             await deleteQueueRow(thread.id);
@@ -337,7 +320,7 @@ module.exports = {
                 }
                 await updateThreadIdForQueue(q.key, newThread.id);
                 await persistQueueThread(newThread.id, q, members);
-            } catch (error) { console.error('Failed to refresh queue thread after update:', error); }
+            } catch (error) { logger.error('Failed to refresh queue thread after update:', error); }
         });
         client.on('lfg:refresh', async () => {
             await ensureQueueThreads(client);
