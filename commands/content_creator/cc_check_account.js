@@ -2,7 +2,9 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const moment = require('moment');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const sheetId = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const logger = require('../../utils/logger');
+const { SPREADSHEET_CONTENT_CREATORS } = require('../../config/constants');
+const sheetId = SPREADSHEET_CONTENT_CREATORS;
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 
 const PLATFORMS = {
@@ -126,7 +128,7 @@ function getPlatformData(platform, discordId, valuesByRange) {
             config
         };
     } catch (error) {
-        console.error(`Error fetching ${platform} data:`, error);
+        logger.error(`Error fetching ${platform} data:`, error);
         return null;
     }
 }
@@ -495,7 +497,7 @@ module.exports = {
 
             const sheetsStartTime = Date.now();
             const sheets = await getSheetsClient();
-            console.log(`[cc-check-progress] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
+            logger.info(`[cc-check-progress] Sheets client ready in ${Date.now() - sheetsStartTime}ms`);
             const rangesToFetch = Array.from(new Set(
                 Object.values(PLATFORMS).flatMap(config => ([
                     config.appRange,
@@ -510,7 +512,7 @@ module.exports = {
                 ranges: rangesToFetch,
                 ttlMs: SHEET_CACHE_TTL_MS
             });
-            console.log(`[cc-check-progress] Data fetched in ${Date.now() - cacheStartTime}ms`);
+            logger.info(`[cc-check-progress] Data fetched in ${Date.now() - cacheStartTime}ms`);
 
             const processingStartTime = Date.now();
             const targetUser = interaction.options.getUser('user');
@@ -573,9 +575,9 @@ module.exports = {
 
             const totalTime = Date.now() - cmdStartTime;
             const processingTime = Date.now() - processingStartTime;
-            console.log(`[cc-check-progress] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
+            logger.info(`[cc-check-progress] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
-            console.error('Error in cc-check-progress:', error);
+            logger.error('Error in cc-check-progress:', error);
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Request Failed\nAn unexpected error occurred while processing your request.'));
             if (!interaction.replied && !interaction.deferred) {

@@ -1,33 +1,8 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { Client } = require('pg');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
+const { executeQuery } = require('../../db');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) {
-        parts.push(`## ${title}`);
-    }
-    if (subtitle) {
-        parts.push(subtitle);
-    }
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) {
-            parts.push('');
-        }
-        parts.push(...lines.filter(Boolean));
-    }
-    if (parts.length === 0) {
-        return null;
-    }
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
-}
-
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false } };  
+const { buildTextBlock } = require('../../utils/ui');
+const logger = require('../../utils/logger');  
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -45,20 +20,17 @@ module.exports = {
         const sheetId = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
         const sheetTabName = 'Officials LFO Interactions';
 
-        const client = new Client(clientConfig);
-        await client.connect();
-
         try {
             const queries = [
-                client.query(
+                executeQuery(
                     'SELECT post_owner_discord_id, discord_thread_id, participants FROM "lfm_data" WHERE post_owner_discord_id = $1 AND discord_thread_id IS NOT NULL',
                     [commandUserId]
                 ),
-                client.query(
+                executeQuery(
                     'SELECT post_owner_discord_id, discord_thread_id, participants FROM lfg_data WHERE post_owner_discord_id = $1 AND discord_thread_id IS NOT NULL',
                     [commandUserId]
                 ),
-                client.query(
+                executeQuery(
                     'SELECT post_owner_discord_id, discord_thread_id, participants FROM lfo_data WHERE post_owner_discord_id = $1 AND discord_thread_id IS NOT NULL',
                     [commandUserId]
                 )
@@ -104,7 +76,7 @@ module.exports = {
 
             const updatedParticipants = participants.filter(participant => participant !== user.id);
 
-            await client.query(`UPDATE "${lfgSystem}" SET participants = $1 WHERE discord_thread_id = $2`, [
+            await executeQuery(`UPDATE "${lfgSystem}" SET participants = $1 WHERE discord_thread_id = $2`, [
                 updatedParticipants,
                 threadId,
             ]);
@@ -138,12 +110,10 @@ module.exports = {
                 ephemeral: true
             });
         } catch (error) {
-            console.error('Error handling interaction or updating Google Sheet:', error);
+            logger.error('Error handling interaction or updating Google Sheet:', error);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Remove Participant', lines: ['An error occurred while processing your request.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
-        } finally {
-            await client.end();
         }
     } };

@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
+const { LEVEL_5_ROLE_ID, HIGHER_LEVEL_ROLES } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -26,21 +27,13 @@ module.exports = {
         .setName('apply-for-official')
         .setDescription('Submit an application to become an official'),
     async execute(interaction) {
-        const levelRoles = [
-            '924522770057031740',
-            '924522921370714152',
-            '924522979768016946',
-            '924523044268032080',
-            '1242262635223715971',
-            '1087071951270453278',
-            '1223408044784746656'
-        ];
+        const levelRoles = [LEVEL_5_ROLE_ID, ...HIGHER_LEVEL_ROLES];
 
         const member = await interaction.guild.members.fetch(interaction.user.id);
 
         if (!levelRoles.some(roleId => member.roles.cache.has(roleId))) {
             const errorContainer = new ContainerBuilder();
-            const block = buildTextBlock({ title: 'Role Required', subtitle: 'Official Application', lines: ['You must have <@&924522770057031740>+ to apply for official.'] });
+            const block = buildTextBlock({ title: 'Role Required', subtitle: 'Official Application', lines: [`You must have <@&${LEVEL_5_ROLE_ID}>+ to apply for official.`] });
             if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({
                 flags: MessageFlags.IsComponentsV2,

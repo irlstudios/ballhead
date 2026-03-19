@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_LFO } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -21,7 +23,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const SHEET_ID = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
+const SHEET_ID = SPREADSHEET_LFO;
 const FORM_RESPONSES_TAB = 'Form Responses 1';
 const STATS_TAB = 'Stats';
 
@@ -57,6 +59,7 @@ module.exports = {
         .setDescription('Check your current grade and requirement'),
     async execute(interaction) {
         const discordName = interaction.user.username.toLowerCase();
+        const discordId = interaction.user.id;
         const sheets = await getSheetsClient();
 
         try {
@@ -66,12 +69,15 @@ module.exports = {
             const dateRow = stats[0];
             const currentWeekIndex = getCurrentWeekIndex(dateRow);
 
-            const gradeInfo = formResponses.find(row => row[1]?.toLowerCase() === discordName);
+            // Try matching by Discord ID first (more reliable), then fall back to username
+            const gradeInfo = formResponses.find(row => row[1] === discordId)
+                || formResponses.find(row => row[1]?.toLowerCase() === discordName);
             const hostedInfo = gradeInfo
                 ? `Video: ${gradeInfo[4] || '--'}\nScore: ${gradeInfo[7] || 'N/A'}`
                 : 'No grading information found.';
 
-            const statsInfo = stats.find(row => row[0]?.toLowerCase() === discordName);
+            const statsInfo = stats.find(row => row[0] === discordId)
+                || stats.find(row => row[0]?.toLowerCase() === discordName);
             if (!gradeInfo && !statsInfo) {
                 await interaction.reply('No grading or requirement information found for you.');
                 return;
@@ -89,14 +95,14 @@ module.exports = {
 
             await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [statusContainer] });
         } catch (error) {
-            console.error('Error fetching grade or requirement data:', error);
+            logger.error('Error fetching grade or requirement data:', error);
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply('There was an error fetching your grade and requirement status.');
             } else {
                 await interaction.editReply('There was an error fetching your grade and requirement status.');
             }
         } finally {
-            console.log('status displayed');
+            logger.info('status displayed');
         }
     }
 };

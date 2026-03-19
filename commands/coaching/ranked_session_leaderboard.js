@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont, loadImage } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_RANKED_SESSIONS, BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -23,10 +25,10 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const sheetId = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
+const sheetId = SPREADSHEET_RANKED_SESSIONS;
 const BACKGROUND_IMAGE_URL = 'https://cdn.ballhead.app/web_assets/IMG_0421.png';
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
-const ERROR_LOG_GUILD_ID = '1233740086839869501';
+const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
+const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
 
 function buildNoticeContainer({ title, subtitle, lines}) {
     const container = new ContainerBuilder();
@@ -39,7 +41,7 @@ try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (error) {
-    console.error('Error loading fonts:', error);
+    logger.error('Error loading fonts:', error);
 }
 
 // Draw rounded rectangle
@@ -165,7 +167,7 @@ module.exports = {
             try {
                 backgroundImage = await loadImage(BACKGROUND_IMAGE_URL);
             } catch (imgError) {
-                console.error('Error loading background image:', imgError);
+                logger.error('Error loading background image:', imgError);
             }
 
             const canvas = createCanvas(1000, 1400);
@@ -375,7 +377,7 @@ module.exports = {
             });
 
         } catch (error) {
-            console.error('Error fetching ranked session leaderboard:', error);
+            logger.error('Error fetching ranked session leaderboard:', error);
 
             try {
                 const errorGuild = await interaction.client.guilds.fetch(ERROR_LOG_GUILD_ID);
@@ -387,7 +389,7 @@ module.exports = {
 
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
-                console.error('Failed to log error:', logError);
+                logger.error('Failed to log error:', logError);
             }
 
             const errorContainer = buildNoticeContainer({

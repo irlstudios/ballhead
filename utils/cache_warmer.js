@@ -1,4 +1,5 @@
 const { warmCache, getCacheStats, startCacheMaintenance } = require('./sheets_cache');
+const logger = require('./logger');
 
 const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const CACHE_TTL_MS = 1800000; // 30 minutes
@@ -20,7 +21,7 @@ const COMMON_RANGES = [
 let warmerInterval = null;
 
 async function startCacheWarmer() {
-    console.log('[Cache Warmer] Starting cache warming system...');
+    logger.info('[Cache Warmer] Starting cache warming system...');
 
     // Start cache maintenance (cleanup expired entries, reset stats)
     startCacheMaintenance();
@@ -34,7 +35,7 @@ async function startCacheWarmer() {
 
     // Set up periodic warming
     warmerInterval = setInterval(async () => {
-        console.log('[Cache Warmer] Periodic cache refresh triggered');
+        logger.info('[Cache Warmer] Periodic cache refresh triggered');
         await warmCache({
             spreadsheetId: SPREADSHEET_ID,
             ranges: COMMON_RANGES,
@@ -43,17 +44,17 @@ async function startCacheWarmer() {
 
         // Log cache stats
         const stats = getCacheStats();
-        console.log('[Cache Stats]', JSON.stringify(stats, null, 2));
+        logger.info('[Cache Stats]', JSON.stringify(stats, null, 2));
     }, WARM_INTERVAL_MS);
 
-    console.log(`[Cache Warmer] Cache will refresh every ${WARM_INTERVAL_MS / 1000 / 60} minutes`);
+    logger.info(`[Cache Warmer] Cache will refresh every ${WARM_INTERVAL_MS / 1000 / 60} minutes`);
 }
 
 function stopCacheWarmer() {
     if (warmerInterval) {
         clearInterval(warmerInterval);
         warmerInterval = null;
-        console.log('[Cache Warmer] Stopped');
+        logger.info('[Cache Warmer] Stopped');
     }
 }
 

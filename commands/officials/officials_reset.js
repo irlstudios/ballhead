@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_LFO, OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -22,12 +24,12 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 }
 
 const roleHierarchy = {
-    '1286098187223957617': 3,
-    '1286098139513880648': 2,
-    '1286098091396698134': 1
+    [OFFICIAL_SENIOR_ROLE_ID]: 3,
+    [OFFICIAL_ACTIVE_ROLE_ID]: 2,
+    [OFFICIAL_PROSPECT_ROLE_ID]: 1
 };
 
-const roleIds = ['1286098187223957617', '1286098139513880648', '1286098091396698134'];
+const roleIds = [OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID];
 
 function sortOfficialsByRole(officials) {
     return officials.sort((a, b) => roleHierarchy[b.highestRoleId] - roleHierarchy[a.highestRoleId]);
@@ -53,9 +55,9 @@ async function updateGoogleSheet(sheets, officials, spreadsheetId) {
             requestBody: { values: rows }
         });
 
-        console.log('Google Sheet updated with sorted officials data');
+        logger.info('Google Sheet updated with sorted officials data');
     } catch (error) {
-        console.log('Failed to update Google Sheets', { error });
+        logger.info('Failed to update Google Sheets', { error });
         throw new Error('Google Sheets update failed');
     }
 }
@@ -77,7 +79,7 @@ module.exports = {
             }
 
             const sheets = await getSheetsClient();
-            const spreadsheetId = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
+            const spreadsheetId = SPREADSHEET_LFO;
 
             await guild.members.fetch();
 
@@ -111,7 +113,7 @@ module.exports = {
             if (block) successContainer.addTextDisplayComponents(block);
             await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
-            console.log('Error executing the list_officials command', { error });
+            logger.info('Error executing the list_officials command', { error });
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Officials Sync', lines: ['An error occurred while processing your request.'] });
             if (block) errorContainer.addTextDisplayComponents(block);

@@ -1,31 +1,14 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
+const { compSquadLevelRoles, contentSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const logger = require('../../utils/logger');
 
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const LOGGING_GUILD_ID = '1233740086839869501';
-const LOGGING_CHANNEL_ID = '1233853415952748645';
-const ERROR_LOGGING_CHANNEL_ID = '1233853458092658749';
-const compSquadLevelRoles = [
-    '1288918067178508423', '1288918165417365576', '1288918209294237707', '1288918281343733842', '1200889836844896316'
-];
-const contentSquadLevelRoles = [
-    '1291090496869109762', '1291090569346682931', '1291090608315699229', '1291090760405356708'
-];
-const mascotSquads = [
-    { name: 'Duck Squad', roleId: '1359614680615620608' },
-    { name: 'Pumpkin Squad', roleId: '1361466564292907060' },
-    { name: 'Snowman Squad', roleId: '1361466801443180584' },
-    { name: 'Gorilla Squad', roleId: '1361466637261471961' },
-    { name: 'Bee Squad', roleId: '1361466746149666956' },
-    { name: 'Alligator Squad', roleId: '1361466697059664043' },
-];
+const extendedCompRoles = [...compSquadLevelRoles, '1200889836844896316'];
 
 const SL_ID = 1;
-const SL_SQUAD_NAME = 2;
-const SL_EVENT_SQUAD = 3;
 const SM_ID = 1;
 const SM_SQUAD_NAME = 2;
-const AD_ID = 1;
 const AD_SQUAD_TYPE = 3;
 
 module.exports = {
@@ -80,9 +63,9 @@ module.exports = {
 
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A:E' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
             ]).catch(() => { throw new Error('Failed to retrieve data from Google Sheets.'); });
 
             const allData = (allDataResponse.data.values || []);
@@ -135,27 +118,27 @@ module.exports = {
 
             const leaderAllDataRow = allData.find(row => row && row.length > AD_ID && row[AD_ID] === commandUserID);
             const squadTypeForRoles = leaderAllDataRow ? leaderAllDataRow[AD_SQUAD_TYPE] : null;
-            const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? compSquadLevelRoles :
+            const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? extendedCompRoles :
                 squadTypeForRoles === 'Content' ? contentSquadLevelRoles : [];
 
             const eventSquadName = leaderRow[SL_EVENT_SQUAD];
             let mascotRoleIdToRemove = null;
             if (eventSquadName && eventSquadName !== 'N/A') {
-                const mascotInfo = mascotSquads.find(m => m.name === eventSquadName);
+                const mascotInfo = findMascotByName(eventSquadName);
                 if (mascotInfo) {
                     mascotRoleIdToRemove = mascotInfo.roleId;
-                    console.log(`Squad ${leaderSquadName} has mascot role: ${eventSquadName} (${mascotRoleIdToRemove})`);
+                    logger.info(`Squad ${leaderSquadName} has mascot role: ${eventSquadName} (${mascotRoleIdToRemove})`);
                 } else {
-                    console.warn(`Squad ${leaderSquadName} has event squad '${eventSquadName}' but no matching role ID found.`);
+                    logger.warn(`Squad ${leaderSquadName} has event squad '${eventSquadName}' but no matching role ID found.`);
                 }
             }
 
 
             const sheetRowIndexSM = targetMemberRowIndex + 2;
             const clearRangeSM = `Squad Members!A${sheetRowIndexSM}:E${sheetRowIndexSM}`;
-            console.log(`Clearing Squad Members range ${clearRangeSM} for user ${targetUserID}`);
+            logger.info(`Clearing Squad Members range ${clearRangeSM} for user ${targetUserID}`);
             await sheets.spreadsheets.values.clear({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: clearRangeSM,
             }).catch(err => { throw new Error(`Failed to clear row in Squad Members sheet: ${err.message}`); });
 
@@ -172,25 +155,25 @@ module.exports = {
                 const sheetRowIndexAD = targetAllDataRowIndex + 2;
                 const rangeToUpdateAD = `All Data!C${sheetRowIndexAD}:G${sheetRowIndexAD}`;
                 const valuesToUpdateAD = [['N/A', 'N/A', 'N/A', 'FALSE', 'No']];
-                console.log(`Updating All Data range ${rangeToUpdateAD} for user ${targetUserID}`);
+                logger.info(`Updating All Data range ${rangeToUpdateAD} for user ${targetUserID}`);
                 await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_ID,
+                    spreadsheetId: SPREADSHEET_SQUADS,
                     range: rangeToUpdateAD,
                     valueInputOption: 'RAW',
                     resource: { values: valuesToUpdateAD },
                 }).catch(err => { throw new Error(`Failed to update row in All Data sheet: ${err.message}`); });
             } else {
-                console.warn(`User ${targetUserTag} (${targetUserID}) was in Squad Members but not found in All Data.`);
+                logger.warn(`User ${targetUserTag} (${targetUserID}) was in Squad Members but not found in All Data.`);
             }
-            console.log(`Updated sheets for removing ${targetUserTag} from ${leaderSquadName}`);
+            logger.info(`Updated sheets for removing ${targetUserTag} from ${leaderSquadName}`);
 
             try {
                 const memberToRemove = await guild.members.fetch(targetUserID);
                 if (memberToRemove.nickname && memberToRemove.nickname.toUpperCase().startsWith(`[${leaderSquadName.toUpperCase()}]`)) {
-                    console.log(`Resetting nickname for ${targetUserTag}`);
+                    logger.info(`Resetting nickname for ${targetUserTag}`);
                     await memberToRemove.setNickname(null).catch(nickErr => {
-                        if (nickErr.code !== 50013) { console.error(`Could not reset nickname for ${targetUserTag}:`, nickErr.message); }
-                        else { console.log(`Missing permissions to reset nickname for ${targetUserTag}.`); }
+                        if (nickErr.code !== 50013) { logger.error(`Could not reset nickname for ${targetUserTag}: ${nickErr.message}`); }
+                        else { logger.info(`Missing permissions to reset nickname for ${targetUserTag}.`); }
                     });
                 }
 
@@ -202,24 +185,24 @@ module.exports = {
                 if (rolesToRemove.length > 0) {
                     const rolesMemberHas = rolesToRemove.filter(roleId => memberToRemove.roles.cache.has(roleId));
                     if (rolesMemberHas.length > 0) {
-                        console.log(`Attempting to remove roles [${rolesMemberHas.join(', ')}] from ${targetUserTag}`);
+                        logger.info(`Attempting to remove roles [${rolesMemberHas.join(', ')}] from ${targetUserTag}`);
                         await memberToRemove.roles.remove(rolesMemberHas).catch(roleErr => {
                             if (roleErr.code !== 50013 && roleErr.code !== 10011) {
-                                console.error(`Failed to remove roles from ${targetUserTag}:`, roleErr.message);
+                                logger.error(`Failed to remove roles from ${targetUserTag}: ${roleErr.message}`);
                             } else {
-                                console.log(`Missing permissions or roles already gone for ${targetUserTag}.`);
+                                logger.info(`Missing permissions or roles already gone for ${targetUserTag}.`);
                             }
                         });
                     } else {
-                        console.log(`${targetUserTag} did not have any relevant roles to remove.`);
+                        logger.info(`${targetUserTag} did not have any relevant roles to remove.`);
                     }
                 }
 
             } catch (discordError) {
                 if (discordError.code === 10007) {
-                    console.log(`Member ${targetUserTag} (${targetUserID}) left the server before nickname/roles could be updated.`);
+                    logger.info(`Member ${targetUserTag} (${targetUserID}) left the server before nickname/roles could be updated.`);
                 } else {
-                    console.error(`Error updating Discord member ${targetUserTag}:`, discordError.message);
+                    logger.error(`Error updating Discord member ${targetUserTag}: ${discordError.message}`);
                 }
                 const warningContainer = new ContainerBuilder();
                 warningContainer.addTextDisplayComponents(
@@ -227,12 +210,12 @@ module.exports = {
                     new TextDisplayBuilder().setContent(`Could not reset nickname or remove roles for ${targetUserTag}.\nThey may have left the server.`)
                 );
                 await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true }).catch(followUpError => {
-                    console.error('Failed to send follow-up warning after remove-from-squad:', followUpError);
+                    logger.error('Failed to send follow-up warning after remove-from-squad:', followUpError);
                 });
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 logContainer.addTextDisplayComponents(
@@ -241,7 +224,7 @@ module.exports = {
                 );
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
-                console.error('Failed to send removal log message:', logError);
+                logger.error('Failed to send removal log message:', logError);
             }
 
             const successContainer = new ContainerBuilder();
@@ -255,10 +238,10 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            console.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
+            logger.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
-                const errorChannel = await errorGuild.channels.fetch(ERROR_LOGGING_CHANNEL_ID);
+                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Remove From Squad Error'),
@@ -266,14 +249,14 @@ module.exports = {
                 );
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
-                console.error('Failed to log removal command error:', logError);
+                logger.error('Failed to log removal command error:', logError);
             }
             const replyContainer = new ContainerBuilder();
             replyContainer.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Request Failed'),
                 new TextDisplayBuilder().setContent(`An error occurred: ${error.message || 'Please try again later.'}`)
             );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(console.error);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
         }
     }
 };

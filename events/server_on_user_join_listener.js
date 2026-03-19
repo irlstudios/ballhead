@@ -1,15 +1,6 @@
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder, Events, GuildMemberFlagsBitField } = require('discord.js');
-const { Pool } = require('pg');
-
-const clientConfig = {
-    host: process.env.DB_HOST,
-    user: process.env.DB_USER,
-    database: process.env.DB_DATABASE_NAME,
-    password: process.env.DB_PASSWORD,
-    ssl: { rejectUnauthorized: false },
-};
-
-const pool = new Pool(clientConfig);
+const { pool } = require('../db');
+const logger = require('../utils/logger');
 const ONBOARDING_WINDOW_HOURS = 48;
 let botClient = null;
 let onboardingRemindersReady = null;
@@ -68,9 +59,9 @@ module.exports = {
                 await pool.query(
                     'INSERT INTO onboarding_reminders (user_id, reminder_key, send_at, sent) VALUES ($1, $2, NOW() + INTERVAL \'1 hour\', false) ON CONFLICT (user_id, reminder_key) DO NOTHING',
                     [member.id, 'hour_1']
-                ).catch(console.error);
+                ).catch(err => logger.error('Failed to insert onboarding reminder:', err));
             } catch (error) {
-                console.error(`Could not send welcome DM to ${member.user.tag}:`, error);
+                logger.error(`Could not send welcome DM to ${member.user.tag}:`, error);
             }
         }
     }
@@ -84,14 +75,19 @@ if (!global.onboardingReminderLoopStarted) {
         try {
             await ensureOnboardingRemindersTable();
             const { rows } = await pool.query(
-                `DELETE FROM onboarding_reminders
-                 WHERE send_at <= NOW() AND sent = false
-                 RETURNING user_id, reminder_key`
+                `SELECT user_id, reminder_key FROM onboarding_reminders
+                 WHERE send_at <= NOW() AND sent = false`
             );
 
             for (const ticket of rows) {
                 const user = await botClient.users.fetch(ticket.user_id).catch(() => null);
-                if (!user) continue;
+                if (!user) {
+                    await pool.query(
+                        'DELETE FROM onboarding_reminders WHERE user_id = $1 AND reminder_key = $2',
+                        [ticket.user_id, ticket.reminder_key]
+                    ).catch(() => null);
+                    continue;
+                }
 
                 const reminderContainer = new ContainerBuilder();
                 reminderContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Keep the Ball Rolling'));
@@ -104,10 +100,22 @@ if (!global.onboardingReminderLoopStarted) {
                 ].join('\n')));
                 reminderContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('-# See you on the court'));
 
-                await user.send({ flags: MessageFlags.IsComponentsV2, components: [reminderContainer] }).catch(() => null);
+                const sent = await user.send({ flags: MessageFlags.IsComponentsV2, components: [reminderContainer] }).catch(() => null);
+                if (sent) {
+                    await pool.query(
+                        'DELETE FROM onboarding_reminders WHERE user_id = $1 AND reminder_key = $2',
+                        [ticket.user_id, ticket.reminder_key]
+                    ).catch(() => null);
+                } else {
+                    // Mark as sent to avoid infinite retries (DMs are likely disabled)
+                    await pool.query(
+                        'UPDATE onboarding_reminders SET sent = true WHERE user_id = $1 AND reminder_key = $2',
+                        [ticket.user_id, ticket.reminder_key]
+                    ).catch(() => null);
+                }
             }
         } catch (err) {
-            console.error('Onboarding heartbeat loop error:', err);
+            logger.error('Onboarding heartbeat loop error:', err);
         }
     }, 5 * 60 * 1000);
 }

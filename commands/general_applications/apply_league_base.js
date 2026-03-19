@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
+const { LEVEL_5_ROLE_ID, HIGHER_LEVEL_ROLES } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -27,19 +28,8 @@ module.exports = {
         .setName('apply-base-league')
         .setDescription('Apply to register a Base League'),
     async execute(interaction) {
-        const level5RoleId = '924522770057031740';
-        const higherRoles = [
-            '924522921370714152',
-            '924522979768016946',
-            '924523044268032080',
-            '1242262635223715971',
-            '925177626644058153',
-            '1087071951270453278',
-            '1223408044784746656',
-        ];
-
         const userRoles = interaction.member.roles.cache;
-        const hasRequiredRole = userRoles.has(level5RoleId) || higherRoles.some(roleId => userRoles.has(roleId));
+        const hasRequiredRole = userRoles.has(LEVEL_5_ROLE_ID) || HIGHER_LEVEL_ROLES.some(roleId => userRoles.has(roleId));
 
         if (!hasRequiredRole) {
             const errorContainer = new ContainerBuilder();

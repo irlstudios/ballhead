@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const credentials = require('../resources/secret.json');
+const logger = require('./logger');
 
 let sheetsClient = null;
 let sheetsClientPromise = null;
@@ -85,7 +86,7 @@ async function getCachedValues({ sheets, spreadsheetId, ranges, ttlMs = 120000 }
             totalRows += (vr.values || []).length;
         }
 
-        console.log(`[Sheets API] Fetched ${missing.length} ranges (${totalRows} total rows) in ${apiDuration}ms`);
+        logger.info(`[Sheets API] Fetched ${missing.length} ranges (${totalRows} total rows) in ${apiDuration}ms`);
 
         for (let i = 0; i < missing.length; i += 1) {
             const range = missing[i];
@@ -97,7 +98,8 @@ async function getCachedValues({ sheets, spreadsheetId, ranges, ttlMs = 120000 }
     }
 
     const totalTime = Date.now() - startTime;
-    console.log(`[Cache] Total: ${totalTime}ms | Hits: ${cacheStats.hits - missing.length} | Misses: ${missing.length} | Cache size: ${rangeCache.size}`);
+    const hitsThisCall = ranges.length - missing.length;
+    logger.info(`[Cache] Total: ${totalTime}ms | Hits: ${hitsThisCall} | Misses: ${missing.length} | Cache size: ${rangeCache.size}`);
 
     return results;
 }
@@ -106,13 +108,13 @@ async function getCachedValues({ sheets, spreadsheetId, ranges, ttlMs = 120000 }
 async function warmCache({ spreadsheetId, ranges, ttlMs = 1800000 }) {
     try {
         const sheets = await getSheetsClient();
-        console.log(`[Cache Warmer] Warming cache for ${ranges.length} ranges...`);
+        logger.info(`[Cache Warmer] Warming cache for ${ranges.length} ranges...`);
         const startTime = Date.now();
         await getCachedValues({ sheets, spreadsheetId, ranges, ttlMs });
         const duration = Date.now() - startTime;
-        console.log(`[Cache Warmer] Cache warmed in ${duration}ms`);
+        logger.info(`[Cache Warmer] Cache warmed in ${duration}ms`);
     } catch (error) {
-        console.error('[Cache Warmer] Error warming cache:', error.message);
+        logger.error('[Cache Warmer] Error warming cache:', error.message);
     }
 }
 
@@ -140,7 +142,7 @@ function getCacheStats() {
 // Clear cache (useful for manual refresh)
 function clearCache() {
     rangeCache.clear();
-    console.log('[Cache] Cache cleared');
+    logger.info('[Cache] Cache cleared');
 }
 
 // Clean up expired cache entries
@@ -156,7 +158,7 @@ function cleanupExpiredEntries() {
     }
 
     if (cleaned > 0) {
-        console.log(`[Cache Cleanup] Removed ${cleaned} expired entries. Cache size: ${rangeCache.size}`);
+        logger.info(`[Cache Cleanup] Removed ${cleaned} expired entries. Cache size: ${rangeCache.size}`);
     }
 }
 
@@ -169,7 +171,7 @@ function resetCacheStats() {
     cacheStats.totalApiTime = 0;
     cacheStats.lastReset = Date.now();
 
-    console.log('[Cache Stats] Reset statistics. Previous session:', {
+    logger.info('[Cache Stats] Reset statistics. Previous session:', {
         hits: oldStats.hits,
         misses: oldStats.misses,
         hitRate: oldStats.hits + oldStats.misses > 0
@@ -198,7 +200,7 @@ function startCacheMaintenance() {
         resetCacheStats();
     }, 86400000); // 24 hours
 
-    console.log('[Cache Maintenance] Started periodic cleanup (every 10 minutes) and stats reset (every 24 hours)');
+    logger.info('[Cache Maintenance] Started periodic cleanup (every 10 minutes) and stats reset (every 24 hours)');
 }
 
 // Stop periodic maintenance tasks
@@ -206,12 +208,12 @@ function stopCacheMaintenance() {
     if (cleanupInterval) {
         clearInterval(cleanupInterval);
         cleanupInterval = null;
-        console.log('[Cache Maintenance] Stopped');
+        logger.info('[Cache Maintenance] Stopped');
     }
     if (statsResetInterval) {
         clearInterval(statsResetInterval);
         statsResetInterval = null;
-        console.log('[Cache Maintenance] Stats reset stopped');
+        logger.info('[Cache Maintenance] Stats reset stopped');
     }
 }
 

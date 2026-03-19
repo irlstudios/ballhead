@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -41,14 +42,14 @@ module.exports = {
     async execute(interaction) {
         const interactionAgeMs = Date.now() - interaction.createdTimestamp;
         if (interactionAgeMs > 2500) {
-            console.warn(`[ff-stats] Interaction too old to defer (${interactionAgeMs}ms).`);
+            logger.warn(`[ff-stats] Interaction too old to defer (${interactionAgeMs}ms).`);
             return;
         }
         try {
             await interaction.deferReply();
         } catch (error) {
             if (error?.code === 10062) {
-                console.warn('[ff-stats] Interaction expired before deferReply.');
+                logger.warn('[ff-stats] Interaction expired before deferReply.');
                 return;
             }
             throw error;
