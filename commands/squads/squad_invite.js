@@ -1,12 +1,8 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { insertInvite, fetchInviteById, deleteInvite } = require('../../db');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const LOGGING_GUILD_ID = '1233740086839869501';
-const LOGGING_CHANNEL_ID = '1233853415952748645';
-const ERROR_LOG_CHANNEL_ID = '1233853458092658749';
-const MAX_SQUAD_MEMBERS = 10;
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS } = require('../../config/constants');
+const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 
 module.exports = {
@@ -62,11 +58,11 @@ module.exports = {
 
         try {
             const [allDataResponse, squadMembersResponse, squadLeadersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A:E' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
             ]).catch(err => {
-                console.error('Error fetching sheet data:', err);
+                logger.error('Error fetching sheet data:', err);
                 throw new Error('Failed to retrieve necessary data from Google Sheets.');
             });
 
@@ -176,7 +172,7 @@ module.exports = {
 
             } catch (dmError) {
                 if (dmError.code === 50007) {
-                    console.log(`Cannot send DM to ${targetUserTag} (${targetUserId}) - DMs likely disabled.`);
+                    logger.info(`Cannot send DM to ${targetUserTag} (${targetUserId}) - DMs likely disabled.`);
                     const dmFailedContainer = new ContainerBuilder()
                         .setAccentColor(0xF1C40F)
                         .addTextDisplayComponents(
@@ -186,7 +182,7 @@ module.exports = {
                         );
                     await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [dmFailedContainer], ephemeral: true });
                 } else {
-                    console.error(`Failed to send invite DM to ${targetUserId}:`, dmError);
+                    logger.error(`Failed to send invite DM to ${targetUserId}:`, dmError);
                     throw new Error('Failed to send the invite DM due to an unexpected error.');
                 }
                 return;
@@ -198,12 +194,12 @@ module.exports = {
                     new ButtonBuilder().setCustomId(`invite_reject_${inviteMessage.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger),
                 );
             await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [inviteContainer, row] }).catch(editErr => {
-                console.error(`Failed to add buttons to invite DM ${inviteMessage.id}: ${editErr.message}`);
+                logger.error(`Failed to add buttons to invite DM ${inviteMessage.id}: ${editErr.message}`);
             });
 
             let trackingMessage;
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
                 const trackingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const trackingContainer = new ContainerBuilder();
                 trackingContainer.addTextDisplayComponents(
@@ -212,7 +208,7 @@ module.exports = {
                 );
                 trackingMessage = await trackingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [trackingContainer] });
             } catch (logError) {
-                console.error(`Failed to send invite log message: ${logError.message}`);
+                logger.error(`Failed to send invite log message: ${logError.message}`);
             }
 
             try {
@@ -225,17 +221,18 @@ module.exports = {
                     squad_type: finalSquadType,
                     invite_status: 'Pending'
                 };
-                await insertInvite(postData.command_user_id, postData.invited_member_id, postData.squad_name, postData.message_id, postData.tracking_message_id, postData.squad_type);
-                console.log(`Posted invite data for DM ${inviteMessage.id}`);
+                const expiresAt = new Date(Date.now() + INVITE_EXPIRY_MS);
+                await insertInvite(postData.command_user_id, postData.invited_member_id, postData.squad_name, postData.message_id, postData.tracking_message_id, postData.squad_type, expiresAt);
+                logger.info(`Posted invite data for DM ${inviteMessage.id}`);
             } catch (apiError) {
-                console.error(`Failed to post invite data: ${apiError.message}`);
+                logger.error(`Failed to post invite data: ${apiError.message}`);
             }
 
             setTimeout(async () => {
                 try {
                     const currentInviteData = await fetchInviteById(inviteMessage.id);
                     if (currentInviteData && currentInviteData.invite_status === 'Pending') {
-                        console.log(`Invite ${inviteMessage.id} expired.`);
+                        logger.info(`Invite ${inviteMessage.id} expired.`);
                         const expiredContainer = new ContainerBuilder()
                             .setAccentColor(0x95A5A6)
                             .addTextDisplayComponents(
@@ -243,20 +240,20 @@ module.exports = {
                                 new TextDisplayBuilder().setContent(`The invite from <@${commandUserID}> to join **${squadName}** has expired.`),
                                 new TextDisplayBuilder().setContent(`-# Ask them to send a new invite if you're still interested`)
                             );
-                        await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [expiredContainer] }).catch(editErr => console.warn(`Could not edit expired invite DM ${inviteMessage.id}: ${editErr.message}`));
+                        await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [expiredContainer] }).catch(editErr => logger.warn(`Could not edit expired invite DM ${inviteMessage.id}: ${editErr.message}`));
                         if (trackingMessage) {
                             const expiredTracking = new ContainerBuilder();
                             expiredTracking.addTextDisplayComponents(
                                 new TextDisplayBuilder().setContent('## Invite Expired'),
                                 new TextDisplayBuilder().setContent(`Invite from **${commandUserTag}** (<@${commandUserID}>) to **${targetUserTag}** (<@${targetUserId}>) for squad **${squadName}**.`)
                             );
-                            await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [expiredTracking] }).catch(editErr => console.warn(`Could not edit expired tracking message ${trackingMessage.id}: ${editErr.message}`));
+                            await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [expiredTracking] }).catch(editErr => logger.warn(`Could not edit expired tracking message ${trackingMessage.id}: ${editErr.message}`));
                         }
                         await deleteInvite(inviteMessage.id);
                     }
                 } catch (error) {
-                    if (error.message && error.message.includes('404')) { console.log(`Invite ${inviteMessage.id} likely already processed or deleted before expiry.`); }
-                    else { console.error(`Error during invite expiry check for ${inviteMessage.id}:`, error.message); }
+                    if (error.message && error.message.includes('404')) { logger.info(`Invite ${inviteMessage.id} likely already processed or deleted before expiry.`); }
+                    else { logger.error(`Error during invite expiry check for ${inviteMessage.id}:`, error.message); }
                 }
             }, INVITE_EXPIRY_MS);
 
@@ -270,13 +267,13 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            console.error(`Error during /invite-to-squad for ${commandUserTag}:`, error);
+            logger.error(`Error during /invite-to-squad for ${commandUserTag}:`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(LOGGING_GUILD_ID);
-                const errorChannel = await errorGuild.channels.fetch(ERROR_LOG_CHANNEL_ID);
+                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`## Invite Command Error\n${squadName}`),
+                    new TextDisplayBuilder().setContent('## Invite Command Error'),
                     new TextDisplayBuilder().setContent([
                         `**User:** ${commandUserTag} (${commandUserID})`,
                         `**Invitee:** ${targetUserTag} (${targetUserId})`,
@@ -284,12 +281,12 @@ module.exports = {
                     ].join('\n'))
                 );
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
-            } catch (logError) { console.error('Failed to log invite command error:', logError); }
+            } catch (logError) { logger.error('Failed to log invite command error:', logError); }
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
                 components: [new TextDisplayBuilder().setContent(`Something went wrong. Please try again later.`)],
                 ephemeral: true
-            }).catch(console.error);
+            }).catch(logger.error);
         }
     }
 };

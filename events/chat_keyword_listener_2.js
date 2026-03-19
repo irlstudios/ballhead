@@ -1,4 +1,5 @@
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const logger = require('../utils/logger');
 const forumChannelId = '1149459026304827442';
 let forumChannel;
 let guildId;
@@ -688,7 +689,7 @@ async function getRandomForumPostLink(client) {
                 const starter = await t.fetchStarterMessage();
                 reactionsTotal = starter ? starter.reactions.cache.reduce((a, r) => a + r.count, 0) : 0;
             } catch (error) {
-                console.warn('Failed to fetch starter message for thread', t.id, error);
+                logger.warn('Failed to fetch starter message for thread', t.id, error);
             }
 
             const ageDays = (now - t.createdTimestamp) / 86400000;
@@ -815,7 +816,7 @@ module.exports = {
                 await message.channel.send({ flags: MessageFlags.IsComponentsV2, components: [suggestionContainer] });
 
             } catch (error) {
-                console.error('Failed to send random forum post link:', error);
+                logger.error('Failed to send random forum post link:', error);
             }
         }
     }

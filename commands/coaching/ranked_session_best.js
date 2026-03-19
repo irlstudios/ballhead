@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_RANKED_SESSIONS } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -30,7 +32,7 @@ const RANKED_COACH_ROLES = [
     '1317633044286406729',
 ];
 
-const SHEET_ID = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
+const SHEET_ID = SPREADSHEET_RANKED_SESSIONS;
 
 function buildNotice({ title, subtitle, lines }) {
     const container = new ContainerBuilder();
@@ -118,7 +120,7 @@ module.exports = {
                 lines: [`**Session ID:** ${sessionId}`, `**Best Participant:** ${bestParticipant}`]});
             await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
-            console.error('Error updating best participant:', error);
+            logger.error('Error updating best participant:', error);
             const errorContainer = buildNotice({
                 title: 'Update Failed',
                 subtitle: 'Ranked Session',

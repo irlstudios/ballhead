@@ -1,55 +1,13 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, SQUAD_OWNER_ROLES, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_PREFERENCE } = require('../../config/constants');
+const { compSquadLevelRoles, contentSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
+const logger = require('../../utils/logger');
 
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) {
-        parts.push(`## ${title}`);
-    }
-    if (subtitle) {
-        parts.push(subtitle);
-    }
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) {
-            parts.push('');
-        }
-        parts.push(...lines.filter(Boolean));
-    }
-    if (parts.length === 0) {
-        return null;
-    }
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
-}
-
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-const SQUAD_OWNER_ROLES = ['1218468103382499400', '1288918946258489354', '1290803054140199003'];
-const compSquadLevelRoles = [
-    '1288918067178508423', '1288918165417365576', '1288918209294237707', '1288918281343733842'
-];
-const contentSquadLevelRoles = [
-    '1291090496869109762', '1291090569346682931', '1291090608315699229', '1291090760405356708'
-];
-const mascotSquads = [
-    { name: 'Duck Squad', roleId: '1359614680615620608' },
-    { name: 'Pumpkin Squad', roleId: '1361466564292907060' },
-    { name: 'Snowman Squad', roleId: '1361466801443180584' },
-    { name: 'Gorilla Squad', roleId: '1361466637261471961' },
-    { name: 'Bee Squad', roleId: '1361466746149666956' },
-    { name: 'Alligator Squad', roleId: '1361466697059664043' },
-];
 const SL_ID = 1;
-const SL_SQUAD_NAME = 2;
-const SL_EVENT_SQUAD = 3;
 const AD_SQUAD_NAME = 2;
 const AD_SQUAD_TYPE = 3;
-const AD_PREFERENCE = 7;
-
-function buildNoticeContainer({ title, subtitle, lines}) {
-    const container = new ContainerBuilder();
-    const block = buildTextBlock({ title, subtitle, lines });
-            if (block) container.addTextDisplayComponents(block);
-    return container;
-}
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -65,9 +23,9 @@ module.exports = {
 
         try {
             const [squadLeadersResponse, squadMembersResponse, allDataResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A:F' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A:E' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A:H' })
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' })
             ]).catch(() => { throw new Error('Failed to retrieve data from Google Sheets.'); });
 
             const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
@@ -101,12 +59,12 @@ module.exports = {
             const eventSquadName = userSquadLeaderRow[SL_EVENT_SQUAD];
             let mascotRoleIdToRemove = null;
             if (eventSquadName && eventSquadName !== 'N/A') {
-                const mascotInfo = mascotSquads.find(m => m.name === eventSquadName);
+                const mascotInfo = findMascotByName(eventSquadName);
                 if (mascotInfo) {
                     mascotRoleIdToRemove = mascotInfo.roleId;
-                    console.log(`Squad ${squadName} identified with mascot role: ${eventSquadName} (${mascotRoleIdToRemove})`);
+                    logger.info(`Squad ${squadName} identified with mascot role: ${eventSquadName} (${mascotRoleIdToRemove})`);
                 } else {
-                    console.warn(`Squad ${squadName} has event squad '${eventSquadName}' but no matching role ID found.`);
+                    logger.warn(`Squad ${squadName} has event squad '${eventSquadName}' but no matching role ID found.`);
                 }
             }
 
@@ -122,11 +80,11 @@ module.exports = {
                         const dmContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Squad Update', lines: [`The squad **${squadName}** you were in has been disbanded by the squad leader.`] });
             if (block) dmContainer.addTextDisplayComponents(block);
-                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.info(`Failed to DM ${memberId}: ${err.message}`));
 
                         if (member.nickname && member.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
                             await member.setNickname(member.user.username).catch(nickError => {
-                                if (nickError.code !== 50013) { console.log(`Could not reset nickname for ${member.user.tag} (${memberId}):`, nickError.message); }
+                                if (nickError.code !== 50013) { logger.info(`Could not reset nickname for ${member.user.tag} (${memberId}): ${nickError.message}`); }
                             });
                         }
 
@@ -135,17 +93,17 @@ module.exports = {
                             rolesToRemoveFromMember.push(mascotRoleIdToRemove);
                         }
                         if (rolesToRemoveFromMember.length > 0) {
-                            console.log(`Attempting to remove roles [${rolesToRemoveFromMember.join(', ')}] from member ${member.user.tag}`);
+                            logger.info(`Attempting to remove roles [${rolesToRemoveFromMember.join(', ')}] from member ${member.user.tag}`);
                             await member.roles.remove(rolesToRemoveFromMember).catch(roleErr => {
                                 if (roleErr.code !== 50013 && roleErr.code !== 10011 ) {
-                                    console.log(`Failed to remove roles from ${member.user.tag} (${memberId}):`, roleErr.message);
+                                    logger.info(`Failed to remove roles from ${member.user.tag} (${memberId}): ${roleErr.message}`);
                                 }
                             });
                         }
                     }
                 } catch (fetchError) { /* ... handle member fetch error ... */
-                    if (fetchError.code === 10007) { console.log(`Member ${memberId} not found in guild, skipping cleanup.`); }
-                    else { console.log(`Could not fetch member ${memberId} for cleanup: ${fetchError.message}`); }
+                    if (fetchError.code === 10007) { logger.info(`Member ${memberId} not found in guild, skipping cleanup.`); }
+                    else { logger.info(`Could not fetch member ${memberId} for cleanup: ${fetchError.message}`); }
                 }
             }
 
@@ -155,13 +113,13 @@ module.exports = {
                     const ownerRolesToRemove = SQUAD_OWNER_ROLES.filter(roleId => leader.roles.cache.has(roleId));
                     if (ownerRolesToRemove.length > 0) {
                         await leader.roles.remove(ownerRolesToRemove).catch(roleErr => { /* ... error handling ... */
-                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { console.log(`Failed to remove owner roles from leader ${leader.user.tag}:`, roleErr.message); }
+                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { logger.info(`Failed to remove owner roles from leader ${leader.user.tag}: ${roleErr.message}`); }
                         });
                     }
 
                     if (leader.nickname && leader.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
                         await leader.setNickname(leader.user.username).catch(nickError => { /* ... error handling ... */
-                            if (nickError.code !== 50013) { console.log(`Could not reset nickname for leader ${leader.user.tag}:`, nickError.message); }
+                            if (nickError.code !== 50013) { logger.info(`Could not reset nickname for leader ${leader.user.tag}: ${nickError.message}`); }
                         });
                     }
 
@@ -170,15 +128,15 @@ module.exports = {
                         rolesToRemoveFromLeader.push(mascotRoleIdToRemove);
                     }
                     if (rolesToRemoveFromLeader.length > 0) {
-                        console.log(`Attempting to remove roles [${rolesToRemoveFromLeader.join(', ')}] from leader ${leader.user.tag}`);
+                        logger.info(`Attempting to remove roles [${rolesToRemoveFromLeader.join(', ')}] from leader ${leader.user.tag}`);
                         await leader.roles.remove(rolesToRemoveFromLeader).catch(roleErr => { /* ... error handling ... */
-                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { console.log(`Failed to remove level/mascot roles from leader ${leader.user.tag}:`, roleErr.message); }
+                            if (roleErr.code !== 50013 && roleErr.code !== 10011) { logger.info(`Failed to remove level/mascot roles from leader ${leader.user.tag}: ${roleErr.message}`); }
                         });
                     }
                 }
             } catch (fetchError) { /* ... handle leader fetch error ... */
-                if (fetchError.code === 10007) { console.log(`Leader ${userId} not found in guild, skipping cleanup.`); }
-                else { console.log(`Could not fetch leader ${userId} for cleanup: ${fetchError.message}`); }
+                if (fetchError.code === 10007) { logger.info(`Leader ${userId} not found in guild, skipping cleanup.`); }
+                else { logger.info(`Could not fetch leader ${userId} for cleanup: ${fetchError.message}`); }
             }
 
             const updatedSquadMembers = squadMembers.filter(row => row && row.length > 2 && row[2] !== squadName);
@@ -201,18 +159,19 @@ module.exports = {
 
             const finalAllData = [allDataResponse.data.values[0], ...updatedAllData];
 
-            await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A2:E' }).catch(err => console.error('Error clearing Squad Members:', err.response?.data || err.message));
+            const sheetErrors = [];
+            await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A2:E' }).catch(err => { sheetErrors.push('Squad Members clear'); logger.error('Error clearing Squad Members:', err.response?.data || err.message); });
             if (updatedSquadMembers.length > 0) {
-                await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Members!A2', valueInputOption: 'RAW', resource: { values: updatedSquadMembers } }).catch(err => console.error('Error updating Squad Members:', err.response?.data || err.message));
+                await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A2', valueInputOption: 'RAW', resource: { values: updatedSquadMembers } }).catch(err => { sheetErrors.push('Squad Members update'); logger.error('Error updating Squad Members:', err.response?.data || err.message); });
             }
-            await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A2:F' }).catch(err => console.error('Error clearing Squad Leaders:', err.response?.data || err.message));
+            await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A2:F' }).catch(err => { sheetErrors.push('Squad Leaders clear'); logger.error('Error clearing Squad Leaders:', err.response?.data || err.message); });
             if (updatedSquadLeaders.length > 0) {
-                await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'Squad Leaders!A2', valueInputOption: 'RAW', resource: { values: updatedSquadLeaders } }).catch(err => console.error('Error updating Squad Leaders:', err.response?.data || err.message));
+                await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A2', valueInputOption: 'RAW', resource: { values: updatedSquadLeaders } }).catch(err => { sheetErrors.push('Squad Leaders update'); logger.error('Error updating Squad Leaders:', err.response?.data || err.message); });
             }
-            await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_ID, range: 'All Data!A1:H', valueInputOption: 'RAW', resource: { values: finalAllData } }).catch(err => console.error('Error updating All Data:', err.response?.data || err.message));
+            await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1:H', valueInputOption: 'RAW', resource: { values: finalAllData } }).catch(err => { sheetErrors.push('All Data update'); logger.error('Error updating All Data:', err.response?.data || err.message); });
 
 
-            const loggingChannel = await interaction.client.guilds.fetch('1233740086839869501') /* ... */ .then(guild => guild?.channels.fetch('1233853415952748645')).catch(() => null);
+            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID) /* ... */ .then(guild => guild?.channels.fetch(LOGGING_CHANNEL_ID)).catch(() => null);
             if (loggingChannel) { /* ... send log message ... */
                 try {
                     const logContainer = new ContainerBuilder();
@@ -220,20 +179,32 @@ module.exports = {
             if (block) logContainer.addTextDisplayComponents(block);
                     await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
-                    console.error('Failed to send log message:', logError);
+                    logger.error('Failed to send log message:', logError);
                 }
             }
 
-            const successContainer = new ContainerBuilder();
-            const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Disband Squad', lines: [
-                `Your squad **${squadName}** has been successfully disbanded.`,
-                'Members have been notified, roles removed (including squad level and mascot roles), and nicknames reset (where possible).'
-            ] });
-            if (block) successContainer.addTextDisplayComponents(block);
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            if (sheetErrors.length > 0) {
+                const warnContainer = buildNoticeContainer({
+                    title: 'Squad Partially Disbanded',
+                    subtitle: 'Disband Squad',
+                    lines: [
+                        `Squad **${squadName}** was disbanded but some sheet updates failed: ${sheetErrors.join(', ')}.`,
+                        'Please contact an admin to verify the data.'
+                    ]
+                });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [warnContainer], ephemeral: true });
+            } else {
+                const successContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Disband Squad', lines: [
+                    `Your squad **${squadName}** has been successfully disbanded.`,
+                    'Members have been notified, roles removed (including squad level and mascot roles), and nicknames reset (where possible).'
+                ] });
+                if (block) successContainer.addTextDisplayComponents(block);
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            }
 
         } catch (error) {
-            console.error('Error during the disband-squad command execution:', error);
+            logger.error('Error during the disband-squad command execution:', error);
             let errorMessage = 'An error occurred while disbanding the squad. Please try again later.';
             if (error.response?.data?.error) { errorMessage += ` (Details: ${error.response.data.error.message})`; } else if (error.message) { errorMessage += ` (Details: ${error.message})`; }
             const errorContainer = buildNoticeContainer({
@@ -241,7 +212,7 @@ module.exports = {
                 subtitle: 'Disband Squad',
                 lines: [errorMessage]
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(console.error);
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
         }
     }
 };

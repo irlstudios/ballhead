@@ -1,6 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags, TextDisplayBuilder } = require('discord.js');
 const { getCacheStats, clearCache } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
 
 // Admin role IDs who can clear cache
 const ADMIN_ROLES = [
@@ -67,7 +68,7 @@ module.exports = {
                 ephemeral: true
             });
         } catch (error) {
-            console.error('Error in cache-stats command:', error);
+            logger.error('Error in cache-stats command:', error);
             await interaction.reply({
                 flags: MessageFlags.IsComponentsV2,
                 components: [

@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -21,8 +23,6 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const SPREADSHEET_ID = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
-
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('squad-opt-in')
@@ -36,7 +36,7 @@ module.exports = {
         try {
             const range = 'All Data!A:H';
             const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: range });
 
             const allData = allDataResponse.data.values || [];
@@ -71,10 +71,10 @@ module.exports = {
             }
 
             const updateRange = `All Data!H${sheetRowIndex}`;
-            console.log(`Updating ${updateRange} to TRUE for user ${userId}`);
+            logger.info(`Updating ${updateRange} to TRUE for user ${userId}`);
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_ID,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: updateRange,
                 valueInputOption: 'RAW',
                 requestBody: {
@@ -88,7 +88,7 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            console.error(`Error during squad-opt-in command for ${userId}:`, error);
+            logger.error(`Error during squad-opt-in command for ${userId}:`, error);
 
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Squad Invitations', lines: ['An error occurred while processing your request.', 'Please try again later.'] });

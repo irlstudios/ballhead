@@ -1,8 +1,10 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
+const logger = require('../../utils/logger');
+const { SPREADSHEET_CONTENT_CREATORS } = require('../../config/constants');
 
-const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const SPREADSHEET_ID = SPREADSHEET_CONTENT_CREATORS;
 const SHEET_CACHE_TTL_MS = 1800000; // 30 minutes (data updates weekly)
 const PLATFORM_SHEETS = [
     { range: 'Reels Data!A:O', platform: 'Reels' }
@@ -316,7 +318,7 @@ function processData(postsData, pIds, platformFilter = null, seasonStartUnix = n
     });
 
     const pIdList = Array.from(pIdSet.values()).join(', ');
-    console.info(`Processed ${userData.posts.length} posts for creator IDs [${pIdList}] on platform ${platformFilter || 'All Platforms'}.`);
+    logger.info(`Processed ${userData.posts.length} posts for creator IDs [${pIdList}] on platform ${platformFilter || 'All Platforms'}.`);
 
     return {
         ...userData,
@@ -357,7 +359,7 @@ module.exports = {
             const platformOption = interaction.options.getString('platform') || null;
 
             const { posts, creatorIds, seasonStart } = await getSheetData(platformOption);
-            console.log(`[quality-score] Data fetched in ${Date.now() - dataFetchStartTime}ms`);
+            logger.info(`[quality-score] Data fetched in ${Date.now() - dataFetchStartTime}ms`);
 
             const processingStartTime = Date.now();
             const lookupKey = normalizeDiscordId(userId);
@@ -486,9 +488,9 @@ module.exports = {
 
             const totalTime = Date.now() - cmdStartTime;
             const processingTime = Date.now() - processingStartTime;
-            console.log(`[quality-score] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
+            logger.info(`[quality-score] Processing completed in ${processingTime}ms | Total: ${totalTime}ms`);
         } catch (error) {
-            console.error(`Error fetching posts: ${error.message}`);
+            logger.error(`Error fetching posts: ${error.message}`);
 
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Fetch Failed\nAn error occurred while fetching posts.'));

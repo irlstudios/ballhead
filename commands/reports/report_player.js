@@ -1,5 +1,6 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -114,7 +115,7 @@ module.exports = {
             });
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
-            console.error('Error handling report submission:', error);
+            logger.error('Error handling report submission:', error);
             const errorContainer = buildNoticeContainer({
                 title: 'Report Failed',
                 subtitle: 'Try Again Later',

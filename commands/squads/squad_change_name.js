@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -27,21 +29,20 @@ module.exports = {
         }
 
         const sheets = await getSheetsClient();
-        const spreadsheetId = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A:F'
             });
 
             const squadMembersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Members!A:E'
             });
 
             const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'All Data!A:H'
             });
 
@@ -96,21 +97,21 @@ module.exports = {
             });
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A:F',
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadLeaders }
             });
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Members!A:E',
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadMembers }
             });
 
             await sheets.spreadsheets.values.update({
-                spreadsheetId: spreadsheetId,
+                spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'All Data!A:H',
                 valueInputOption: 'RAW',
                 resource: { values: updatedAllData }
@@ -128,18 +129,18 @@ module.exports = {
                             new TextDisplayBuilder().setContent('## Squad Name Changed'),
                             new TextDisplayBuilder().setContent(`The squad name has been changed from **${currentSquadName}** to **${newSquadName}** by the squad leader.`)
                         );
-                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => console.log(`Failed to DM ${memberId}: ${err.message}`));
+                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.warn(`Failed to DM ${memberId}: ${err.message}`));
 
                         try {
                             await member.setNickname(`[${newSquadName}] ${member.user.username}`);
                         } catch (error) {
                             if (error.code !== 50013) {
-                                console.log(`Could not update nickname for ${member.user.tag} (${memberId}):`, error.message);
+                                logger.warn(`Could not update nickname for ${member.user.tag} (${memberId}): ${error.message}`);
                             }
                         }
                     }
                 } catch (error) {
-                    console.log(`Could not fetch member ${memberId} for notification: ${error.message}`);
+                    logger.warn(`Could not fetch member ${memberId} for notification: ${error.message}`);
                 }
             }
 
@@ -150,17 +151,17 @@ module.exports = {
                         await leader.setNickname(`[${newSquadName}] ${leader.user.username}`);
                     } catch (error) {
                         if (error.code !== 50013) {
-                            console.log(`Could not update nickname for leader ${leader.user.tag} (${userId}):`, error.message);
+                            logger.warn(`Could not update nickname for leader ${leader.user.tag} (${userId}): ${error.message}`);
                         }
                     }
                 }
             } catch (error) {
-                console.log(`Could not fetch leader ${userId} for nickname update: ${error.message}`);
+                logger.warn(`Could not fetch leader ${userId} for nickname update: ${error.message}`);
             }
 
 
-            const loggingChannel = await interaction.client.guilds.fetch('1233740086839869501')
-                .then(guild => guild.channels.fetch('1233853415952748645'))
+            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+                .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
                 .catch(() => null);
 
             if (loggingChannel) {
@@ -172,7 +173,7 @@ module.exports = {
                     );
                     await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
-                    console.error('Failed to send log message:', logError);
+                    logger.error('Failed to send log message:', logError);
                 }
             }
 
@@ -185,7 +186,7 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            console.error('Error during the change-squad-name command execution:', error);
+            logger.error('Error during the change-squad-name command execution:', error);
             let errorMessage = 'An error occurred while changing the squad name. Please try again later.';
             if (error.response && error.response.data && error.response.data.error) {
                 errorMessage += ` (Details: ${error.response.data.error.message})`;

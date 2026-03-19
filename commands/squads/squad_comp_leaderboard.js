@@ -1,6 +1,8 @@
 const { SlashCommandBuilder, AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { createCanvas, registerFont } = require('canvas');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { SPREADSHEET_COMP_WINS } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -22,13 +24,11 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const compWinSheetId = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
-
 try {
     registerFont('./resources/Fonts/AntonSC-Regular.ttf', { family: 'Anton SC' });
     registerFont('./resources/Fonts/BebasNeue-Regular.ttf', { family: 'Bebas Neue' });
 } catch (error) {
-    console.error('Error loading fonts:', error);
+    logger.error('Error loading fonts:', error);
 }
 
 function drawRoundedRect(ctx, x, y, width, height, radius, fillColor, borderColor) {
@@ -62,12 +62,12 @@ module.exports = {
             await interaction.deferReply({ ephemeral: false });
 
             const squadWinsResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: compWinSheetId,
+                spreadsheetId: SPREADSHEET_COMP_WINS,
                 range: '\'Squads + Aggregate Wins\'!A1:ZZ' });
 
             const squadWinsData = squadWinsResponse.data.values;
             if (!squadWinsData || squadWinsData.length < 2) {
-                console.error('No data found in the Squad Wins sheet.');
+                logger.error('No data found in the Squad Wins sheet.');
                 const emptyContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Competitive Squad Leaderboard', subtitle: 'No Results', lines: ['No squads have wins to display.'] });
             if (block) emptyContainer.addTextDisplayComponents(block);
@@ -75,7 +75,7 @@ module.exports = {
                 return;
             }
 
-            console.log('Processing squad wins data...');
+            logger.info('Processing squad wins data...');
 
             const squadTotalWinsMap = {};
             const squadRows = squadWinsData.slice(1);
@@ -92,7 +92,7 @@ module.exports = {
                         totalWins,
                         squadType,
                         squadMade };
-                    console.log(`Squad: ${squadName} - Total Wins: ${totalWins} - Type: ${squadType}`);
+                    logger.info(`Squad: ${squadName} - Total Wins: ${totalWins} - Type: ${squadType}`);
                 }
             });
 
@@ -170,7 +170,7 @@ module.exports = {
                 ],
                 files: [new AttachmentBuilder(leaderboardImage, { name: 'squad_leaderboard.png' })] });
         } catch (error) {
-            console.error('Error fetching squad leaderboard:', error);
+            logger.error('Error fetching squad leaderboard:', error);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Leaderboard Error', subtitle: 'Competitive Squads', lines: ['An error occurred while fetching the squad leaderboard. Please try again later.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
