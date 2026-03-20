@@ -86,11 +86,21 @@ async function fetchBuffer(url) {
 }
 
 async function generateQueueImage(client, queue, members) {
-    const bgBuf = await fetchBuffer('https://cdn.ballhead.app/web_assets/FORCDN.jpg');
-    const bg = await loadImage(bgBuf);
-    const canvas = createCanvas(bg.width, bg.height);
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(bg, 0, 0, bg.width, bg.height);
+    let canvas;
+    let ctx;
+    try {
+        const bgBuf = await fetchBuffer('https://cdn.ballhead.app/web_assets/FORCDN.jpg');
+        const bg = await loadImage(bgBuf);
+        canvas = createCanvas(bg.width, bg.height);
+        ctx = canvas.getContext('2d');
+        ctx.drawImage(bg, 0, 0, bg.width, bg.height);
+    } catch (err) {
+        logger.warn('[LFG] CDN background image unavailable, using fallback:', err.message);
+        canvas = createCanvas(800, 400);
+        ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fillRect(0, 0, 800, 400);
+    }
     const txt = `${members.size}/${queue.size}`;
     const fs = Math.floor(bg.height * 0.12);
     ctx.font = `bold ${fs}px Sans-Serif`;
