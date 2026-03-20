@@ -4,8 +4,21 @@ const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema } = require('../db');
 require('dotenv').config({ path: './resources/.env' });
 
+const ensureRoleTimeoutsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS role_timeouts (
+            user_id TEXT NOT NULL,
+            role_id TEXT NOT NULL,
+            guild_id TEXT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY (user_id, role_id)
+        )
+    `);
+};
+
 const processExpiredRoleTimeouts = async (client) => {
     try {
+        await ensureRoleTimeoutsTable();
         const result = await executeQuery(
             'SELECT user_id, role_id, guild_id FROM role_timeouts WHERE expires_at <= NOW()'
         ).catch(() => null);
