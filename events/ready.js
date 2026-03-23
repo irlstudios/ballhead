@@ -7,6 +7,7 @@ const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSch
     fetchExpiredPendingTransfers, updateTransferRequestStatus } = require('../db');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
+const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
 
 const ensureRoleTimeoutsTable = async () => {
@@ -175,6 +176,15 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT)');
+        // Daily: Prune Inactive Members - 11:59 PM Chicago
+        cron.schedule('59 23 * * *', async () => {
+            try {
+                await pruneInactiveMembers(client);
+            } catch (error) {
+                logger.error('[Cron] Prune Inactive Members failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT)');
     },
 };
