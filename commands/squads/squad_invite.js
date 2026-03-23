@@ -2,6 +2,7 @@ const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Messa
 const { insertInvite, fetchInviteById, deleteInvite } = require('../../db');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS } = require('../../config/constants');
+const { disambiguateSquad, AD_SQUAD_TYPE } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 
@@ -13,6 +14,11 @@ module.exports = {
             option.setName('member')
                 .setDescription('The member you want to invite.')
                 .setRequired(true)
+        )
+        .addStringOption(option =>
+            option.setName('squad')
+                .setDescription('Squad name (required if you own multiple)')
+                .setRequired(false)
         ),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -57,32 +63,32 @@ module.exports = {
         const sheets = await getSheetsClient();
 
         try {
-            const [allDataResponse, squadMembersResponse, squadLeadersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
-            ]).catch(err => {
-                logger.error('Error fetching sheet data:', err);
-                throw new Error('Failed to retrieve necessary data from Google Sheets.');
+            const { getCachedValues } = require('../../utils/sheets_cache');
+            const results = await getCachedValues({
+                sheets,
+                spreadsheetId: SPREADSHEET_SQUADS,
+                ranges: ['All Data!A:H', 'Squad Members!A:E', 'Squad Leaders!A:G'],
+                ttlMs: 30000,
             });
 
-            const allData = (allDataResponse.data.values || []).slice(1);
-            const squadMembers = (squadMembersResponse.data.values || []).slice(1);
-            const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
+            const allData = (results.get('All Data!A:H') || []).slice(1);
+            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
+            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
 
-            const inviterLeaderRow = squadLeaders.find(row => row && row.length > 1 && row[1] === commandUserID);
-            const inviterAllDataRow = allData.find(row => row && row.length > 1 && row[1] === commandUserID);
-            const isInviterMarkedLeader = inviterAllDataRow && inviterAllDataRow.length > 6 && inviterAllDataRow[6] === 'Yes';
-            if (!inviterLeaderRow && !isInviterMarkedLeader) {
+            const specifiedSquad = interaction.options.getString('squad');
+            const { squad: inviterLeaderRow, error: disambigError } = disambiguateSquad(squadLeaders, commandUserID, specifiedSquad);
+            if (disambigError) {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent('You must be a squad leader to invite members.')],
-                    ephemeral: true
+                    components: [new TextDisplayBuilder().setContent(disambigError)],
+                    ephemeral: true,
                 });
                 return;
             }
-            const squadName = inviterLeaderRow ? inviterLeaderRow[2]?.trim() : inviterAllDataRow[2]?.trim();
-            const finalSquadType = inviterAllDataRow ? inviterAllDataRow[3]?.trim() : null;
+            const squadName = inviterLeaderRow[2]?.trim();
+            // Get squad type from All Data (Squad Leaders col 3 is Event Squad, not type)
+            const inviterAllDataRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[1] === commandUserID && row[2]?.toUpperCase() === squadName?.toUpperCase());
+            const finalSquadType = inviterAllDataRow ? inviterAllDataRow[AD_SQUAD_TYPE]?.trim() : null;
             if (!squadName || squadName === 'N/A') {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
