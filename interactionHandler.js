@@ -225,6 +225,13 @@ const handleButton = async (interaction, client) => {
             return;
         }
 
+        if (interaction.customId.startsWith('transfer-')) {
+            const { handleTransferButton } = require('./handlers/transfer');
+            const transferAction = interaction.customId.startsWith('transfer-accept') ? 'accept' : 'decline';
+            await handleTransferButton(interaction, transferAction);
+            return;
+        }
+
         const handler = buttonRoutes[action];
         if (handler) {
             await handler();
