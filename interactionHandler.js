@@ -21,6 +21,10 @@ const {
     ERROR_LOG_GUILD_ID: FF_LEADERBOARD_ERROR_LOG_GUILD_ID,
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
 const { handleInviteButton } = require('./handlers/invites');
+const {
+    buildSquadLeaderboardPayload,
+    DEFAULT_VIEW: SQUAD_LEADERBOARD_DEFAULT_VIEW,
+} = require('./commands/squads/squad_leaderboard');
 
 const interactionHandler = async (interaction, client) => {
     try {
@@ -162,6 +166,10 @@ const handleSelectMenu = async (interaction) => {
         await handleFFLeaderboardSelect(interaction);
         return;
     }
+    if (interaction.customId === 'squad-leaderboard-select') {
+        await handleSquadLeaderboardSelect(interaction);
+        return;
+    }
 };
 
 const handleModalSubmit = async (interaction) => {
@@ -277,6 +285,43 @@ const handleFFLeaderboardSelect = async (interaction) => {
             ...noticePayload('An error occurred while updating the leaderboard.', { title: 'Leaderboard Error', subtitle: 'Friendly Fire' }),
             ephemeral: true,
         }).catch(e => logger.error('FF followUp failed:', e));
+    }
+};
+
+const handleSquadLeaderboardSelect = async (interaction) => {
+    const view = interaction.values[0] || SQUAD_LEADERBOARD_DEFAULT_VIEW;
+    await interaction.deferUpdate();
+    try {
+        const result = await buildSquadLeaderboardPayload(view, interaction.client);
+        if (result.errorContainer) {
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer] });
+            return;
+        }
+        await interaction.editReply({
+            flags: MessageFlags.IsComponentsV2,
+            components: result.components,
+            files: result.files,
+        });
+    } catch (error) {
+        logger.error('Error updating Squad leaderboard:', error);
+        try {
+            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({
+                title: 'Leaderboard Update Error',
+                subtitle: 'Squad leaderboard failed',
+                lines: [`**Error:** ${error.message}`],
+            });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
+        } catch (logError) {
+            logger.error('Failed to log Squad leaderboard error:', logError);
+        }
+        await interaction.followUp({
+            ...noticePayload('An error occurred while updating the leaderboard.', { title: 'Leaderboard Error', subtitle: 'Squad Leaderboard' }),
+            ephemeral: true,
+        }).catch(e => logger.error('Squad leaderboard followUp failed:', e));
     }
 };
 
