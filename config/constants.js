@@ -64,9 +64,16 @@ const ITEMS_PER_PAGE = 10;
 // Squad constraints
 const MAX_SQUAD_MEMBERS = 10;
 
+// Role IDs - Top Squad
+const TOP_COMP_SQUAD_ROLE_ID = '1200889836844896316';
+
+// Channel IDs - Squad Announcements
+const TOP_SQUAD_ANNOUNCEMENT_CHANNEL_ID = '828618109794385970';
+
 // Sheet column indices
 const SL_SQUAD_NAME = 2;
 const SL_EVENT_SQUAD = 3;
+const SL_PARENT_SQUAD = 6;
 const AD_ID = 1;
 const AD_PREFERENCE = 7;
 
@@ -109,6 +116,9 @@ module.exports = {
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
     SL_EVENT_SQUAD,
+    SL_PARENT_SQUAD,
+    TOP_COMP_SQUAD_ROLE_ID,
+    TOP_SQUAD_ANNOUNCEMENT_CHANNEL_ID,
     AD_ID,
     AD_PREFERENCE,
 };

@@ -25,7 +25,6 @@ const contentSquadLevelRoles = Object.freeze([
 
 function getSquadTypeRoles(squadType) {
     if (squadType === 'Competitive') return compSquadLevelRoles;
-    if (squadType === 'Content') return contentSquadLevelRoles;
     return [];
 }
 
