@@ -3,6 +3,7 @@ const { getSheetsClient } = require('../../utils/sheets_cache');
 const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
+const { stripLevelRoles } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 const SL_ID = 1;
@@ -35,7 +36,7 @@ module.exports = {
         try {
             const [squadMembersResponse, squadLeadersResponse, allDataResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' })
             ]).catch(() => { throw new Error('Failed to retrieve data from Google Sheets.'); });
 
@@ -178,6 +179,9 @@ module.exports = {
                         logger.warn(`Mascot role ${mascotRoleIdToRemove} not found in guild for removal.`);
                     }
                 }
+
+                // Strip level roles when leaving a squad
+                await stripLevelRoles(guild, userId);
             } catch (error) {
                 if (error.code === 10007) { logger.info(`Member ${userTag} (${userId}) not found in guild ${GYM_CLASS_GUILD_ID}, cannot reset nickname/roles.`); }
                 else { logger.error(`Error during nickname/role cleanup for ${userTag} (${userId}): ${error.message}`); }

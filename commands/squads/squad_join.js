@@ -50,7 +50,7 @@ module.exports = {
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
             ]).catch(err => {
                 logger.error('Error fetching sheet data for random join:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
