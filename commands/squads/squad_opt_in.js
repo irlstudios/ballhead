@@ -41,46 +41,44 @@ module.exports = {
 
             const allData = allDataResponse.data.values || [];
 
-            let dataRowIndex = -1;
-            const userRow = allData.find((row, index) => {
+            const prefIndex = 7;
+            const userRowIndices = [];
+            for (let i = 0; i < allData.length; i++) {
+                const row = allData[i];
                 if (row && row.length > 1 && row[1] === userId.toString()) {
-                    dataRowIndex = index;
-                    return true;
+                    userRowIndices.push(i);
                 }
-                return false;
-            });
+            }
 
-            if (!userRow || dataRowIndex === -1) {
+            if (userRowIndices.length === 0) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Data Not Found', subtitle: 'Squad Invitations', lines: ['Your data could not be found in the system.', 'If you believe this is an error, please contact an admin.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
                 return;
             }
 
-            const sheetRowIndex = dataRowIndex + 1;
-
-            const prefIndex = 7;
-
-            if (userRow.length > prefIndex && userRow[prefIndex] === 'TRUE') {
+            const firstRow = allData[userRowIndices[0]];
+            if (firstRow.length > prefIndex && firstRow[prefIndex] === 'TRUE') {
                 const infoContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Already Opted In', subtitle: 'Squad Invitations', lines: ['You are already opted in to receive squad invitations.'] });
-            if (block) infoContainer.addTextDisplayComponents(block);
+                if (block) infoContainer.addTextDisplayComponents(block);
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
                 return;
             }
 
-            const updateRange = `All Data!H${sheetRowIndex}`;
-            logger.info(`Updating ${updateRange} to TRUE for user ${userId}`);
-
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: updateRange,
-                valueInputOption: 'RAW',
-                requestBody: {
-                    values: [['TRUE']]
-                }
-            }).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
+            const updatePromises = userRowIndices.map(idx => {
+                const sheetRow = idx + 1;
+                const updateRange = `All Data!H${sheetRow}`;
+                logger.info(`Updating ${updateRange} to TRUE for user ${userId}`);
+                return sheets.spreadsheets.values.update({
+                    spreadsheetId: SPREADSHEET_SQUADS,
+                    range: updateRange,
+                    valueInputOption: 'RAW',
+                    requestBody: { values: [['TRUE']] },
+                });
+            });
+            await Promise.all(updatePromises).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
 
             const successContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Opt-In Confirmed', subtitle: 'Squad Invitations', lines: ['You have successfully opted back in to receive squad invitations.'] });

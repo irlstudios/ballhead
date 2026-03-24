@@ -43,30 +43,33 @@ module.exports = {
                     range });
 
                 const rows = response.data.values || [];
-                let rowIndex = -1;
-                const userRow = rows.find((row, index) => {
+                const prefIndex = 7;
+                const userRowIndices = [];
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
                     if (row && row.length > 1 && row[1] === userID.toString()) {
-                        rowIndex = index + 1;
-                        return true;
+                        userRowIndices.push(i);
                     }
-                    return false;
-                });
+                }
 
+                if (userRowIndices.length > 0) {
+                    const firstRow = rows[userRowIndices[0]];
 
-                if (userRow && rowIndex > 0) {
-                    const prefIndex = 7;
-
-                    if (userRow.length > prefIndex && userRow[prefIndex] === 'FALSE') {
+                    if (firstRow.length > prefIndex && firstRow[prefIndex] === 'FALSE') {
                         return { success: false, message: 'You are already opted out of squad invites.' };
                     } else {
-                        const updateRange = `All Data!H${rowIndex}`;
-                        logger.info(`Updating ${updateRange} to FALSE for user ${userID}`);
-                        await sheets.spreadsheets.values.update({
-                            spreadsheetId: SPREADSHEET_SQUADS,
-                            range: updateRange,
-                            valueInputOption: 'RAW',
-                            requestBody: {
-                                values: [['FALSE']] } }).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
+                        const updatePromises = userRowIndices.map(idx => {
+                            const sheetRow = idx + 1;
+                            const updateRange = `All Data!H${sheetRow}`;
+                            logger.info(`Updating ${updateRange} to FALSE for user ${userID}`);
+                            return sheets.spreadsheets.values.update({
+                                spreadsheetId: SPREADSHEET_SQUADS,
+                                range: updateRange,
+                                valueInputOption: 'RAW',
+                                requestBody: { values: [['FALSE']] },
+                            });
+                        });
+                        await Promise.all(updatePromises).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
                         return { success: true, message: 'You have successfully opted out of squad invites.' };
                     }
                 } else {
