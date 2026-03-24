@@ -1,6 +1,6 @@
 const { Events } = require('discord.js');
 const logger = require('../utils/logger');
-const { GYM_CLASS_GUILD_ID, GYM_CLASS_GUILD_ID, BOOSTER_ROLE_ID } = require('../config/constants');
+const { GYM_CLASS_GUILD_ID, BOOSTER_ROLE_ID } = require('../config/constants');
 
 module.exports = {
     name: Events.GuildMemberUpdate,
