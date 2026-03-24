@@ -218,6 +218,7 @@ const handleButton = async (interaction, client) => {
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),
             'denyLeague': () => handleDenyLeagueButton(interaction),
+            'squads': () => handleSquadsPagination(interaction, customId),
         };
 
         if (action.startsWith('lfg:')) {
@@ -330,6 +331,50 @@ const handleSquadLeaderboardSelect = async (interaction) => {
             ephemeral: true,
         }).catch(e => logger.error('Squad leaderboard followUp failed:', e));
     }
+};
+
+const handleSquadsPagination = async (interaction, direction) => {
+    await interaction.deferUpdate();
+
+    const paginationData = interaction.client.squadsPagination?.get(interaction.message.interaction?.id);
+    if (!paginationData) {
+        await interaction.followUp({
+            ...noticePayload('This pagination session has expired. Please run `/squads` again.', { title: 'Session Expired', subtitle: 'Squads List' }),
+            ephemeral: true,
+        }).catch(() => {});
+        return;
+    }
+
+    const { squadList, totalPages } = paginationData;
+    const ITEMS_PER_PAGE = 10;
+
+    if (direction === 'next' && paginationData.currentPage < totalPages) {
+        paginationData.currentPage += 1;
+    } else if (direction === 'prev' && paginationData.currentPage > 1) {
+        paginationData.currentPage -= 1;
+    }
+
+    const page = paginationData.currentPage;
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    const pageItems = squadList.slice(start, Math.min(end, squadList.length));
+
+    const { ContainerBuilder: CB, TextDisplayBuilder: TDB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = require('discord.js');
+    const container = new CB();
+    container.addTextDisplayComponents(
+        new TDB().setContent('## Registered Squads'),
+        new TDB().setContent(pageItems.length > 0 ? pageItems.join('\n') : 'No squads on this page.'),
+        new TDB().setContent(`-# Page ${page} of ${totalPages}`)
+    );
+    const buttons = new ARB().addComponents(
+        new BB().setCustomId('squads_prev').setLabel('Previous').setStyle(BS.Primary).setDisabled(page === 1),
+        new BB().setCustomId('squads_next').setLabel('Next').setStyle(BS.Primary).setDisabled(page === totalPages)
+    );
+
+    await interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
+        components: [container, buttons],
+    });
 };
 
 module.exports = interactionHandler;

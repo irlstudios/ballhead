@@ -125,24 +125,16 @@ const handleAccept = async (interaction, transfer) => {
             resource: { values: [updatedLeaderRow] },
         });
 
-        // Remove target from Squad Members (they're now leader)
+        // Remove target from Squad Members (they're now leader) - targeted row clear
         const targetMemberIndex = squadMembersHeaderless.findIndex(
             row => row && row.length > 2 && row[1] === targetId && row[2]?.toUpperCase() === squadName.toUpperCase()
         );
         if (targetMemberIndex !== -1) {
-            const updatedMembers = squadMembersHeaderless.filter((_, i) => i !== targetMemberIndex);
+            const sheetRowSM = targetMemberIndex + 2;
             await sheets.spreadsheets.values.clear({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Members!A2:E',
+                range: `Squad Members!A${sheetRowSM}:E${sheetRowSM}`,
             });
-            if (updatedMembers.length > 0) {
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_SQUADS,
-                    range: 'Squad Members!A2',
-                    valueInputOption: 'RAW',
-                    resource: { values: updatedMembers },
-                });
-            }
         }
 
         // Add old leader as regular member

@@ -139,6 +139,20 @@ function getCacheStats() {
     };
 }
 
+// Invalidate specific ranges from cache after writes
+function invalidateRanges(spreadsheetId, ranges) {
+    let invalidated = 0;
+    for (const range of ranges) {
+        const key = getCacheKey(spreadsheetId, range);
+        if (rangeCache.delete(key)) {
+            invalidated++;
+        }
+    }
+    if (invalidated > 0) {
+        logger.info(`[Cache] Invalidated ${invalidated} ranges after write`);
+    }
+}
+
 // Clear cache (useful for manual refresh)
 function clearCache() {
     rangeCache.clear();
@@ -220,6 +234,7 @@ function stopCacheMaintenance() {
 module.exports = {
     getSheetsClient,
     getCachedValues,
+    invalidateRanges,
     warmCache,
     getCacheStats,
     clearCache,
