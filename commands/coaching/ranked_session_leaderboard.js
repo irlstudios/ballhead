@@ -3,7 +3,7 @@ const { createCanvas, registerFont, loadImage } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 const logger = require('../../utils/logger');
-const { SPREADSHEET_RANKED_SESSIONS, BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { SPREADSHEET_RANKED_SESSIONS, BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -28,7 +28,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 const sheetId = SPREADSHEET_RANKED_SESSIONS;
 const BACKGROUND_IMAGE_URL = 'https://cdn.ballhead.app/web_assets/IMG_0421.png';
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
-const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
+const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 
 function buildNoticeContainer({ title, subtitle, lines}) {
     const container = new ContainerBuilder();

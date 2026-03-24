@@ -15,7 +15,7 @@ const {
     SPREADSHEET_SQUADS,
     TOP_COMP_SQUAD_ROLE_ID,
     TOP_SQUAD_ANNOUNCEMENT_CHANNEL_ID,
-    BALLHEAD_GUILD_ID,
+    GYM_CLASS_GUILD_ID,
 } = require('../config/constants');
 const { getSquadState, setSquadState } = require('../db');
 const { findSquadMembers } = require('./squad_queries');
@@ -171,7 +171,7 @@ function buildAnnouncementImage(topSquads, maxWins, memberNames) {
  */
 async function syncTopSquad(client, announce = true) {
     const sheets = await getSheetsClient();
-    const guild = await client.guilds.fetch(BALLHEAD_GUILD_ID);
+    const guild = await client.guilds.fetch(GYM_CLASS_GUILD_ID);
 
     const squadWins = await calculateSquadWins(sheets);
     const { topSquads, maxWins } = findTopSquads(squadWins);

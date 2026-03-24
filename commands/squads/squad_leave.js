@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
 const { stripLevelRoles } = require('../../utils/squad_level_sync');
@@ -140,7 +140,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Activity', lines: [`User **${userTag}** (<@${userId}>) has left the squad **${squadName}**.`] });
@@ -204,7 +204,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error during /leave-squad for ${userTag} (${userId}):`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Leave Squad Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });

@@ -6,7 +6,7 @@ const logCommandUsage = require('./API/command-data');
 const { createModal } = require('./modals/modalFactory');
 const logger = require('./utils/logger');
 const { buildTextBlock, noticePayload } = require('./utils/ui');
-const { BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants');
+const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants');
 
 // Handler modules
 const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
@@ -60,7 +60,7 @@ const interactionHandler = async (interaction, client) => {
         }
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({
@@ -313,7 +313,7 @@ const handleSquadLeaderboardSelect = async (interaction) => {
     } catch (error) {
         logger.error('Error updating Squad leaderboard:', error);
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({

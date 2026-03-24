@@ -3,7 +3,7 @@
 const { getSheetsClient, getCachedValues } = require('./sheets_cache');
 const {
     SPREADSHEET_SQUADS,
-    BALLHEAD_GUILD_ID,
+    GYM_CLASS_GUILD_ID,
 } = require('../config/constants');
 const { compSquadLevelRoles } = require('../config/squads');
 const { calculateSquadWins } = require('./top_squad_sync');
@@ -52,7 +52,7 @@ async function syncMemberLevelRole(member, correctRoleId) {
  */
 async function syncLevelRoles(client) {
     const sheets = await getSheetsClient();
-    const guild = await client.guilds.fetch(BALLHEAD_GUILD_ID);
+    const guild = await client.guilds.fetch(GYM_CLASS_GUILD_ID);
 
     const squadWins = await calculateSquadWins(sheets);
 

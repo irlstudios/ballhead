@@ -2,7 +2,7 @@
 
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, AD_PREFERENCE } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, AD_PREFERENCE } = require('../../config/constants');
 const { findABTeams, findMemberRow, findAllDataRowIndex, SM_SQUAD_NAME } = require('../../utils/squad_queries');
 const { stripLevelRoles } = require('../../utils/squad_level_sync');
 const { withSquadLock } = require('../../utils/squad_lock');
@@ -103,7 +103,7 @@ module.exports = {
             });
 
             // Strip roles
-            const guild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             await stripLevelRoles(guild, targetUser.id);
 
             // Reset nickname

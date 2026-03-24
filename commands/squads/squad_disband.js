@@ -3,7 +3,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const {
-    SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID,
+    SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID,
     AD_PREFERENCE,
 } = require('../../config/constants');
 const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
@@ -206,7 +206,7 @@ module.exports = {
                 }).catch(err => { sheetErrors.push('All Data update'); logger.error('Error updating All Data:', err.message); });
 
                 // Log the disband
-                const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+                const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
                     .then(g => g?.channels.fetch(LOGGING_CHANNEL_ID)).catch(() => null);
                 if (loggingChannel) {
                     try {

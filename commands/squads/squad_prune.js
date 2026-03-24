@@ -2,7 +2,7 @@
 
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 const { disambiguateSquad } = require('../../utils/squad_queries');
 const { pruneSquad } = require('../../utils/squad_prune');
 const logger = require('../../utils/logger');
@@ -24,7 +24,7 @@ module.exports = {
             const userId = interaction.user.id;
             const specifiedSquad = interaction.options.getString('squad');
             const sheets = await getSheetsClient();
-            const guild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
 
             const results = await getCachedValues({
                 sheets,

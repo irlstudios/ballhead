@@ -1,13 +1,13 @@
 const { Events } = require('discord.js');
 const logger = require('../utils/logger');
-const { BALLHEAD_GUILD_ID, GYM_CLASS_GUILD_ID, BOOSTER_ROLE_ID } = require('../config/constants');
+const { GYM_CLASS_GUILD_ID, GYM_CLASS_GUILD_ID, BOOSTER_ROLE_ID } = require('../config/constants');
 
 module.exports = {
     name: Events.GuildMemberUpdate,
     async execute(oldMember, newMember) {
 
         try {
-            if (oldMember.guild.id !== BALLHEAD_GUILD_ID || newMember.guild.id !== BALLHEAD_GUILD_ID) return;
+            if (oldMember.guild.id !== GYM_CLASS_GUILD_ID || newMember.guild.id !== GYM_CLASS_GUILD_ID) return;
             const gymClassGuild = await newMember.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             if (!gymClassGuild) return logger.error('Gym Class guild not found.');
             const gymClassMember = await gymClassGuild.members.fetch(newMember.id);

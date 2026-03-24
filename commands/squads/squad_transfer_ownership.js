@@ -5,7 +5,7 @@ const {
     MessageFlags, ContainerBuilder, TextDisplayBuilder,
 } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 const { disambiguateSquad, findMemberRow } = require('../../utils/squad_queries');
 const { insertTransferRequest } = require('../../db');
 const logger = require('../../utils/logger');

@@ -3,7 +3,7 @@
 const { getSheetsClient, getCachedValues } = require('./sheets_cache');
 const {
     SPREADSHEET_SQUADS,
-    BALLHEAD_GUILD_ID,
+    GYM_CLASS_GUILD_ID,
 } = require('../config/constants');
 const { withSquadLock } = require('./squad_lock');
 const { findSquadMembers } = require('./squad_queries');
@@ -73,7 +73,7 @@ async function pruneSquad(sheets, guild, guildMemberIds, squadName, squadMembers
  */
 async function pruneInactiveMembers(client) {
     const sheets = await getSheetsClient();
-    const guild = await client.guilds.fetch(BALLHEAD_GUILD_ID);
+    const guild = await client.guilds.fetch(GYM_CLASS_GUILD_ID);
 
     // Bulk fetch all guild members
     const allGuildMembers = await guild.members.fetch();
