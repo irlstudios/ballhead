@@ -6,6 +6,7 @@ const { buildTextBlock, buildNoticeContainer, noticePayload } = require('../util
 const { fetchInviteById, updateInviteStatus, deleteInvite } = require('../db');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const { mascotSquads } = require('../config/squads');
+const { assignLevelRoleOnJoin } = require('../utils/squad_level_sync');
 const {
     BALLHEAD_GUILD_ID,
     GYM_CLASS_GUILD_ID,
@@ -154,7 +155,7 @@ const handleAcceptInvite = async (interaction, ctx) => {
     const [squadMembersResponse, allDataResponse, squadLeadersResponse] = await Promise.all([
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
     ]).catch(() => { throw new Error('Failed to retrieve sheet data for processing invite.'); });
 
     const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
@@ -256,6 +257,11 @@ const handleAcceptInvite = async (interaction, ctx) => {
             }
         }
     }
+
+    // Assign level role for competitive squads
+    await assignLevelRoleOnJoin(guild, invitedMemberId, squadName).catch(e =>
+        logger.error(`[Invite Accept] Failed to assign level role to ${invitedMemberId}:`, e.message)
+    );
 
     const acceptanceContainer = new ContainerBuilder()
         .setAccentColor(0x2ECC71)
