@@ -12,7 +12,7 @@ const {
 } = require('../utils/squad_queries');
 const {
     SPREADSHEET_SQUADS,
-    BALLHEAD_GUILD_ID,
+    GYM_CLASS_GUILD_ID,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
 } = require('../config/constants');
@@ -108,7 +108,7 @@ const handleAccept = async (interaction, transfer) => {
             );
         }
 
-        const guild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+        const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
         const targetMember = await guild.members.fetch(targetId).catch(() => null);
         const leaderMember = await guild.members.fetch(leaderId).catch(() => null);
 

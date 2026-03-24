@@ -4,7 +4,7 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder 
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const {
     SPREADSHEET_SQUADS,
-    BALLHEAD_GUILD_ID,
+    GYM_CLASS_GUILD_ID,
     BOT_BUGS_CHANNEL_ID,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
@@ -247,7 +247,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error processing /register command for ${userTag} (${userId}):`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(

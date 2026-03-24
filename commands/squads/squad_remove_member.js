@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, invalidateRanges } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
 const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
 const { disambiguateSquad } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
@@ -221,7 +221,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 logContainer.addTextDisplayComponents(
@@ -246,7 +246,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(

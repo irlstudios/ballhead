@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { insertInvite, fetchInviteById, deleteInvite } = require('../../db');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS } = require('../../config/constants');
 const { disambiguateSquad, AD_SQUAD_TYPE } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
@@ -205,7 +205,7 @@ module.exports = {
 
             let trackingMessage;
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const trackingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const trackingContainer = new ContainerBuilder();
                 trackingContainer.addTextDisplayComponents(
@@ -275,7 +275,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error during /invite-to-squad for ${commandUserTag}:`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(

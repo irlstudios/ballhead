@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -115,7 +115,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error in /squad-opt-out for ${userId}:`, error);
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Opt-Out Error', subtitle: 'Command Failure', lines: [`**User:** ${interaction.user.tag} (${userId })`, `**Error:** ${error.message}`] });

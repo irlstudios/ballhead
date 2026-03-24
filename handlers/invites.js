@@ -8,7 +8,6 @@ const { getSheetsClient } = require('../utils/sheets_cache');
 const { mascotSquads } = require('../config/squads');
 const { assignLevelRoleOnJoin } = require('../utils/squad_level_sync');
 const {
-    BALLHEAD_GUILD_ID,
     GYM_CLASS_GUILD_ID,
     BOT_BUGS_CHANNEL_ID,
     LOGGING_CHANNEL_ID,
@@ -63,11 +62,10 @@ const handleInviteButton = async (interaction, action) => {
             return;
         }
 
-        const ballheadGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
-        const gymClassGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
-        const guild = interaction.guild && (interaction.guild.id === BALLHEAD_GUILD_ID || interaction.guild.id === GYM_CLASS_GUILD_ID)
+        const fetchedGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
+        const guild = interaction.guild && interaction.guild.id === GYM_CLASS_GUILD_ID
             ? interaction.guild
-            : (ballheadGuild || gymClassGuild);
+            : fetchedGuild;
 
         if (!guild) {
             logger.error('Could not fetch required Guilds.');
@@ -76,8 +74,8 @@ const handleInviteButton = async (interaction, action) => {
         }
 
         let trackingChannel;
-        if (ballheadGuild) {
-            trackingChannel = ballheadGuild.channels.cache.get(LOGGING_CHANNEL_ID) || await ballheadGuild.channels.fetch(LOGGING_CHANNEL_ID).catch(err => { logger.error(`Failed to fetch tracking channel: ${err.message}`); return null; });
+        if (guild) {
+            trackingChannel = guild.channels.cache.get(LOGGING_CHANNEL_ID) || await guild.channels.fetch(LOGGING_CHANNEL_ID).catch(err => { logger.error(`Failed to fetch tracking channel: ${err.message}`); return null; });
         }
         let trackingMessage;
         if (trackingChannel && trackingMessageId) {
@@ -118,7 +116,7 @@ const handleInviteButton = async (interaction, action) => {
         }).catch(e => logger.error('editReply failed:', e));
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
             if (!errorGuild) return;
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID).catch(() => null);
             if (!errorChannel) return;

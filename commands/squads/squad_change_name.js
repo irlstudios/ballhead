@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 module.exports = {
@@ -160,7 +160,7 @@ module.exports = {
             }
 
 
-            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+            const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
                 .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
                 .catch(() => null);
 
