@@ -120,7 +120,7 @@ module.exports = {
                     const leader = await guild.members.fetch(userId);
                     if (leader) {
                         // Use role safety: only remove roles the user no longer needs
-                        const rolesToRemove = getRolesToRemove(allData, squadLeaders, userId, squadType);
+                        const rolesToRemove = getRolesToRemove(allData, squadLeaders, userId, squadType, squadName);
                         if (rolesToRemove.length > 0) {
                             await leader.roles.remove(rolesToRemove).catch(roleErr => {
                                 if (roleErr.code !== 50013 && roleErr.code !== 10011) {

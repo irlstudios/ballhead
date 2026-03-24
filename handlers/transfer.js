@@ -199,7 +199,7 @@ const handleAccept = async (interaction, transfer) => {
 
         // Remove roles from old leader only if they don't need them anymore
         if (leaderMember) {
-            const rolesToRemove = getRolesToRemove(allDataHeaderless, squadLeadersHeaderless, leaderId, squadType);
+            const rolesToRemove = getRolesToRemove(allDataHeaderless, squadLeadersHeaderless, leaderId, squadType, squadName);
             for (const roleId of rolesToRemove) {
                 await leaderMember.roles.remove(roleId).catch(e =>
                     logger.error(`[Transfer] Failed to remove role ${roleId} from ${leaderId}:`, e.message)

@@ -62,8 +62,10 @@ module.exports = {
                 return interaction.editReply({ content: `Your A team (**${aTeamName}**) is full.` });
             }
 
-            await withSquadLock(bTeamName, async () => {
-                await withSquadLock(aTeamName, async () => {
+            // Always acquire locks in alphabetical order to prevent deadlocks
+            const [firstLock, secondLock] = [bTeamName, aTeamName].sort((a, b) => a.localeCompare(b));
+            await withSquadLock(firstLock, async () => {
+                await withSquadLock(secondLock, async () => {
                     // Re-fetch for freshness
                     const fresh = await getCachedValues({
                         sheets,
