@@ -1,8 +1,9 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
+const { stripLevelRoles } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 const SL_ID = 1;
@@ -35,7 +36,7 @@ module.exports = {
         try {
             const [squadMembersResponse, squadLeadersResponse, allDataResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' })
             ]).catch(() => { throw new Error('Failed to retrieve data from Google Sheets.'); });
 
@@ -139,7 +140,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Activity', lines: [`User **${userTag}** (<@${userId}>) has left the squad **${squadName}**.`] });
@@ -178,6 +179,9 @@ module.exports = {
                         logger.warn(`Mascot role ${mascotRoleIdToRemove} not found in guild for removal.`);
                     }
                 }
+
+                // Strip level roles when leaving a squad
+                await stripLevelRoles(guild, userId);
             } catch (error) {
                 if (error.code === 10007) { logger.info(`Member ${userTag} (${userId}) not found in guild ${GYM_CLASS_GUILD_ID}, cannot reset nickname/roles.`); }
                 else { logger.error(`Error during nickname/role cleanup for ${userTag} (${userId}): ${error.message}`); }
@@ -200,7 +204,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error during /leave-squad for ${userTag} (${userId}):`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Leave Squad Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });

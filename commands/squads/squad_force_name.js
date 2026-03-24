@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -76,7 +76,7 @@ module.exports = {
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F'
+                range: 'Squad Leaders!A:G'
             });
             const squadMembersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
@@ -112,7 +112,7 @@ module.exports = {
             const updatedSquadLeaders = squadLeaders.map(row => {
                 if (!row || row.length < 3) return row;
                 if (row[2].toUpperCase() === currentSquadName) {
-                    return [row[0], row[1], newSquadName, row[3], row[4], row[5]];
+                    return [row[0], row[1], newSquadName, row[3], row[4], row[5], row[6] || ''];
                 }
                 return row;
             });
@@ -139,7 +139,7 @@ module.exports = {
 
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A1:F' + updatedSquadLeaders.length,
+                range: 'Squad Leaders!A1:G' + updatedSquadLeaders.length,
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadLeaders }
             }).catch(err => { throw new Error(`Failed to update Squad Leaders sheet: ${err.message}`); });
@@ -208,7 +208,7 @@ module.exports = {
             }
 
 
-            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+            const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
                 .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
                 .catch(() => null);
 

@@ -6,8 +6,8 @@ const { buildTextBlock, buildNoticeContainer, noticePayload } = require('../util
 const { fetchInviteById, updateInviteStatus, deleteInvite } = require('../db');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const { mascotSquads } = require('../config/squads');
+const { assignLevelRoleOnJoin } = require('../utils/squad_level_sync');
 const {
-    BALLHEAD_GUILD_ID,
     GYM_CLASS_GUILD_ID,
     BOT_BUGS_CHANNEL_ID,
     LOGGING_CHANNEL_ID,
@@ -62,11 +62,10 @@ const handleInviteButton = async (interaction, action) => {
             return;
         }
 
-        const gymClassGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
-        const ballheadGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
-        const guild = interaction.guild && (interaction.guild.id === GYM_CLASS_GUILD_ID || interaction.guild.id === BALLHEAD_GUILD_ID)
+        const fetchedGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
+        const guild = interaction.guild && interaction.guild.id === GYM_CLASS_GUILD_ID
             ? interaction.guild
-            : (gymClassGuild || ballheadGuild);
+            : fetchedGuild;
 
         if (!guild) {
             logger.error('Could not fetch required Guilds.');
@@ -75,8 +74,8 @@ const handleInviteButton = async (interaction, action) => {
         }
 
         let trackingChannel;
-        if (ballheadGuild) {
-            trackingChannel = ballheadGuild.channels.cache.get(LOGGING_CHANNEL_ID) || await ballheadGuild.channels.fetch(LOGGING_CHANNEL_ID).catch(err => { logger.error(`Failed to fetch tracking channel: ${err.message}`); return null; });
+        if (guild) {
+            trackingChannel = guild.channels.cache.get(LOGGING_CHANNEL_ID) || await guild.channels.fetch(LOGGING_CHANNEL_ID).catch(err => { logger.error(`Failed to fetch tracking channel: ${err.message}`); return null; });
         }
         let trackingMessage;
         if (trackingChannel && trackingMessageId) {
@@ -117,7 +116,7 @@ const handleInviteButton = async (interaction, action) => {
         }).catch(e => logger.error('editReply failed:', e));
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
             if (!errorGuild) return;
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID).catch(() => null);
             if (!errorChannel) return;
@@ -143,6 +142,14 @@ const handleInviteButton = async (interaction, action) => {
 const handleAcceptInvite = async (interaction, ctx) => {
     const { guild, squadName, squadType, trackingMessage, commandUserID, invitedMemberId, commandUser, inviteMessage } = ctx;
 
+    // Re-check invite status inside the lock to prevent double-accept race
+    const freshInvite = await fetchInviteById(interaction.message.id).catch(() => null);
+    if (!freshInvite || freshInvite.invite_status !== 'Pending') {
+        const status = freshInvite ? freshInvite.invite_status : 'unknown';
+        await interaction.editReply(noticePayload(`This invite has already been processed (${status}).`, { title: 'Invite Processed', subtitle: 'Squad Invite' }));
+        return;
+    }
+
     const member = await guild.members.fetch(invitedMemberId).catch(() => null);
     if (!member) {
         await interaction.editReply(noticePayload('You could not be found in the server.', { title: 'Member Not Found', subtitle: 'Squad Invite' }));
@@ -154,7 +161,7 @@ const handleAcceptInvite = async (interaction, ctx) => {
     const [squadMembersResponse, allDataResponse, squadLeadersResponse] = await Promise.all([
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+        sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
     ]).catch(() => { throw new Error('Failed to retrieve sheet data for processing invite.'); });
 
     const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
@@ -256,6 +263,11 @@ const handleAcceptInvite = async (interaction, ctx) => {
             }
         }
     }
+
+    // Assign level role for competitive squads
+    await assignLevelRoleOnJoin(guild, invitedMemberId, squadName).catch(e =>
+        logger.error(`[Invite Accept] Failed to assign level role to ${invitedMemberId}:`, e.message)
+    );
 
     const acceptanceContainer = new ContainerBuilder()
         .setAccentColor(0x2ECC71)

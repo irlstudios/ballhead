@@ -1,10 +1,11 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
-const { compSquadLevelRoles, contentSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { getSheetsClient, invalidateRanges } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
+const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { disambiguateSquad } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 
-const extendedCompRoles = [...compSquadLevelRoles, '1200889836844896316'];
+const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
 
 const SL_ID = 1;
 const SM_ID = 1;
@@ -18,7 +19,11 @@ module.exports = {
         .addUserOption(option =>
             option.setName('member')
                 .setDescription('The member you want to remove from your squad.')
-                .setRequired(true)),
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('squad')
+                .setDescription('Squad name (required if you own multiple)')
+                .setRequired(false)),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -64,7 +69,7 @@ module.exports = {
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
             ]).catch(() => { throw new Error('Failed to retrieve data from Google Sheets.'); });
 
@@ -76,12 +81,13 @@ module.exports = {
             squadLeadersData.shift();
             squadMembersData.shift();
 
-            const leaderRow = squadLeadersData.find(row => row && row.length > SL_ID && row[SL_ID] === commandUserID);
-            if (!leaderRow) {
+            const specifiedSquad = interaction.options.getString('squad');
+            const { squad: leaderRow, error: disambigError } = disambiguateSquad(squadLeadersData, commandUserID, specifiedSquad);
+            if (disambigError) {
                 const container = new ContainerBuilder();
                 container.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Access Denied'),
-                    new TextDisplayBuilder().setContent('You must be a squad leader to use this command.')
+                    new TextDisplayBuilder().setContent(disambigError)
                 );
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
@@ -118,8 +124,7 @@ module.exports = {
 
             const leaderAllDataRow = allData.find(row => row && row.length > AD_ID && row[AD_ID] === commandUserID);
             const squadTypeForRoles = leaderAllDataRow ? leaderAllDataRow[AD_SQUAD_TYPE] : null;
-            const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? extendedCompRoles :
-                squadTypeForRoles === 'Content' ? contentSquadLevelRoles : [];
+            const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? extendedCompRoles : [];
 
             const eventSquadName = leaderRow[SL_EVENT_SQUAD];
             let mascotRoleIdToRemove = null;
@@ -166,6 +171,7 @@ module.exports = {
                 logger.warn(`User ${targetUserTag} (${targetUserID}) was in Squad Members but not found in All Data.`);
             }
             logger.info(`Updated sheets for removing ${targetUserTag} from ${leaderSquadName}`);
+            invalidateRanges(SPREADSHEET_SQUADS, ['Squad Members!A:E', 'All Data!A:H']);
 
             try {
                 const memberToRemove = await guild.members.fetch(targetUserID);
@@ -215,7 +221,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 logContainer.addTextDisplayComponents(
@@ -240,7 +246,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(

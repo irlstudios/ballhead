@@ -1,6 +1,21 @@
+'use strict';
+
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID, SQUAD_LEADER_ROLE_ID, COMPETITIVE_SQUAD_OWNER_ROLE_ID, CONTENT_SQUAD_OWNER_ROLE_ID, LEVEL_5_ROLE_ID } = require('../../config/constants');
+const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
+const {
+    SPREADSHEET_SQUADS,
+    GYM_CLASS_GUILD_ID,
+    BOT_BUGS_CHANNEL_ID,
+    SQUAD_LEADER_ROLE_ID,
+    COMPETITIVE_SQUAD_OWNER_ROLE_ID,
+    LEVEL_5_ROLE_ID,
+} = require('../../config/constants');
+const {
+    findUserSquads, findUserAllDataRows, isSquadNameTaken,
+    AD_SQUAD_NAME, AD_SQUAD_TYPE, AD_IS_LEADER, SL_SQUAD_NAME,
+} = require('../../utils/squad_queries');
+const { calculateSquadWins } = require('../../utils/top_squad_sync');
+const { getSquadLevel } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 const formatDate = () => {
@@ -27,7 +42,6 @@ module.exports = {
                 .addChoices(
                     { name: 'Casual', value: 'Casual' },
                     { name: 'Competitive', value: 'Competitive' },
-                    { name: 'Content', value: 'Content' }
                 )),
 
     async execute(interaction) {
@@ -61,37 +75,72 @@ module.exports = {
         const sheets = await getSheetsClient();
 
         try {
-            const [allDataResponse, squadLeadersResponse] = await Promise.all([
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' })
-            ]).catch(err => {
-                logger.error('Error fetching sheet data:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
+            const results = await getCachedValues({
+                sheets,
+                spreadsheetId: SPREADSHEET_SQUADS,
+                ranges: ['All Data!A:H', 'Squad Leaders!A:G'],
+                ttlMs: 30000,
             });
+            const allData = (results.get('All Data!A:H') || []).slice(1);
+            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
 
-            const allData = (allDataResponse.data.values || []).slice(1);
-            const squadLeaders = (squadLeadersResponse.data.values || []).slice(1);
+            // Multi-squad validation
+            const userSquads = findUserSquads(squadLeaders, userId);
+            const userAllDataRows = findUserAllDataRows(allData, userId);
 
-            const userInAllData = allData.find(row => row && row.length > 1 && row[1] === userId);
-            const userInSquadLeaders = squadLeaders.find(row => row && row.length > 1 && row[1] === userId);
-            const squadNameTaken = squadLeaders.find(row => row && row.length > 2 && row[2]?.toUpperCase() === squadName);
-            const isMarkedLeaderInAllData = userInAllData && userInAllData.length > 6 && userInAllData[6] === 'Yes';
-            if (userInSquadLeaders || isMarkedLeaderInAllData) {
-                const container = new ContainerBuilder();
-                container.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## Already a Leader'),
-                    new TextDisplayBuilder().setContent('You appear to already own a squad.')
-                );
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            // Determine types of existing squads via All Data (Squad Leaders col 3 is Event Squad, not type)
+            const ownedTypes = userAllDataRows
+                .filter(row => row.length > AD_IS_LEADER && row[AD_IS_LEADER] === 'Yes')
+                .map(row => ({ name: row[AD_SQUAD_NAME], type: row[AD_SQUAD_TYPE] }));
+
+            const ownsCasual = ownedTypes.find(s => s.type === 'Casual');
+            const ownsComp = ownedTypes.find(s => s.type === 'Competitive');
+            const ownsBTeam = userSquads.find(r => r.length > 6 && r[6] && r[6] !== '');
+
+            let isBTeam = false;
+            let aTeamSquadName = '';
+
+            if (squadType === 'Casual') {
+                if (ownsCasual) {
+                    return interaction.editReply({ content: 'You already own a Casual squad.' });
+                }
+                if (ownsComp && ownsComp.name?.toUpperCase() !== squadName) {
+                    return interaction.editReply({
+                        content: `Your Casual squad must share the same name as your Competitive squad (${ownsComp.name}).`,
+                    });
+                }
+            } else if (squadType === 'Competitive') {
+                if (ownsComp && !ownsBTeam) {
+                    // They want a second comp squad (B team). Check level 50 requirement.
+                    const squadWins = await calculateSquadWins(sheets);
+                    const compData = squadWins.get(ownsComp.name);
+                    const level = compData ? getSquadLevel(compData.totalWins) : 0;
+                    if (level < 50) {
+                        return interaction.editReply({
+                            content: `Your Competitive squad must be level 50+ to create a B team. Current level: ${level}.`,
+                        });
+                    }
+                    isBTeam = true;
+                    aTeamSquadName = ownsComp.name;
+                } else if (ownsComp && ownsBTeam) {
+                    return interaction.editReply({ content: 'You already own an A team and B team.' });
+                } else if (ownsCasual && ownsCasual.name?.toUpperCase() !== squadName) {
+                    return interaction.editReply({
+                        content: `Your Competitive squad must share the same name as your Casual squad (${ownsCasual.name}).`,
+                    });
+                }
             }
-            if (userInAllData && userInAllData.length > 2 && userInAllData[2] !== 'N/A' && userInAllData[2]?.toUpperCase() !== squadName) {
-                const container = new ContainerBuilder();
-                container.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## Already in a Squad'),
-                    new TextDisplayBuilder().setContent(`You are already listed as a member of squad **${userInAllData[2]}**.`)
-                );
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+
+            // Check if user is a member of another squad (owners cannot join others)
+            const isMemberOfOther = userAllDataRows.some(
+                row => row[AD_IS_LEADER] !== 'Yes' && row[AD_SQUAD_NAME] && row[AD_SQUAD_NAME] !== 'N/A'
+            );
+            if (isMemberOfOther && userSquads.length === 0) {
+                return interaction.editReply({ content: 'You must leave your current squad before creating one.' });
             }
-            if (squadNameTaken) {
+
+            // Name uniqueness check (allows same user to own same name in different type)
+            if (isSquadNameTaken(squadLeaders, squadName, userId)) {
                 const container = new ContainerBuilder();
                 container.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Squad Tag Taken'),
@@ -99,10 +148,10 @@ module.exports = {
                 );
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             }
+
             const squadLeaderRole = interaction.guild.roles.cache.get(SQUAD_LEADER_ROLE_ID);
             const competitiveRole = interaction.guild.roles.cache.get(COMPETITIVE_SQUAD_OWNER_ROLE_ID);
-            const contentRole = interaction.guild.roles.cache.get(CONTENT_SQUAD_OWNER_ROLE_ID);
-            if (!squadLeaderRole || !competitiveRole || !contentRole) {
+            if (!squadLeaderRole || !competitiveRole) {
                 const container = new ContainerBuilder();
                 container.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent('## Configuration Error'),
@@ -112,62 +161,45 @@ module.exports = {
             }
 
             const dateString = formatDate();
+            const parentSquad = isBTeam ? aTeamSquadName : '';
             const newLeaderRow = [
                 username,
                 userId,
                 squadName,
                 'N/A',
                 'FALSE',
-                dateString
+                dateString,
+                parentSquad,
             ];
 
             await sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
-                resource: { values: [newLeaderRow] }
+                resource: { values: [newLeaderRow] },
             }).catch(err => { throw new Error(`Failed to append to Squad Leaders sheet: ${err.message}`); });
 
-            const userInAllDataIndex = allData.findIndex(row => row && row.length > 1 && row[1] === userId);
-
-            if (userInAllDataIndex !== -1) {
-                const sheetRowIndex = userInAllDataIndex + 2;
-                const valuesToUpdate = [
-                    squadName,
-                    squadType || 'N/A',
-                    'N/A',
-                    'FALSE',
-                    'Yes'
-                ];
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_SQUADS,
-                    range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`,
-                    valueInputOption: 'RAW',
-                    resource: { values: [valuesToUpdate] }
-                }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
-            } else {
-                const newAllDataRow = [
-                    username,
-                    userId,
-                    squadName,
-                    squadType || 'N/A',
-                    'N/A',
-                    'FALSE',
-                    'Yes',
-                    'TRUE'
-                ];
-                await sheets.spreadsheets.values.append({
-                    spreadsheetId: SPREADSHEET_SQUADS,
-                    range: 'All Data!A1',
-                    valueInputOption: 'RAW',
-                    resource: { values: [newAllDataRow] }
-                }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
-            }
+            // Add or update All Data entry
+            const newAllDataRow = [
+                username,
+                userId,
+                squadName,
+                squadType || 'N/A',
+                'N/A',
+                'FALSE',
+                'Yes',
+                'TRUE',
+            ];
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_SQUADS,
+                range: 'All Data!A1',
+                valueInputOption: 'RAW',
+                resource: { values: [newAllDataRow] },
+            }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
 
             try {
                 await interaction.member.roles.add(squadLeaderRole);
                 if (squadType === 'Competitive') await interaction.member.roles.add(competitiveRole);
-                if (squadType === 'Content') await interaction.member.roles.add(contentRole);
             } catch (roleError) {
                 logger.warn(`Failed to add roles to ${username} (${userId}): ${roleError.message}`);
                 const warningContainer = new ContainerBuilder();
@@ -194,7 +226,7 @@ module.exports = {
                 const dmContainer = new ContainerBuilder();
                 dmContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`## Squad Registered\n${squadName}`),
-                    new TextDisplayBuilder().setContent(`Your squad **${squadName}** (${squadType}) has been registered.`)
+                    new TextDisplayBuilder().setContent(`Your squad **${squadName}** (${squadType}) has been registered.${isBTeam ? ` This is a B team linked to **${aTeamSquadName}**.` : ''}`)
                 );
                 await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
@@ -204,18 +236,18 @@ module.exports = {
             const successContainer = new ContainerBuilder();
             successContainer.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent(`## Squad Registered\n${squadName}`),
-                new TextDisplayBuilder().setContent(`Squad **${squadName}** (${squadType}) has been registered and configured.`)
+                new TextDisplayBuilder().setContent(`Squad **${squadName}** (${squadType}) has been registered and configured.${isBTeam ? ` Linked as B team to **${aTeamSquadName}**.` : ''}`)
             );
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
                 components: [successContainer],
-                ephemeral: true
+                ephemeral: true,
             });
 
         } catch (error) {
             logger.error(`Error processing /register command for ${userTag} (${userId}):`, error);
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 errorContainer.addTextDisplayComponents(
@@ -234,8 +266,8 @@ module.exports = {
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
                 components: [errorContainer],
-                ephemeral: true
+                ephemeral: true,
             }).catch(logger.error);
         }
-    }
+    },
 };
