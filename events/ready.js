@@ -1,7 +1,13 @@
 const { REST } = require('@discordjs/rest');
 const { Routes } = require('discord-api-types/v10');
+const cron = require('node-cron');
 const logger = require('../utils/logger');
-const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema } = require('../db');
+const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
+    ensureSquadStateTable, ensureTransferRequestsTable,
+    fetchExpiredPendingTransfers, updateTransferRequestStatus } = require('../db');
+const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
+const { syncLevelRoles } = require('../utils/squad_level_sync');
+const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
 
 const ensureRoleTimeoutsTable = async () => {
@@ -131,5 +137,54 @@ module.exports = {
         await processExpiredRoleTimeouts(client);
         await scheduleFutureRoleTimeouts(client);
         await processExpiredInvites(client);
+
+        // Ensure new DB tables
+        await ensureSquadStateTable();
+        await ensureTransferRequestsTable();
+
+        // Load top squad state from DB
+        await loadTopSquadFromDB();
+
+        // Process expired transfer requests
+        try {
+            const expiredTransfers = await fetchExpiredPendingTransfers();
+            for (const transfer of expiredTransfers) {
+                await updateTransferRequestStatus(transfer.message_id, 'Expired');
+            }
+            if (expiredTransfers.length > 0) {
+                logger.info(`[Startup] Processed ${expiredTransfers.length} expired transfer request(s).`);
+            }
+        } catch (error) {
+            logger.error('[Startup] Error processing expired transfers:', error);
+        }
+
+        // Weekly: Top Comp Squad Announcement - Friday 4:00 PM Chicago
+        cron.schedule('0 16 * * 5', async () => {
+            try {
+                await syncTopSquad(client, true);
+            } catch (error) {
+                logger.error('[Cron] Top Squad Sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Daily: Level Role Sync - 11:45 PM Chicago
+        cron.schedule('45 23 * * *', async () => {
+            try {
+                await syncLevelRoles(client);
+            } catch (error) {
+                logger.error('[Cron] Level Role Sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Daily: Prune Inactive Members - 11:59 PM Chicago
+        cron.schedule('59 23 * * *', async () => {
+            try {
+                await pruneInactiveMembers(client);
+            } catch (error) {
+                logger.error('[Cron] Prune Inactive Members failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT)');
     },
 };

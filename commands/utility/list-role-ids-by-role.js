@@ -3,10 +3,10 @@ const {CommandInteraction, PermissionsBitField, AttachmentBuilder, MessageFlags,
 const {Buffer} = require('node:buffer');
 const axios = require('axios');
 const logger = require('../../utils/logger');
-const { BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
-const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
+const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 
 module.exports = {
     data: new SlashCommandBuilder()

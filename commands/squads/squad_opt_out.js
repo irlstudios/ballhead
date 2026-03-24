@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -43,30 +43,33 @@ module.exports = {
                     range });
 
                 const rows = response.data.values || [];
-                let rowIndex = -1;
-                const userRow = rows.find((row, index) => {
+                const prefIndex = 7;
+                const userRowIndices = [];
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
                     if (row && row.length > 1 && row[1] === userID.toString()) {
-                        rowIndex = index + 1;
-                        return true;
+                        userRowIndices.push(i);
                     }
-                    return false;
-                });
+                }
 
+                if (userRowIndices.length > 0) {
+                    const firstRow = rows[userRowIndices[0]];
 
-                if (userRow && rowIndex > 0) {
-                    const prefIndex = 7;
-
-                    if (userRow.length > prefIndex && userRow[prefIndex] === 'FALSE') {
+                    if (firstRow.length > prefIndex && firstRow[prefIndex] === 'FALSE') {
                         return { success: false, message: 'You are already opted out of squad invites.' };
                     } else {
-                        const updateRange = `All Data!H${rowIndex}`;
-                        logger.info(`Updating ${updateRange} to FALSE for user ${userID}`);
-                        await sheets.spreadsheets.values.update({
-                            spreadsheetId: SPREADSHEET_SQUADS,
-                            range: updateRange,
-                            valueInputOption: 'RAW',
-                            requestBody: {
-                                values: [['FALSE']] } }).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
+                        const updatePromises = userRowIndices.map(idx => {
+                            const sheetRow = idx + 1;
+                            const updateRange = `All Data!H${sheetRow}`;
+                            logger.info(`Updating ${updateRange} to FALSE for user ${userID}`);
+                            return sheets.spreadsheets.values.update({
+                                spreadsheetId: SPREADSHEET_SQUADS,
+                                range: updateRange,
+                                valueInputOption: 'RAW',
+                                requestBody: { values: [['FALSE']] },
+                            });
+                        });
+                        await Promise.all(updatePromises).catch(err => { throw new Error(`Sheet update failed: ${err.message}`); });
                         return { success: true, message: 'You have successfully opted out of squad invites.' };
                     }
                 } else {
@@ -112,7 +115,7 @@ module.exports = {
         } catch (error) {
             logger.error(`Error in /squad-opt-out for ${userId}:`, error);
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Opt-Out Error', subtitle: 'Command Failure', lines: [`**User:** ${interaction.user.tag} (${userId })`, `**Error:** ${error.message}`] });

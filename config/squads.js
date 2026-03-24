@@ -16,16 +16,8 @@ const compSquadLevelRoles = Object.freeze([
     '1288918281343733842',
 ]);
 
-const contentSquadLevelRoles = Object.freeze([
-    '1291090496869109762',
-    '1291090569346682931',
-    '1291090608315699229',
-    '1291090760405356708',
-]);
-
 function getSquadTypeRoles(squadType) {
     if (squadType === 'Competitive') return compSquadLevelRoles;
-    if (squadType === 'Content') return contentSquadLevelRoles;
     return [];
 }
 
@@ -36,7 +28,6 @@ function findMascotByName(eventSquadName) {
 module.exports = {
     mascotSquads,
     compSquadLevelRoles,
-    contentSquadLevelRoles,
     getSquadTypeRoles,
     findMascotByName,
 };
