@@ -33,7 +33,7 @@ module.exports = {
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F'
+                range: 'Squad Leaders!A:G'
             });
 
             const squadMembersResponse = await sheets.spreadsheets.values.get({
@@ -98,7 +98,7 @@ module.exports = {
 
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F',
+                range: 'Squad Leaders!A:G',
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadLeaders }
             });

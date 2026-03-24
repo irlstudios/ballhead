@@ -45,7 +45,7 @@ module.exports = {
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F'
+                range: 'Squad Leaders!A:G'
             });
 
             const squadLeadersData = squadLeadersResponse.data.values || [];
