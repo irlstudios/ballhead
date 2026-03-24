@@ -4,12 +4,12 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const logger = require('../../utils/logger');
-const { BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
 const SPREADSHEET_ID = '1ZLbmCl3prerT5Qp57Gc3BESfGe0EGUryVk4DpjxrVtI';
 const SHEET_NAME = 'Gym Class';
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
-const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
+const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 const REQUIRED_ROLES = ['752218192197320735', '805833778064130104'];
 
 async function getChannelPermissions(channel) {

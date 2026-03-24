@@ -8,7 +8,7 @@ const {
 } = require('discord.js');
 const { createCanvas, registerFont } = require('canvas');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_COMP_WINS, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { SPREADSHEET_COMP_WINS, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 const { calculateSquadWins, getWeeklyWins } = require('../../utils/top_squad_sync');
 const { getSquadLevel } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
@@ -236,7 +236,7 @@ async function buildSquadLeaderboardPayload(view, client) {
         // Resolve Discord usernames
         let guild = null;
         if (client) {
-            guild = await client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
+            guild = await client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
         }
 
         const canvasEntries = [];

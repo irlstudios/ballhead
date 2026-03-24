@@ -1,7 +1,6 @@
 'use strict';
 
 // Guild IDs
-const BALLHEAD_GUILD_ID = '1233740086839869501';
 const GYM_CLASS_GUILD_ID = '752216589792706621';
 
 // Channel IDs
@@ -76,7 +75,6 @@ const AD_ID = 1;
 const AD_PREFERENCE = 7;
 
 module.exports = {
-    BALLHEAD_GUILD_ID,
     GYM_CLASS_GUILD_ID,
     BOT_BUGS_CHANNEL_ID,
     USER_BUG_REPORTS_CHANNEL_ID,

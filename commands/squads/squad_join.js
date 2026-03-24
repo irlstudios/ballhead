@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, AD_PREFERENCE } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, AD_PREFERENCE } = require('../../config/constants');
 const { mascotSquads } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
 const { withSquadLock } = require('../../utils/squad_lock');
@@ -250,7 +250,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 let logDescription = `**User:** ${userTag} (<@${userId}>)\n**Joined Squad:** ${chosenSquad.name}\n**Leader:** <@${chosenSquad.leaderId}>`;
                 if (assignedMascotRole) {
@@ -269,7 +269,7 @@ module.exports = {
             logger.error(`Error processing /join-random-squad for ${userTag}:`, error);
 
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const errorBlock = buildTextBlock({ title: 'Join Random Squad Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });
