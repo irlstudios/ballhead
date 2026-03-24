@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 module.exports = {
@@ -33,7 +33,7 @@ module.exports = {
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F'
+                range: 'Squad Leaders!A:G'
             });
 
             const squadMembersResponse = await sheets.spreadsheets.values.get({
@@ -98,7 +98,7 @@ module.exports = {
 
             await sheets.spreadsheets.values.update({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:F',
+                range: 'Squad Leaders!A:G',
                 valueInputOption: 'RAW',
                 resource: { values: updatedSquadLeaders }
             });
@@ -160,7 +160,7 @@ module.exports = {
             }
 
 
-            const loggingChannel = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID)
+            const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
                 .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
                 .catch(() => null);
 

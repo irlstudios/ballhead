@@ -3,7 +3,7 @@ const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 const logger = require('../../utils/logger');
-const { BOT_BUGS_CHANNEL_ID, BALLHEAD_GUILD_ID } = require('../../config/constants');
+const { BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -27,7 +27,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 
 const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
-const ERROR_LOG_GUILD_ID = BALLHEAD_GUILD_ID;
+const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 const FF_LEADERBOARD_CATEGORIES = [
     { label: 'Player Rating (MMR)', value: 'MMR' },
     { label: 'Points', value: 'Points' },

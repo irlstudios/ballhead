@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, SPREADSHEET_CONTENT_POSTS } = require('../../config/constants');
+const { SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 async function fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
@@ -115,139 +115,6 @@ async function fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET
 }
 
 
-async function fetchContentRoster(sheets, SPREADSHEET_CONTENT_POSTS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
-    try {
-        const individualPostsResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_CONTENT_POSTS,
-            range: '\'Individual # of Posts\'!A:Z',
-        });
-
-        const individualPostsData = individualPostsResponse.data.values || [];
-        if (individualPostsData.length < 1) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Content Roster Unavailable\n' + squadNameInput),
-                new TextDisplayBuilder().setContent(`Could not read headers from the content posts sheet for "${squadNameInput}".`)
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-            return;
-        }
-        const individualPostsHeaders = individualPostsData.shift() || [];
-        const squadMembersResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_SQUADS,
-            range: '\'Squad Members\'!A:E',
-        });
-        const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
-        const relevantPosts = individualPostsData.filter(row => row && row.length > 1 && row[1]?.trim().toLowerCase() === squadNameNormalized);
-
-        if (relevantPosts.length === 0) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## No Content Members\n' + squadNameInput),
-                new TextDisplayBuilder().setContent(`No members found listed in the content tracking sheet for squad "${squadNameInput}".`)
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-            return;
-        }
-
-        const squadMembersMap = new Map();
-        for (const memberRow of squadMembersData) {
-            const discordId = memberRow[1]?.trim();
-            const squad = memberRow[2]?.trim().toLowerCase();
-            const joinedSquadStr = memberRow[4]?.trim();
-
-            if (discordId && squad === squadNameNormalized) {
-                try {
-                    const joinedDate = joinedSquadStr ? new Date(joinedSquadStr) : null;
-                    if(joinedDate && !isNaN(joinedDate)) {
-                        squadMembersMap.set(discordId, joinedDate);
-                    } else {
-                        squadMembersMap.set(discordId, new Date(0));
-                        logger.warn(`Invalid or missing join date for ${discordId} in squad ${squadNameInput}. Defaulting to epoch.`);
-                    }
-                } catch (error) {
-                    squadMembersMap.set(discordId, new Date(0));
-                    logger.warn(`Error parsing join date for ${discordId} in squad ${squadNameInput}: ${joinedSquadStr}`, error);
-                }
-            }
-        }
-
-        const dateColumns = individualPostsHeaders.slice(6).map(dateStr => {
-            try { return new Date(dateStr); } catch { return null; }
-        }).filter(date => date && !isNaN(date));
-
-        const membersWithPosts = relevantPosts.map(row => {
-            const discordId = row[0]?.trim();
-            if (!discordId) return null;
-
-            const joinedSquadDate = squadMembersMap.get(discordId) || new Date(0);
-
-            let postsCount = 0;
-            for (let i = 0; i < dateColumns.length; i++) {
-                const weekDate = dateColumns[i];
-                const weekColumnIndex = 6 + i;
-                if (weekDate >= joinedSquadDate) {
-                    const posts = parseInt(row[weekColumnIndex]?.trim()) || 0;
-                    postsCount += posts;
-                }
-            }
-
-            return {
-                discordId,
-                totalPosts: postsCount,
-                isLeader: discordId === leaderId,
-            };
-        }).filter(m => m !== null);
-
-        const totalSquadPosts = membersWithPosts.reduce((sum, member) => sum + member.totalPosts, 0);
-
-        membersWithPosts.sort((a, b) => {
-            if (a.isLeader && !b.isLeader) return -1;
-            if (!a.isLeader && b.isLeader) return 1;
-            return b.totalPosts - a.totalPosts;
-        });
-
-        const leader = membersWithPosts.find(member => member.isLeader);
-        const members = membersWithPosts.filter(member => !member.isLeader);
-        let memberContributions = 'No other members found in content tracking.';
-        if (members.length > 0) {
-            memberContributions = members
-                .map(member => `<@${member.discordId}> (${member.totalPosts} Posts)`)
-                .join('\n');
-        }
-
-        const container = new ContainerBuilder()
-            .setAccentColor(0xFF6B00)
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()}`),
-                new TextDisplayBuilder().setContent(`${totalSquadPosts} Total Posts`)
-            )
-            .addSeparatorComponents(
-                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
-            )
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`**Leader**\n${leaderId ? `<@${leaderId}> (${leader ? leader.totalPosts + ' Posts' : 'N/A'})` : 'Not found'}`),
-                new TextDisplayBuilder().setContent(`**Members**\n${memberContributions}`)
-            )
-            .addSeparatorComponents(
-                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
-            )
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`-# Content • Formed ${squadMade || 'Unknown'}`)
-            );
-
-        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-
-    } catch (error) {
-        logger.error(`Error in fetchContentRoster for ${squadNameInput}:`, error);
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('## Roster Error\nContent Squad'),
-            new TextDisplayBuilder().setContent('An error occurred while fetching the content squad roster.')
-        );
-        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-    }
-}
 
 async function fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType) {
     try {
@@ -321,7 +188,7 @@ module.exports = {
         try {
             const squadLeadersResponse = await sheets.spreadsheets.values.get({
                 spreadsheetId: SPREADSHEET_SQUADS,
-                range: '\'Squad Leaders\'!A:F',
+                range: '\'Squad Leaders\'!A:G',
             });
 
             const squadLeadersData = (squadLeadersResponse.data.values || []).slice(1);
@@ -352,8 +219,6 @@ module.exports = {
 
             if (squadType === 'Competitive') {
                 await fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
-            } else if (squadType === 'Content') {
-                await fetchContentRoster(sheets, SPREADSHEET_CONTENT_POSTS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
             } else {
                 await fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType);
             }

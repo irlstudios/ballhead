@@ -1,8 +1,9 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, AD_PREFERENCE } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, AD_PREFERENCE } = require('../../config/constants');
 const { mascotSquads } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
+const { withSquadLock } = require('../../utils/squad_lock');
 const logger = require('../../utils/logger');
 
 const SL_ID = 1;
@@ -50,7 +51,7 @@ module.exports = {
         try {
             const [allDataResponse, squadLeadersResponse, squadMembersResponse] = await Promise.all([
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
-                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:F' }),
+                sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
                 sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
             ]).catch(err => {
                 logger.error('Error fetching sheet data for random join:', err); throw new Error('Failed to retrieve necessary data from Google Sheets.');
@@ -131,32 +132,41 @@ module.exports = {
                 return;
             }
 
-            // NOTE: Capacity check above is not locked. Concurrent /join-random-squad calls could
-            // pass the check simultaneously. An in-memory lock is applied on the invite accept path
-            // (handlers/invites.js) where concurrent button clicks are most likely. A full fix here
-            // would require re-checking capacity inside a lock, but the risk is low for this command.
             const randomIndex = Math.floor(Math.random() * availableSquads.length);
             const chosenSquad = availableSquads[randomIndex];
             logger.info(`User ${userTag} randomly assigned to join squad ${chosenSquad.name}`);
 
-            let currentDate = new Date();
-            let dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
-            const newSquadMemberRow = [username, userId, chosenSquad.name, 'N/A', dateString];
-            await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A1', valueInputOption: 'RAW', resource: { values: [newSquadMemberRow] } })
-                .catch(err => { throw new Error(`Failed to add you to the Squad Members sheet: ${err.message}`); });
+            await withSquadLock(chosenSquad.name, async () => {
+                // Re-check capacity inside the lock to prevent race conditions
+                const freshMembersResp = await sheets.spreadsheets.values.get({
+                    spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E',
+                });
+                const freshMembersData = (freshMembersResp.data.values || []).slice(1);
+                const currentCount = freshMembersData.filter(
+                    row => row && row.length > SM_SQUAD_NAME && row[SM_SQUAD_NAME] === chosenSquad.name
+                ).length + 1;
+                if (currentCount >= MAX_SQUAD_MEMBERS) {
+                    throw new Error(`Squad **${chosenSquad.name}** filled up before your join could complete. Please try again.`);
+                }
 
-            let existingPreference = 'TRUE';
-            if (userAllDataRow && userAllDataRow.length > AD_PREFERENCE) { existingPreference = userAllDataRow[AD_PREFERENCE] || 'TRUE'; }
-            if (userAllDataRowIndex !== -1) {
-                const sheetRowIndex = userAllDataRowIndex + 2;
-                const valuesToUpdate = [chosenSquad.name, chosenSquad.type, 'N/A', 'FALSE', 'No'];
-                await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`, valueInputOption: 'RAW', resource: { values: [valuesToUpdate] } })
-                    .catch(err => { throw new Error(`Failed to update your record in All Data sheet: ${err.message}`); });
-            } else {
-                const newAllDataRow = [username, userId, chosenSquad.name, chosenSquad.type, 'N/A', 'FALSE', 'No', existingPreference];
-                await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1', valueInputOption: 'RAW', resource: { values: [newAllDataRow] } })
-                    .catch(err => { throw new Error(`Failed to add your record to All Data sheet: ${err.message}`); });
-            }
+                const currentDate = new Date();
+                const dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
+                const newSquadMemberRow = [username, userId, chosenSquad.name, 'N/A', dateString];
+                await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A1', valueInputOption: 'RAW', resource: { values: [newSquadMemberRow] } })
+                    .catch(err => { throw new Error(`Failed to add you to the Squad Members sheet: ${err.message}`); });
+
+                const existingPreference = (userAllDataRow && userAllDataRow.length > AD_PREFERENCE) ? (userAllDataRow[AD_PREFERENCE] || 'TRUE') : 'TRUE';
+                if (userAllDataRowIndex !== -1) {
+                    const sheetRowIndex = userAllDataRowIndex + 2;
+                    const valuesToUpdate = [chosenSquad.name, chosenSquad.type, 'N/A', 'FALSE', 'No'];
+                    await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: `All Data!C${sheetRowIndex}:G${sheetRowIndex}`, valueInputOption: 'RAW', resource: { values: [valuesToUpdate] } })
+                        .catch(err => { throw new Error(`Failed to update your record in All Data sheet: ${err.message}`); });
+                } else {
+                    const newAllDataRow = [username, userId, chosenSquad.name, chosenSquad.type, 'N/A', 'FALSE', 'No', existingPreference];
+                    await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1', valueInputOption: 'RAW', resource: { values: [newAllDataRow] } })
+                        .catch(err => { throw new Error(`Failed to add your record to All Data sheet: ${err.message}`); });
+                }
+            });
             logger.info(`Updated sheets for ${userTag} joining ${chosenSquad.name}`);
 
             try {
@@ -240,7 +250,7 @@ module.exports = {
             }
 
             try {
-                const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 let logDescription = `**User:** ${userTag} (<@${userId}>)\n**Joined Squad:** ${chosenSquad.name}\n**Leader:** <@${chosenSquad.leaderId}>`;
                 if (assignedMascotRole) {
@@ -259,7 +269,7 @@ module.exports = {
             logger.error(`Error processing /join-random-squad for ${userTag}:`, error);
 
             try {
-                const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+                const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const errorBlock = buildTextBlock({ title: 'Join Random Squad Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });

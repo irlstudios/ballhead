@@ -342,6 +342,77 @@ const removeRep = async (user_id, amount) => {
     return result.rows;
 };
 
+// Squad State
+async function ensureSquadStateTable() {
+    const query = `
+        CREATE TABLE IF NOT EXISTS squad_state (
+            key VARCHAR(255) PRIMARY KEY,
+            value VARCHAR(1024),
+            updated_at TIMESTAMP DEFAULT NOW()
+        )
+    `;
+    return executeQuery(query);
+}
+
+async function getSquadState(key) {
+    const query = 'SELECT value, updated_at FROM squad_state WHERE key = $1';
+    const result = await executeQuery(query, [key]);
+    return result.rows[0] || null;
+}
+
+async function setSquadState(key, value) {
+    const query = `
+        INSERT INTO squad_state (key, value, updated_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
+    `;
+    return executeQuery(query, [key, value]);
+}
+
+// Transfer Requests
+async function ensureTransferRequestsTable() {
+    const query = `
+        CREATE TABLE IF NOT EXISTS transfer_requests (
+            id SERIAL PRIMARY KEY,
+            leader_id VARCHAR(255) NOT NULL,
+            target_id VARCHAR(255) NOT NULL,
+            squad_name VARCHAR(255) NOT NULL,
+            squad_type VARCHAR(50) NOT NULL,
+            message_id VARCHAR(255),
+            status VARCHAR(50) DEFAULT 'Pending',
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT NOW()
+        )
+    `;
+    return executeQuery(query);
+}
+
+async function insertTransferRequest({ leaderId, targetId, squadName, squadType, messageId, expiresAt }) {
+    const query = `
+        INSERT INTO transfer_requests (leader_id, target_id, squad_name, squad_type, message_id, expires_at)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+    `;
+    const result = await executeQuery(query, [leaderId, targetId, squadName, squadType, messageId, expiresAt]);
+    return result.rows[0];
+}
+
+async function fetchTransferRequestByMessageId(messageId) {
+    const query = 'SELECT * FROM transfer_requests WHERE message_id = $1';
+    const result = await executeQuery(query, [messageId]);
+    return result.rows[0] || null;
+}
+
+async function updateTransferRequestStatus(messageId, status) {
+    const query = 'UPDATE transfer_requests SET status = $1 WHERE message_id = $2';
+    return executeQuery(query, [status, messageId]);
+}
+
+async function fetchExpiredPendingTransfers() {
+    const query = "SELECT * FROM transfer_requests WHERE status = 'Pending' AND expires_at < NOW()";
+    const result = await executeQuery(query);
+    return result.rows;
+}
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -379,4 +450,12 @@ module.exports = {
     loadAllLfgParticipants,
     findLfgParticipantsByKey,
     upsertLfgQueue,
+    ensureSquadStateTable,
+    getSquadState,
+    setSquadState,
+    ensureTransferRequestsTable,
+    insertTransferRequest,
+    fetchTransferRequestByMessageId,
+    updateTransferRequestStatus,
+    fetchExpiredPendingTransfers,
 };

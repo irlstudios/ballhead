@@ -11,7 +11,7 @@ const handleBugReport = async (interaction, customId) => {
     const errorReceived = interaction.fields.getTextInputValue('bug-error');
     const steps = interaction.fields.getTextInputValue('bug-steps');
 
-    const { BALLHEAD_GUILD_ID, USER_BUG_REPORTS_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../config/constants');
+    const { GYM_CLASS_GUILD_ID, USER_BUG_REPORTS_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../config/constants');
 
     const logContainer = new ContainerBuilder();
     const block = buildTextBlock({
@@ -26,7 +26,7 @@ const handleBugReport = async (interaction, customId) => {
     if (block) logContainer.addTextDisplayComponents(block);
 
     try {
-        const loggingGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+        const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
         const loggingChannel = await loggingGuild.channels.fetch(USER_BUG_REPORTS_CHANNEL_ID);
         await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
         await interaction.reply({
@@ -44,7 +44,7 @@ const handleBugReport = async (interaction, customId) => {
         });
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
             const errorContainer = new ContainerBuilder();
             const errBlock = buildTextBlock({

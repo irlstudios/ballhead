@@ -3,7 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, parseWeek, noticePayload } = require('../utils/ui');
-const { BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID, ITEMS_PER_PAGE } = require('../config/constants');
+const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID, ITEMS_PER_PAGE } = require('../config/constants');
 
 const buildQualityScorePage = (paginationData, page) => {
     const { posts, totalPages, username, runningAverage, weeklyAverages, embedColor, platform, seasonStart } = paginationData;
@@ -206,7 +206,7 @@ const handlePagination1 = async (interaction, customId) => {
         logger.error('Error handling pagination:', error);
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
             if (errorGuild) {
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID).catch(() => null);
                 if (errorChannel) {

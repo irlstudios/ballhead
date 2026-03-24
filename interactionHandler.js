@@ -6,7 +6,7 @@ const logCommandUsage = require('./API/command-data');
 const { createModal } = require('./modals/modalFactory');
 const logger = require('./utils/logger');
 const { buildTextBlock, noticePayload } = require('./utils/ui');
-const { BALLHEAD_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants');
+const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants');
 
 // Handler modules
 const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
@@ -21,6 +21,10 @@ const {
     ERROR_LOG_GUILD_ID: FF_LEADERBOARD_ERROR_LOG_GUILD_ID,
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
 const { handleInviteButton } = require('./handlers/invites');
+const {
+    buildSquadLeaderboardPayload,
+    DEFAULT_VIEW: SQUAD_LEADERBOARD_DEFAULT_VIEW,
+} = require('./commands/squads/squad_leaderboard');
 
 const interactionHandler = async (interaction, client) => {
     try {
@@ -56,7 +60,7 @@ const interactionHandler = async (interaction, client) => {
         }
 
         try {
-            const errorGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID);
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
             const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({
@@ -162,6 +166,10 @@ const handleSelectMenu = async (interaction) => {
         await handleFFLeaderboardSelect(interaction);
         return;
     }
+    if (interaction.customId === 'squad-leaderboard-select') {
+        await handleSquadLeaderboardSelect(interaction);
+        return;
+    }
 };
 
 const handleModalSubmit = async (interaction) => {
@@ -210,10 +218,18 @@ const handleButton = async (interaction, client) => {
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),
             'denyLeague': () => handleDenyLeagueButton(interaction),
+            'squads': () => handleSquadsPagination(interaction, customId),
         };
 
         if (action.startsWith('lfg:')) {
             await handleLfgButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('transfer-')) {
+            const { handleTransferButton } = require('./handlers/transfer');
+            const transferAction = interaction.customId.startsWith('transfer-accept') ? 'accept' : 'decline';
+            await handleTransferButton(interaction, transferAction);
             return;
         }
 
@@ -278,6 +294,87 @@ const handleFFLeaderboardSelect = async (interaction) => {
             ephemeral: true,
         }).catch(e => logger.error('FF followUp failed:', e));
     }
+};
+
+const handleSquadLeaderboardSelect = async (interaction) => {
+    const view = interaction.values[0] || SQUAD_LEADERBOARD_DEFAULT_VIEW;
+    await interaction.deferUpdate();
+    try {
+        const result = await buildSquadLeaderboardPayload(view, interaction.client);
+        if (result.errorContainer) {
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer] });
+            return;
+        }
+        await interaction.editReply({
+            flags: MessageFlags.IsComponentsV2,
+            components: result.components,
+            files: result.files,
+        });
+    } catch (error) {
+        logger.error('Error updating Squad leaderboard:', error);
+        try {
+            const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
+            const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
+            const errorContainer = new ContainerBuilder();
+            const block = buildTextBlock({
+                title: 'Leaderboard Update Error',
+                subtitle: 'Squad leaderboard failed',
+                lines: [`**Error:** ${error.message}`],
+            });
+            if (block) errorContainer.addTextDisplayComponents(block);
+            await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
+        } catch (logError) {
+            logger.error('Failed to log Squad leaderboard error:', logError);
+        }
+        await interaction.followUp({
+            ...noticePayload('An error occurred while updating the leaderboard.', { title: 'Leaderboard Error', subtitle: 'Squad Leaderboard' }),
+            ephemeral: true,
+        }).catch(e => logger.error('Squad leaderboard followUp failed:', e));
+    }
+};
+
+const handleSquadsPagination = async (interaction, direction) => {
+    await interaction.deferUpdate();
+
+    const paginationData = interaction.client.squadsPagination?.get(interaction.message.interaction?.id);
+    if (!paginationData) {
+        await interaction.followUp({
+            ...noticePayload('This pagination session has expired. Please run `/squads` again.', { title: 'Session Expired', subtitle: 'Squads List' }),
+            ephemeral: true,
+        }).catch(() => {});
+        return;
+    }
+
+    const { squadList, totalPages } = paginationData;
+    const ITEMS_PER_PAGE = 10;
+
+    if (direction === 'next' && paginationData.currentPage < totalPages) {
+        paginationData.currentPage += 1;
+    } else if (direction === 'prev' && paginationData.currentPage > 1) {
+        paginationData.currentPage -= 1;
+    }
+
+    const page = paginationData.currentPage;
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    const pageItems = squadList.slice(start, Math.min(end, squadList.length));
+
+    const { ContainerBuilder: CB, TextDisplayBuilder: TDB, ActionRowBuilder: ARB, ButtonBuilder: BB, ButtonStyle: BS } = require('discord.js');
+    const container = new CB();
+    container.addTextDisplayComponents(
+        new TDB().setContent('## Registered Squads'),
+        new TDB().setContent(pageItems.length > 0 ? pageItems.join('\n') : 'No squads on this page.'),
+        new TDB().setContent(`-# Page ${page} of ${totalPages}`)
+    );
+    const buttons = new ARB().addComponents(
+        new BB().setCustomId('squads_prev').setLabel('Previous').setStyle(BS.Primary).setDisabled(page === 1),
+        new BB().setCustomId('squads_next').setLabel('Next').setStyle(BS.Primary).setDisabled(page === totalPages)
+    );
+
+    await interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
+        components: [container, buttons],
+    });
 };
 
 module.exports = interactionHandler;
