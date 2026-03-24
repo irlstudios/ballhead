@@ -49,11 +49,12 @@ module.exports = {
             const results = await getCachedValues({
                 sheets,
                 spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E'],
+                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E', 'All Data!A:H'],
                 ttlMs: 30000,
             });
             const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
             const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
+            const allData = (results.get('All Data!A:H') || []).slice(1);
 
             const { squad, error } = disambiguateSquad(squadLeaders, userId, specifiedSquad);
             if (error) {
@@ -61,7 +62,9 @@ module.exports = {
             }
 
             const squadName = squad[2];
-            const squadType = squad[3] || '';
+            // Squad type is in All Data col D (index 3), NOT Squad Leaders col D (which is Event Squad)
+            const allDataRow = allData.find(row => row && row.length > 3 && row[2]?.toUpperCase() === squadName.toUpperCase());
+            const squadType = allDataRow ? (allDataRow[3] || '') : '';
 
             // Verify target is a member of this squad
             const targetMemberRow = findMemberRow(squadMembers, targetUser.id, squadName);
