@@ -177,7 +177,17 @@ async function syncTopSquad(client, announce = true) {
     const { topSquads, maxWins } = findTopSquads(squadWins);
 
     if (topSquads.length === 0) {
-        logger.info('[Top Squad Sync] No competitive squads with wins found.');
+        logger.info('[Top Squad Sync] No competitive squads with wins found. Stripping existing role holders.');
+        const allMembers = await guild.members.fetch();
+        for (const [memberId, member] of allMembers) {
+            if (member.roles.cache.has(TOP_COMP_SQUAD_ROLE_ID)) {
+                await member.roles.remove(TOP_COMP_SQUAD_ROLE_ID).catch(e =>
+                    logger.error(`[Top Squad Sync] Failed to remove role from ${memberId}:`, e.message)
+                );
+            }
+        }
+        await setSquadState('top_comp_squad', '');
+        currentTopSquad = '';
         return;
     }
 

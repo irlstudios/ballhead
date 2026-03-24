@@ -134,7 +134,7 @@ module.exports = {
                         await leader.send({ flags: MessageFlags.IsComponentsV2, components: [leaderContainer] }).catch(err => logger.info(`Failed to DM leader ${squadLeaderId}: ${err.message}`));
 
                         // Role safety: only remove roles no longer needed
-                        const safeRolesToRemove = getRolesToRemove(allData, squadLeaders, squadLeaderId, squadType);
+                        const safeRolesToRemove = getRolesToRemove(allData, squadLeaders, squadLeaderId, squadType, squadNameToDisband);
                         if (safeRolesToRemove.length > 0) {
                             await leader.roles.remove(safeRolesToRemove).catch(roleErr => {
                                 if (roleErr.code !== 50013 && roleErr.code !== 10011) {

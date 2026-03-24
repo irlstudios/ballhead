@@ -168,16 +168,24 @@ function disambiguateSquad(squadLeaders, userId, specifiedSquadName) {
  * Only removes roles the user no longer needs.
  * NOTE: Squad type is NOT in Squad Leaders (col D = Event Squad).
  * Must cross-reference All Data (col D = Squad Type) for type info.
+ * @param {string} [excludeSquadName] - Squad name to exclude from "remaining" checks
+ *   (the squad being disbanded/transferred, which may still appear in stale local arrays).
  */
-function getRolesToRemove(allData, squadLeaders, userId, removedSquadType) {
-    const remainingSquads = findUserSquads(squadLeaders, userId);
+function getRolesToRemove(allData, squadLeaders, userId, removedSquadType, excludeSquadName) {
+    const allUserSquads = findUserSquads(squadLeaders, userId);
+    const remainingSquads = excludeSquadName
+        ? allUserSquads.filter(row => row[SL_SQUAD_NAME]?.toUpperCase() !== excludeSquadName.toUpperCase())
+        : allUserSquads;
     const rolesToRemove = [];
 
     if (remainingSquads.length === 0) {
         rolesToRemove.push(SQUAD_LEADER_ROLE_ID);
     }
 
-    const remainingUserRows = findUserAllDataRows(allData, userId);
+    const allUserRows = findUserAllDataRows(allData, userId);
+    const remainingUserRows = excludeSquadName
+        ? allUserRows.filter(row => row.length > AD_SQUAD_NAME && row[AD_SQUAD_NAME]?.toUpperCase() !== excludeSquadName.toUpperCase())
+        : allUserRows;
     const hasCompSquad = remainingUserRows.some(
         row => row.length > AD_SQUAD_TYPE && row[AD_SQUAD_TYPE] === 'Competitive'
     );
