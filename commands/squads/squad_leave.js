@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
 const { stripLevelRoles } = require('../../utils/squad_level_sync');
