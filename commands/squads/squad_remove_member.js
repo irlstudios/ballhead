@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
+const { getSheetsClient, invalidateRanges } = require('../../utils/sheets_cache');
 const { SPREADSHEET_SQUADS, BALLHEAD_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
 const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
 const { disambiguateSquad } = require('../../utils/squad_queries');
@@ -171,6 +171,7 @@ module.exports = {
                 logger.warn(`User ${targetUserTag} (${targetUserID}) was in Squad Members but not found in All Data.`);
             }
             logger.info(`Updated sheets for removing ${targetUserTag} from ${leaderSquadName}`);
+            invalidateRanges(SPREADSHEET_SQUADS, ['Squad Members!A:E', 'All Data!A:H']);
 
             try {
                 const memberToRemove = await guild.members.fetch(targetUserID);

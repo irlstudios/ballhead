@@ -38,44 +38,30 @@ async function pruneSquad(sheets, guild, guildMemberIds, squadName, squadMembers
         const freshMembers = (freshResults.get('Squad Members!A:E') || []);
         const freshAllData = (freshResults.get('All Data!A:H') || []);
 
-        // Filter out pruned members from Squad Members
         const prunedIds = new Set(pruned.map(p => p.userId));
-        const updatedMembers = freshMembers.filter((row, index) => {
-            if (index === 0) return true; // Keep header
-            return !(row && row[1] && prunedIds.has(row[1]) && row[2]?.toUpperCase() === squadName.toUpperCase());
-        });
 
-        // Filter out pruned members' rows for this squad from All Data
-        const updatedAllData = freshAllData.filter((row, index) => {
-            if (index === 0) return true;
-            return !(row && row[1] && prunedIds.has(row[1]) && row[2]?.toUpperCase() === squadName.toUpperCase());
-        });
-
-        // Write back
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId: SPREADSHEET_SQUADS,
-            range: 'Squad Members!A2:E',
-        });
-        if (updatedMembers.length > 1) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Members!A2',
-                valueInputOption: 'RAW',
-                resource: { values: updatedMembers.slice(1) },
-            });
+        // Clear individual Squad Members rows (targeted, no full-sheet rewrite)
+        for (let i = 1; i < freshMembers.length; i++) {
+            const row = freshMembers[i];
+            if (row && row[1] && prunedIds.has(row[1]) && row[2]?.toUpperCase() === squadName.toUpperCase()) {
+                const sheetRow = i + 1;
+                await sheets.spreadsheets.values.clear({
+                    spreadsheetId: SPREADSHEET_SQUADS,
+                    range: `Squad Members!A${sheetRow}:E${sheetRow}`,
+                });
+            }
         }
 
-        await sheets.spreadsheets.values.clear({
-            spreadsheetId: SPREADSHEET_SQUADS,
-            range: 'All Data!A2:H',
-        });
-        if (updatedAllData.length > 1) {
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'All Data!A2',
-                valueInputOption: 'RAW',
-                resource: { values: updatedAllData.slice(1) },
-            });
+        // Clear individual All Data rows (targeted, no full-sheet rewrite)
+        for (let i = 1; i < freshAllData.length; i++) {
+            const row = freshAllData[i];
+            if (row && row[1] && prunedIds.has(row[1]) && row[2]?.toUpperCase() === squadName.toUpperCase()) {
+                const sheetRow = i + 1;
+                await sheets.spreadsheets.values.clear({
+                    spreadsheetId: SPREADSHEET_SQUADS,
+                    range: `All Data!A${sheetRow}:H${sheetRow}`,
+                });
+            }
         }
 
         return pruned;

@@ -74,24 +74,16 @@ module.exports = {
                 const freshMembersHeaderless = freshMembers.slice(1);
                 const freshAllDataHeaderless = freshAllData.slice(1);
 
-                // Remove from Squad Members
+                // Remove from Squad Members (targeted row clear instead of full-sheet rewrite)
                 const memberIndex = freshMembersHeaderless.findIndex(
                     row => row && row[1] === targetUser.id && row[SM_SQUAD_NAME]?.toUpperCase() === targetSquadName.toUpperCase()
                 );
                 if (memberIndex !== -1) {
-                    const updatedMembers = freshMembersHeaderless.filter((_, i) => i !== memberIndex);
+                    const sheetRowSM = memberIndex + 2;
                     await sheets.spreadsheets.values.clear({
                         spreadsheetId: SPREADSHEET_SQUADS,
-                        range: 'Squad Members!A2:E',
+                        range: `Squad Members!A${sheetRowSM}:E${sheetRowSM}`,
                     });
-                    if (updatedMembers.length > 0) {
-                        await sheets.spreadsheets.values.update({
-                            spreadsheetId: SPREADSHEET_SQUADS,
-                            range: 'Squad Members!A2',
-                            valueInputOption: 'RAW',
-                            resource: { values: updatedMembers },
-                        });
-                    }
                 }
 
                 // Update All Data: clear squad info for this member's row

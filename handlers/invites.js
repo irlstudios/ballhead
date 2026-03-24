@@ -63,11 +63,11 @@ const handleInviteButton = async (interaction, action) => {
             return;
         }
 
-        const gymClassGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
         const ballheadGuild = await interaction.client.guilds.fetch(BALLHEAD_GUILD_ID).catch(() => null);
-        const guild = interaction.guild && (interaction.guild.id === GYM_CLASS_GUILD_ID || interaction.guild.id === BALLHEAD_GUILD_ID)
+        const gymClassGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
+        const guild = interaction.guild && (interaction.guild.id === BALLHEAD_GUILD_ID || interaction.guild.id === GYM_CLASS_GUILD_ID)
             ? interaction.guild
-            : (gymClassGuild || ballheadGuild);
+            : (ballheadGuild || gymClassGuild);
 
         if (!guild) {
             logger.error('Could not fetch required Guilds.');
@@ -143,6 +143,14 @@ const handleInviteButton = async (interaction, action) => {
 
 const handleAcceptInvite = async (interaction, ctx) => {
     const { guild, squadName, squadType, trackingMessage, commandUserID, invitedMemberId, commandUser, inviteMessage } = ctx;
+
+    // Re-check invite status inside the lock to prevent double-accept race
+    const freshInvite = await fetchInviteById(interaction.message.id).catch(() => null);
+    if (!freshInvite || freshInvite.invite_status !== 'Pending') {
+        const status = freshInvite ? freshInvite.invite_status : 'unknown';
+        await interaction.editReply(noticePayload(`This invite has already been processed (${status}).`, { title: 'Invite Processed', subtitle: 'Squad Invite' }));
+        return;
+    }
 
     const member = await guild.members.fetch(invitedMemberId).catch(() => null);
     if (!member) {
