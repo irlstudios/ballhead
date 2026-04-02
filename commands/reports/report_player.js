@@ -1,6 +1,11 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const crypto = require('crypto');
 const logger = require('../../utils/logger');
+
+function generateReportId() {
+    return `RPT-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+}
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -65,8 +70,11 @@ module.exports = {
             const lobbyName = interaction.options.getString('lobby-name');
             const proof = interaction.options.getAttachment('proof');
 
+            const refId = generateReportId();
+
             const reportContainer = new ContainerBuilder();
             const reportLines = [
+                `**Reference ID:** ${refId}`,
                 `**Report From:** ${reporter}`,
                 `**User Reported:** ${reportedUser}`,
                 `**Rule Broken:** ${ruleBroken}`,
@@ -120,7 +128,7 @@ module.exports = {
             }
 
             await forumChannel.threads.create({
-                name: `Report: ${reportedUser}`,
+                name: `${refId} | Report: ${reportedUser}`,
                 message: {
                     flags: MessageFlags.IsComponentsV2,
                     components: [reportContainer, actionRow],
@@ -130,7 +138,11 @@ module.exports = {
             const successContainer = buildNoticeContainer({
                 title: 'Report Submitted',
                 subtitle: reportedUser,
-                lines: ['Your report has been submitted successfully.']
+                lines: [
+                    'Your report has been submitted successfully.',
+                    `**Your Reference ID:** ${refId}`,
+                    'Save this ID if you need to follow up with a moderator.',
+                ]
             });
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
