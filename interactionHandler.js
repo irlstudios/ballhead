@@ -21,6 +21,7 @@ const {
     ERROR_LOG_GUILD_ID: FF_LEADERBOARD_ERROR_LOG_GUILD_ID,
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
 const { handleInviteButton } = require('./handlers/invites');
+const { handleReportApprove, handleReportDeny, handleReportInfo } = require('./handlers/reports');
 const {
     buildSquadLeaderboardPayload,
     DEFAULT_VIEW: SQUAD_LEADERBOARD_DEFAULT_VIEW,
@@ -218,6 +219,9 @@ const handleButton = async (interaction, client) => {
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),
             'denyLeague': () => handleDenyLeagueButton(interaction),
+            'reportApprove': () => handleReportApprove(interaction),
+            'reportDeny': () => handleReportDeny(interaction),
+            'reportInfo': () => handleReportInfo(interaction),
             'squads': () => handleSquadsPagination(interaction, customId),
         };
 

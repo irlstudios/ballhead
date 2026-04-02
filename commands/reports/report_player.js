@@ -1,5 +1,5 @@
 const {SlashCommandBuilder} = require('@discordjs/builders');
-const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder } = require('discord.js');
+const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -95,6 +95,25 @@ module.exports = {
                 }
             }
 
+            const reporterId = interaction.user.id;
+
+            const approveButton = new ButtonBuilder()
+                .setCustomId(`reportApprove_${reporterId}`)
+                .setLabel('Approved')
+                .setStyle(ButtonStyle.Success);
+
+            const denyButton = new ButtonBuilder()
+                .setCustomId(`reportDeny_${reporterId}`)
+                .setLabel('Denied')
+                .setStyle(ButtonStyle.Danger);
+
+            const infoButton = new ButtonBuilder()
+                .setCustomId(`reportInfo_${reporterId}`)
+                .setLabel('Needs More Information')
+                .setStyle(ButtonStyle.Secondary);
+
+            const actionRow = new ActionRowBuilder().addComponents(approveButton, denyButton, infoButton);
+
             const forumChannel = interaction.guild.channels.cache.get('1139975178013655183');
             if (!forumChannel) {
                 throw new Error('The forum channel for reports could not be found.');
@@ -104,7 +123,7 @@ module.exports = {
                 name: `Report: ${reportedUser}`,
                 message: {
                     flags: MessageFlags.IsComponentsV2,
-                    components: [reportContainer],
+                    components: [reportContainer, actionRow],
                     files: files.length > 0 ? files : undefined }
             });
 
