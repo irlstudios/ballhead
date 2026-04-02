@@ -9,6 +9,11 @@ function extractRefId(channel) {
     return match ? match[0] : null;
 }
 
+function extractReportedUser(channel) {
+    const match = (channel.name || '').match(/Report:\s*(.+)$/i);
+    return match ? match[1].trim() : null;
+}
+
 const handleReportApprove = async (interaction) => {
     try {
         await interaction.deferReply({ ephemeral: true });
@@ -22,6 +27,7 @@ const handleReportApprove = async (interaction) => {
 
         const reporterId = interaction.customId.split('_')[1];
         const refId = extractRefId(interaction.channel);
+        const reportedUser = extractReportedUser(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
@@ -30,6 +36,8 @@ const handleReportApprove = async (interaction) => {
                 title: 'Report Approved',
                 subtitle: refId || 'Player Report',
                 lines: [
+                    reportedUser ? `**Reported Player:** ${reportedUser}` : null,
+                    '',
                     'Your report has been approved.',
                     'Thank you for helping keep the community safe.',
                     'Appropriate action (such as a ban or moderation review) will be handled swiftly.',
@@ -85,6 +93,7 @@ const handleReportDeny = async (interaction) => {
 
         const reporterId = interaction.customId.split('_')[1];
         const refId = extractRefId(interaction.channel);
+        const reportedUser = extractReportedUser(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
@@ -93,6 +102,8 @@ const handleReportDeny = async (interaction) => {
                 title: 'Report Denied',
                 subtitle: refId || 'Player Report',
                 lines: [
+                    reportedUser ? `**Reported Player:** ${reportedUser}` : null,
+                    '',
                     'Your report has been denied.',
                     'It did not meet our current moderation guidelines or lacked sufficient evidence.',
                 ],
@@ -147,6 +158,7 @@ const handleReportInfo = async (interaction) => {
 
         const reporterId = interaction.customId.split('_')[1];
         const refId = extractRefId(interaction.channel);
+        const reportedUser = extractReportedUser(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
@@ -155,6 +167,8 @@ const handleReportInfo = async (interaction) => {
                 title: 'More Information Needed',
                 subtitle: refId || 'Player Report',
                 lines: [
+                    reportedUser ? `**Reported Player:** ${reportedUser}` : null,
+                    '',
                     'Your report requires additional information.',
                     'Please open a support ticket so our team can follow up and gather more details.',
                 ],
