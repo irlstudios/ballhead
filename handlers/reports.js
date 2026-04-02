@@ -35,17 +35,21 @@ const handleReportApprove = async (interaction) => {
             logger.error('Failed to send report approval DM:', dmError.message);
         }
 
-        const approvedContainer = new ContainerBuilder();
+        const existingComponents = interaction.message.components
+            .filter(c => c.type !== 1)
+            .map(c => c.toJSON());
+
+        const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'Report Approved',
             subtitle: 'Player Report',
             lines: [`This report has been approved by <@${interaction.user.id}>.`],
         });
-        if (block) approvedContainer.addTextDisplayComponents(block);
+        if (block) statusContainer.addTextDisplayComponents(block);
 
         await interaction.message.edit({
             flags: MessageFlags.IsComponentsV2,
-            components: [approvedContainer],
+            components: [...existingComponents, statusContainer],
         });
 
         await interaction.editReply({
@@ -92,17 +96,21 @@ const handleReportDeny = async (interaction) => {
             logger.error('Failed to send report denial DM:', dmError.message);
         }
 
-        const deniedContainer = new ContainerBuilder();
+        const existingComponents = interaction.message.components
+            .filter(c => c.type !== 1)
+            .map(c => c.toJSON());
+
+        const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'Report Denied',
             subtitle: 'Player Report',
             lines: [`This report has been denied by <@${interaction.user.id}>.`],
         });
-        if (block) deniedContainer.addTextDisplayComponents(block);
+        if (block) statusContainer.addTextDisplayComponents(block);
 
         await interaction.message.edit({
             flags: MessageFlags.IsComponentsV2,
-            components: [deniedContainer],
+            components: [...existingComponents, statusContainer],
         });
 
         await interaction.editReply({
@@ -149,17 +157,21 @@ const handleReportInfo = async (interaction) => {
             logger.error('Failed to send report info request DM:', dmError.message);
         }
 
-        const infoContainer = new ContainerBuilder();
+        const existingComponents = interaction.message.components
+            .filter(c => c.type !== 1)
+            .map(c => c.toJSON());
+
+        const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'More Information Requested',
             subtitle: 'Player Report',
             lines: [`More information requested by <@${interaction.user.id}>.`],
         });
-        if (block) infoContainer.addTextDisplayComponents(block);
+        if (block) statusContainer.addTextDisplayComponents(block);
 
         await interaction.message.edit({
             flags: MessageFlags.IsComponentsV2,
-            components: [infoContainer],
+            components: [...existingComponents, statusContainer],
         });
 
         await interaction.editReply({
