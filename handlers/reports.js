@@ -4,6 +4,11 @@ const { MessageFlags, ContainerBuilder, PermissionsBitField } = require('discord
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
 
+function extractRefId(channel) {
+    const match = (channel.name || '').match(/RPT-[A-F0-9]{6}/);
+    return match ? match[0] : null;
+}
+
 const handleReportApprove = async (interaction) => {
     try {
         await interaction.deferReply({ ephemeral: true });
@@ -16,13 +21,14 @@ const handleReportApprove = async (interaction) => {
         }
 
         const reporterId = interaction.customId.split('_')[1];
+        const refId = extractRefId(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
             const dmContainer = new ContainerBuilder();
             const block = buildTextBlock({
                 title: 'Report Approved',
-                subtitle: 'Player Report',
+                subtitle: refId || 'Player Report',
                 lines: [
                     'Your report has been approved.',
                     'Thank you for helping keep the community safe.',
@@ -42,7 +48,7 @@ const handleReportApprove = async (interaction) => {
         const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'Report Approved',
-            subtitle: 'Player Report',
+            subtitle: refId || 'Player Report',
             lines: [`This report has been approved by <@${interaction.user.id}>.`],
         });
         if (block) statusContainer.addTextDisplayComponents(block);
@@ -78,13 +84,14 @@ const handleReportDeny = async (interaction) => {
         }
 
         const reporterId = interaction.customId.split('_')[1];
+        const refId = extractRefId(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
             const dmContainer = new ContainerBuilder();
             const block = buildTextBlock({
                 title: 'Report Denied',
-                subtitle: 'Player Report',
+                subtitle: refId || 'Player Report',
                 lines: [
                     'Your report has been denied.',
                     'It did not meet our current moderation guidelines or lacked sufficient evidence.',
@@ -103,7 +110,7 @@ const handleReportDeny = async (interaction) => {
         const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'Report Denied',
-            subtitle: 'Player Report',
+            subtitle: refId || 'Player Report',
             lines: [`This report has been denied by <@${interaction.user.id}>.`],
         });
         if (block) statusContainer.addTextDisplayComponents(block);
@@ -139,13 +146,14 @@ const handleReportInfo = async (interaction) => {
         }
 
         const reporterId = interaction.customId.split('_')[1];
+        const refId = extractRefId(interaction.channel);
 
         try {
             const member = await interaction.guild.members.fetch(reporterId);
             const dmContainer = new ContainerBuilder();
             const block = buildTextBlock({
                 title: 'More Information Needed',
-                subtitle: 'Player Report',
+                subtitle: refId || 'Player Report',
                 lines: [
                     'Your report requires additional information.',
                     'Please open a support ticket so our team can follow up and gather more details.',
@@ -164,7 +172,7 @@ const handleReportInfo = async (interaction) => {
         const statusContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'More Information Requested',
-            subtitle: 'Player Report',
+            subtitle: refId || 'Player Report',
             lines: [`More information requested by <@${interaction.user.id}>.`],
         });
         if (block) statusContainer.addTextDisplayComponents(block);
