@@ -8,3 +8,5 @@ resources/secret.json
 AGENTS.md
 .claude
 CLAUDE.md
+docs/
+discord_components_v2.md
