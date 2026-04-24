@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
+const logger = require('../../utils/logger');
 
 const BLACKLIST_USER_IDS = new Set();
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
@@ -790,9 +791,17 @@ module.exports = {
                 if (!ch.deletable) {
                     continue;
                 }
-                await ch.delete();
-                await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [ch.id]);
-                deleted++;
+                try {
+                    await ch.delete();
+                    await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [ch.id]);
+                    deleted++;
+                } catch (err) {
+                    if (err.code === 50001) {
+                        logger.warn(`[Rooms] Skipping channel ${ch.id} — missing access`);
+                        continue;
+                    }
+                    throw err;
+                }
             }
             return replyRoomNotice(interaction, {
                 title: 'Cleanup Complete',
