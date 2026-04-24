@@ -88,29 +88,35 @@ async function fetchBuffer(url) {
 async function generateQueueImage(client, queue, members) {
     let canvas;
     let ctx;
+    let imgW;
+    let imgH;
     try {
         const bgBuf = await fetchBuffer('https://cdn.ballhead.app/web_assets/FORCDN.jpg');
         const bg = await loadImage(bgBuf);
-        canvas = createCanvas(bg.width, bg.height);
+        imgW = bg.width;
+        imgH = bg.height;
+        canvas = createCanvas(imgW, imgH);
         ctx = canvas.getContext('2d');
-        ctx.drawImage(bg, 0, 0, bg.width, bg.height);
+        ctx.drawImage(bg, 0, 0, imgW, imgH);
     } catch (err) {
         logger.warn('[LFG] CDN background image unavailable, using fallback:', err.message);
-        canvas = createCanvas(800, 400);
+        imgW = 800;
+        imgH = 400;
+        canvas = createCanvas(imgW, imgH);
         ctx = canvas.getContext('2d');
         ctx.fillStyle = '#1a1a2e';
-        ctx.fillRect(0, 0, 800, 400);
+        ctx.fillRect(0, 0, imgW, imgH);
     }
     const txt = `${members.size}/${queue.size}`;
-    const fs = Math.floor(bg.height * 0.12);
+    const fs = Math.floor(imgH * 0.12);
     ctx.font = `bold ${fs}px Sans-Serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = Math.max(6, Math.floor(bg.height * 0.01));
-    const tx = Math.floor(bg.width / 2);
-    const ty = Math.floor(bg.height * 0.8);
+    ctx.lineWidth = Math.max(6, Math.floor(imgH * 0.01));
+    const tx = Math.floor(imgW / 2);
+    const ty = Math.floor(imgH * 0.8);
     const textWidth = ctx.measureText(txt).width;
     const headR = Math.floor(fs * 0.22);
     const iconGap = Math.floor(fs * 0.35);
