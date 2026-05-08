@@ -228,7 +228,19 @@ const modalConfig = {
                 required: true,
             }
         ],
-    }
+    },
+    'league-checkin-modal': {
+        title: 'Monthly League Check-in',
+        fields: [
+            {
+                id: 'activity-notes',
+                label: 'Activity notes (optional)',
+                placeholder: 'Share what your league has been up to',
+                style: 'Paragraph',
+                required: false,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;

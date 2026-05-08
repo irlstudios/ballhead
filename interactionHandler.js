@@ -12,6 +12,7 @@ const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants'
 const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
+const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
 const { handleLfgButton } = require('./handlers/lfg');
 const {
@@ -182,6 +183,7 @@ const handleModalSubmit = async (interaction) => {
         'generateTemplateModal_kotc': () => handleGenerateTemplateModal(interaction),
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
+        'league-checkin-modal': () => handleLeagueCheckinModal(interaction),
         'denyLeagueModal': () => handleDenyLeagueModal(interaction),
         'koHostApplicationModal': () => handleKoHostApplication(interaction),
         'rankedSessionModal': () => handleRankedSessionModal(interaction),
