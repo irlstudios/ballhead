@@ -13,6 +13,7 @@ const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRanked
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
+const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
 const { handleLfgButton } = require('./handlers/lfg');
 const {
@@ -184,6 +185,7 @@ const handleModalSubmit = async (interaction) => {
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
         'league-checkin-modal': () => handleLeagueCheckinModal(interaction),
+        'update-league-invite-modal': () => handleUpdateLeagueInviteModal(interaction),
         'denyLeagueModal': () => handleDenyLeagueModal(interaction),
         'koHostApplicationModal': () => handleKoHostApplication(interaction),
         'rankedSessionModal': () => handleRankedSessionModal(interaction),

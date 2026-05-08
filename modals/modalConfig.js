@@ -241,6 +241,18 @@ const modalConfig = {
             },
         ],
     },
+    'update-league-invite-modal': {
+        title: 'Update League Invite',
+        fields: [
+            {
+                id: 'new-invite-link',
+                label: 'New Discord Invite Link',
+                placeholder: 'https://discord.gg/...',
+                style: 'Short',
+                required: true,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;
