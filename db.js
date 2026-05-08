@@ -413,6 +413,125 @@ async function fetchExpiredPendingTransfers() {
     return result.rows;
 }
 
+const ensureLeagueActivitySchema = async () => {
+    const columns = [
+        { name: 'last_health_check', type: 'TIMESTAMPTZ' },
+        { name: 'last_checkin_date', type: 'TIMESTAMPTZ' },
+    ];
+    for (const col of columns) {
+        await executeQuery(
+            `ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`
+        ).catch(() => {});
+    }
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_checkins (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            owner_id BIGINT NOT NULL,
+            checkin_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            activity_notes TEXT,
+            checkin_month VARCHAR(7) NOT NULL
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_health_logs (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            check_date TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            invite_valid BOOLEAN NOT NULL,
+            member_count INTEGER,
+            owner_in_guild BOOLEAN NOT NULL
+        )
+    `);
+};
+
+const fetchActiveLeagues = async () => {
+    const result = await executeQuery(
+        'SELECT * FROM "Active Leagues" WHERE league_status = $1',
+        ['Active']
+    );
+    return result.rows;
+};
+
+const fetchAllLeaguesForCheckin = async () => {
+    const result = await executeQuery(
+        'SELECT * FROM "Active Leagues"'
+    );
+    return result.rows;
+};
+
+const fetchLeaguesByOwner = async (ownerId) => {
+    const result = await executeQuery(
+        'SELECT * FROM "Active Leagues" WHERE owner_id = $1',
+        [ownerId]
+    );
+    return result.rows;
+};
+
+const insertLeagueHealthLog = async (leagueId, inviteValid, memberCount, ownerInGuild) => {
+    await executeQuery(
+        `INSERT INTO league_health_logs (league_id, invite_valid, member_count, owner_in_guild)
+         VALUES ($1, $2, $3, $4)`,
+        [leagueId, inviteValid, memberCount, ownerInGuild]
+    );
+};
+
+const updateLeagueHealthData = async (leagueId, data) => {
+    await executeQuery(
+        `UPDATE "Active Leagues"
+         SET server_name = $1, member_count = $2, server_icon = $3,
+             server_banner = $4, vanity_url = $5, server_description = $6,
+             server_features = $7, last_health_check = NOW()
+         WHERE league_id = $8`,
+        [data.serverName, data.memberCount, data.serverIcon, data.serverBanner,
+         data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
+    );
+};
+
+const insertLeagueCheckin = async (leagueId, ownerId, activityNotes, checkinMonth) => {
+    await executeQuery(
+        `INSERT INTO league_checkins (league_id, owner_id, activity_notes, checkin_month)
+         VALUES ($1, $2, $3, $4)`,
+        [leagueId, ownerId, activityNotes, checkinMonth]
+    );
+};
+
+const updateLeagueCheckinDate = async (leagueId) => {
+    await executeQuery(
+        `UPDATE "Active Leagues" SET last_checkin_date = NOW() WHERE league_id = $1`,
+        [leagueId]
+    );
+};
+
+const updateLeagueStatus = async (leagueId, status) => {
+    await executeQuery(
+        `UPDATE "Active Leagues" SET league_status = $1 WHERE league_id = $2`,
+        [status, leagueId]
+    );
+};
+
+const fetchCheckinForMonth = async (leagueId, checkinMonth) => {
+    const result = await executeQuery(
+        'SELECT * FROM league_checkins WHERE league_id = $1 AND checkin_month = $2',
+        [leagueId, checkinMonth]
+    );
+    return result.rows;
+};
+
+const updateLeagueInvite = async (leagueId, invite, data) => {
+    await executeQuery(
+        `UPDATE "Active Leagues"
+         SET league_invite = $1, server_name = $2, server_id = $3,
+             member_count = $4, server_icon = $5, server_banner = $6,
+             vanity_url = $7, server_description = $8, server_features = $9
+         WHERE league_id = $10`,
+        [invite, data.serverName, data.serverId, data.memberCount, data.serverIcon,
+         data.serverBanner, data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
+    );
+};
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -458,4 +577,15 @@ module.exports = {
     fetchTransferRequestByMessageId,
     updateTransferRequestStatus,
     fetchExpiredPendingTransfers,
+    ensureLeagueActivitySchema,
+    fetchActiveLeagues,
+    fetchAllLeaguesForCheckin,
+    fetchLeaguesByOwner,
+    insertLeagueHealthLog,
+    updateLeagueHealthData,
+    insertLeagueCheckin,
+    updateLeagueCheckinDate,
+    updateLeagueStatus,
+    fetchCheckinForMonth,
+    updateLeagueInvite,
 };
