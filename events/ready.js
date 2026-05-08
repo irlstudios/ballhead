@@ -9,6 +9,9 @@ const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
+const { ensureLeagueActivitySchema } = require('../db');
+const { runLeagueHealthCheck } = require('../jobs/league-health-check');
+const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -141,6 +144,7 @@ module.exports = {
         // Ensure new DB tables
         await ensureSquadStateTable();
         await ensureTransferRequestsTable();
+        await ensureLeagueActivitySchema();
 
         // Load top squad state from DB
         await loadTopSquadFromDB();
@@ -185,6 +189,42 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT)');
+        // Weekly: League Health Check - Sunday 12:00 PM Chicago
+        cron.schedule('0 12 * * 0', async () => {
+            try {
+                await runLeagueHealthCheck(client);
+            } catch (error) {
+                logger.error('[Cron] League Health Check failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Monthly: Check-in Reminder - 1st of month 12:00 PM Chicago
+        cron.schedule('0 12 1 * *', async () => {
+            try {
+                await sendCheckinReminder(client);
+            } catch (error) {
+                logger.error('[Cron] Check-in Reminder failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Monthly: Check-in Warning - 21st of month 12:00 PM Chicago
+        cron.schedule('0 12 21 * *', async () => {
+            try {
+                await sendCheckinWarning(client);
+            } catch (error) {
+                logger.error('[Cron] Check-in Warning failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Monthly: Check-in Deadline - 28th of month 12:00 PM Chicago
+        cron.schedule('0 12 28 * *', async () => {
+            try {
+                await processCheckinDeadline(client);
+            } catch (error) {
+                logger.error('[Cron] Check-in Deadline failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT)');
     },
 };
