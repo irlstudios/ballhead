@@ -417,12 +417,20 @@ const ensureLeagueActivitySchema = async () => {
     const columns = [
         { name: 'last_health_check', type: 'TIMESTAMPTZ' },
         { name: 'last_checkin_date', type: 'TIMESTAMPTZ' },
+        { name: 'co_owner_1', type: 'TEXT' },
+        { name: 'co_owner_2', type: 'TEXT' },
     ];
     for (const col of columns) {
         await executeQuery(
             `ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`
         ).catch(() => {});
     }
+
+    await executeQuery(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_leagues_server_id
+        ON "Active Leagues" (server_id)
+        WHERE league_status = 'Active'
+    `).catch(() => {});
 
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS league_checkins (
@@ -532,6 +540,66 @@ const updateLeagueInvite = async (leagueId, invite, data) => {
     );
 };
 
+const fetchLeaguesByCoOwner = async (userId) => {
+    const result = await executeQuery(
+        'SELECT * FROM "Active Leagues" WHERE co_owner_1 = $1 OR co_owner_2 = $1',
+        [userId]
+    );
+    return result.rows;
+};
+
+const isUserCoOwnerAnywhere = async (userId) => {
+    const result = await executeQuery(
+        'SELECT league_id FROM "Active Leagues" WHERE co_owner_1 = $1 OR co_owner_2 = $1 LIMIT 1',
+        [userId]
+    );
+    return result.rows.length > 0;
+};
+
+const addCoOwner = async (leagueId, userId) => {
+    const result = await executeQuery(
+        'SELECT co_owner_1, co_owner_2 FROM "Active Leagues" WHERE league_id = $1',
+        [leagueId]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error('League not found');
+    if (!row.co_owner_1) {
+        await executeQuery(
+            'UPDATE "Active Leagues" SET co_owner_1 = $1 WHERE league_id = $2',
+            [userId, leagueId]
+        );
+    } else if (!row.co_owner_2) {
+        await executeQuery(
+            'UPDATE "Active Leagues" SET co_owner_2 = $1 WHERE league_id = $2',
+            [userId, leagueId]
+        );
+    } else {
+        throw new Error('Both co-owner slots are full');
+    }
+};
+
+const removeCoOwner = async (leagueId, userId) => {
+    const result = await executeQuery(
+        'SELECT co_owner_1, co_owner_2 FROM "Active Leagues" WHERE league_id = $1',
+        [leagueId]
+    );
+    const row = result.rows[0];
+    if (!row) throw new Error('League not found');
+    if (row.co_owner_1 === userId) {
+        await executeQuery(
+            'UPDATE "Active Leagues" SET co_owner_1 = NULL WHERE league_id = $1',
+            [leagueId]
+        );
+    } else if (row.co_owner_2 === userId) {
+        await executeQuery(
+            'UPDATE "Active Leagues" SET co_owner_2 = NULL WHERE league_id = $1',
+            [leagueId]
+        );
+    } else {
+        throw new Error('User is not a co-owner of this league');
+    }
+};
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -588,4 +656,8 @@ module.exports = {
     updateLeagueStatus,
     fetchCheckinForMonth,
     updateLeagueInvite,
+    fetchLeaguesByCoOwner,
+    isUserCoOwnerAnywhere,
+    addCoOwner,
+    removeCoOwner,
 };
