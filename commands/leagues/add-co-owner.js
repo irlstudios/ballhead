@@ -5,7 +5,6 @@ const logger = require('../../utils/logger');
 const { noticePayload, buildTextBlock } = require('../../utils/ui');
 const {
     fetchLeaguesByOwner,
-    findActiveLeague,
     isUserCoOwnerAnywhere,
     addCoOwner,
 } = require('../../db');
@@ -78,7 +77,7 @@ module.exports = {
                 );
             }
 
-            const targetOwnsLeague = await findActiveLeague('owner_id', targetUser.id);
+            const targetOwnsLeague = await fetchLeaguesByOwner(targetUser.id);
             if (targetOwnsLeague.length > 0) {
                 return interaction.editReply(
                     noticePayload('This user already owns a league and cannot be a co-owner.', {

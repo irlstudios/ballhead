@@ -557,25 +557,23 @@ const isUserCoOwnerAnywhere = async (userId) => {
 };
 
 const addCoOwner = async (leagueId, userId) => {
-    const result = await executeQuery(
-        'SELECT co_owner_1, co_owner_2 FROM "Active Leagues" WHERE league_id = $1',
-        [leagueId]
+    const result1 = await executeQuery(
+        `UPDATE "Active Leagues" SET co_owner_1 = $1
+         WHERE league_id = $2 AND co_owner_1 IS NULL
+         RETURNING league_id`,
+        [userId, leagueId]
     );
-    const row = result.rows[0];
-    if (!row) throw new Error('League not found');
-    if (!row.co_owner_1) {
-        await executeQuery(
-            'UPDATE "Active Leagues" SET co_owner_1 = $1 WHERE league_id = $2',
-            [userId, leagueId]
-        );
-    } else if (!row.co_owner_2) {
-        await executeQuery(
-            'UPDATE "Active Leagues" SET co_owner_2 = $1 WHERE league_id = $2',
-            [userId, leagueId]
-        );
-    } else {
-        throw new Error('Both co-owner slots are full');
-    }
+    if (result1.rows.length > 0) return;
+
+    const result2 = await executeQuery(
+        `UPDATE "Active Leagues" SET co_owner_2 = $1
+         WHERE league_id = $2 AND co_owner_2 IS NULL
+         RETURNING league_id`,
+        [userId, leagueId]
+    );
+    if (result2.rows.length > 0) return;
+
+    throw new Error('Both co-owner slots are full');
 };
 
 const removeCoOwner = async (leagueId, userId) => {
