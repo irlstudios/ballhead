@@ -4,6 +4,7 @@ const logger = require('../utils/logger');
 const { noticePayload } = require('../utils/ui');
 const {
     fetchLeaguesByOwner,
+    fetchLeaguesByCoOwner,
     insertLeagueCheckin,
     updateLeagueCheckinDate,
     updateLeagueStatus,
@@ -11,6 +12,7 @@ const {
 const {
     GYM_CLASS_GUILD_ID,
     LEAGUE_OWNER_ROLE_ID,
+    LEAGUE_CO_OWNER_ROLE_ID,
     BASE_LEAGUE_ROLE_ID,
     ACTIVE_LEAGUE_ROLE_ID,
     SPONSORED_LEAGUE_ROLE_ID,
@@ -32,6 +34,17 @@ function getTierRoleId(leagueType) {
     return map[leagueType] || null;
 }
 
+async function restoreCoOwnerRoles(client, league) {
+    const gymGuild = await client.guilds.fetch(GYM_CLASS_GUILD_ID);
+    const coOwnerIds = [league.co_owner_1, league.co_owner_2].filter(Boolean);
+    for (const coOwnerId of coOwnerIds) {
+        const member = await gymGuild.members.fetch(coOwnerId).catch(() => null);
+        if (member) {
+            await member.roles.add(LEAGUE_CO_OWNER_ROLE_ID).catch(() => {});
+        }
+    }
+}
+
 const handleLeagueCheckinModal = async (interaction) => {
     await interaction.deferReply({ ephemeral: true });
 
@@ -40,11 +53,14 @@ const handleLeagueCheckinModal = async (interaction) => {
         const userId = interaction.user.id;
         const month = getCurrentMonth();
 
-        const leagues = await fetchLeaguesByOwner(userId);
-        if (leagues.length === 0) {
+        const ownedLeagues = await fetchLeaguesByOwner(userId);
+        const coOwnedLeagues = await fetchLeaguesByCoOwner(userId);
+        const allLeagues = [...ownedLeagues, ...coOwnedLeagues];
+
+        if (allLeagues.length === 0) {
             return interaction.editReply(
                 noticePayload(
-                    'You do not own any registered leagues.',
+                    'You do not own or co-own any registered leagues.',
                     { title: 'No League Found', subtitle: 'League Check-in' }
                 )
             );
@@ -52,7 +68,8 @@ const handleLeagueCheckinModal = async (interaction) => {
 
         const results = [];
 
-        for (const league of leagues) {
+        for (const league of allLeagues) {
+            const isOwner = league.owner_id.toString() === userId;
             await insertLeagueCheckin(league.league_id, userId, activityNotes, month);
             await updateLeagueCheckinDate(league.league_id);
 
@@ -61,16 +78,26 @@ const handleLeagueCheckinModal = async (interaction) => {
 
                 try {
                     const gymGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
-                    const member = await gymGuild.members.fetch(userId).catch(() => null);
-                    if (member) {
-                        await member.roles.add(LEAGUE_OWNER_ROLE_ID).catch(() => {});
+
+                    const ownerMember = await gymGuild.members.fetch(league.owner_id.toString()).catch(() => null);
+                    if (ownerMember) {
+                        await ownerMember.roles.add(LEAGUE_OWNER_ROLE_ID).catch(() => {});
                         const tierRoleId = getTierRoleId(league.league_type);
                         if (tierRoleId) {
-                            await member.roles.add(tierRoleId).catch(() => {});
+                            await ownerMember.roles.add(tierRoleId).catch(() => {});
+                        }
+                    }
+
+                    await restoreCoOwnerRoles(interaction.client, league);
+
+                    if (!isOwner) {
+                        const callerMember = await gymGuild.members.fetch(userId).catch(() => null);
+                        if (callerMember) {
+                            await callerMember.roles.add(LEAGUE_CO_OWNER_ROLE_ID).catch(() => {});
                         }
                     }
                 } catch (error) {
-                    logger.error(`[Checkin] Failed to restore roles for ${userId}:`, error.message);
+                    logger.error(`[Checkin] Failed to restore roles for league ${league.league_id}:`, error.message);
                 }
 
                 results.push(`**${league.league_name}** - reactivated`);
