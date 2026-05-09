@@ -5,7 +5,6 @@ const { MessageFlags, ContainerBuilder } = require('discord.js');
 const { buildTextBlock } = require('../utils/ui');
 const {
     fetchActiveLeagues,
-    fetchAllLeaguesForCheckin,
     fetchCheckinForMonth,
     updateLeagueStatus,
 } = require('../db');
@@ -13,6 +12,7 @@ const {
     GYM_CLASS_GUILD_ID,
     LEAGUE_LOG_CHANNEL_ID,
     LEAGUE_OWNER_ROLE_ID,
+    LEAGUE_CO_OWNER_ROLE_ID,
     BASE_LEAGUE_ROLE_ID,
     ACTIVE_LEAGUE_ROLE_ID,
     SPONSORED_LEAGUE_ROLE_ID,
@@ -35,6 +35,10 @@ function getTierRoleId(leagueType) {
         'Sponsored': SPONSORED_LEAGUE_ROLE_ID,
     };
     return map[leagueType] || null;
+}
+
+function getCoOwnerIds(league) {
+    return [league.co_owner_1, league.co_owner_2].filter(Boolean);
 }
 
 async function sendCheckinReminder(client) {
@@ -111,6 +115,7 @@ async function processCheckinDeadline(client) {
 
         await updateLeagueStatus(league.league_id, 'Inactive');
 
+        // Remove owner roles
         try {
             const member = await gymGuild.members.fetch(league.owner_id.toString()).catch(() => null);
             if (member) {
@@ -121,9 +126,23 @@ async function processCheckinDeadline(client) {
                 }
             }
         } catch (error) {
-            logger.error(`[Checkin Cycle] Failed to remove roles from ${league.owner_id}:`, error.message);
+            logger.error(`[Checkin Cycle] Failed to remove roles from owner ${league.owner_id}:`, error.message);
         }
 
+        // Remove co-owner roles
+        const coOwnerIds = getCoOwnerIds(league);
+        for (const coOwnerId of coOwnerIds) {
+            try {
+                const coMember = await gymGuild.members.fetch(coOwnerId).catch(() => null);
+                if (coMember) {
+                    await coMember.roles.remove(LEAGUE_CO_OWNER_ROLE_ID).catch(() => {});
+                }
+            } catch (error) {
+                logger.error(`[Checkin Cycle] Failed to remove co-owner role from ${coOwnerId}:`, error.message);
+            }
+        }
+
+        // DM owner
         try {
             const owner = await client.users.fetch(league.owner_id.toString());
             await owner.send(
@@ -132,6 +151,20 @@ async function processCheckinDeadline(client) {
             ).catch(() => {});
         } catch (error) {
             logger.error(`[Checkin Cycle] Failed to DM owner ${league.owner_id}:`, error.message);
+        }
+
+        // DM co-owners
+        for (const coOwnerId of coOwnerIds) {
+            try {
+                const coOwner = await client.users.fetch(coOwnerId);
+                await coOwner.send(
+                    `The league **${league.league_name}** has been marked inactive due to a missed check-in. ` +
+                    'Use `/league-checkin` at any time to help reactivate it.'
+                ).catch(() => {});
+            } catch (error) {
+                logger.error(`[Checkin Cycle] Failed to DM co-owner ${coOwnerId}:`, error.message);
+            }
+            await delay(DELAY_MS);
         }
 
         inactiveLeagues.push(league.league_name);
