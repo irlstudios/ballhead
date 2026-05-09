@@ -3,7 +3,7 @@
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { noticePayload } = require('../utils/ui');
-const { fetchLeaguesByOwner, updateLeagueInvite } = require('../db');
+const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, updateLeagueInvite } = require('../db');
 
 function extractInviteCode(url) {
     const match = url.match(/discord(?:app)?\.com\/invite\/([^/\s]+)/i)
@@ -26,11 +26,14 @@ const handleUpdateLeagueInviteModal = async (interaction) => {
         const newInvite = interaction.fields.getTextInputValue('new-invite-link');
         const userId = interaction.user.id;
 
-        const leagues = await fetchLeaguesByOwner(userId);
-        if (leagues.length === 0) {
+        const ownedLeagues = await fetchLeaguesByOwner(userId);
+        const coOwnedLeagues = await fetchLeaguesByCoOwner(userId);
+        const allLeagues = [...ownedLeagues, ...coOwnedLeagues];
+
+        if (allLeagues.length === 0) {
             return interaction.editReply(
                 noticePayload(
-                    'You do not own any registered leagues.',
+                    'You do not own or co-own any registered leagues.',
                     { title: 'No League Found', subtitle: 'Update Invite' }
                 )
             );
@@ -84,7 +87,7 @@ const handleUpdateLeagueInviteModal = async (interaction) => {
             );
         }
 
-        const league = leagues.find(
+        const league = allLeagues.find(
             (l) => l.server_id && l.server_id.toString() === guild.id
         );
 

@@ -3,7 +3,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
 const { noticePayload } = require('../../utils/ui');
-const { fetchLeaguesByOwner } = require('../../db');
+const { fetchLeaguesByOwner, fetchLeaguesByCoOwner } = require('../../db');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -11,12 +11,14 @@ module.exports = {
         .setDescription('Update the invite link for your league'),
 
     async execute(interaction) {
-        const leagues = await fetchLeaguesByOwner(interaction.user.id);
+        const userId = interaction.user.id;
+        const ownedLeagues = await fetchLeaguesByOwner(userId);
+        const coOwnedLeagues = await fetchLeaguesByCoOwner(userId);
 
-        if (leagues.length === 0) {
+        if (ownedLeagues.length === 0 && coOwnedLeagues.length === 0) {
             return interaction.reply({
                 ...noticePayload(
-                    'You do not own any registered leagues.',
+                    'You do not own or co-own any registered leagues.',
                     { title: 'No League Found', subtitle: 'Update Invite' }
                 ),
                 ephemeral: true,
