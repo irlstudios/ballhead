@@ -12,6 +12,8 @@ require('dotenv').config({ path: './resources/.env' });
 const { ensureLeagueActivitySchema } = require('../db');
 const { runLeagueHealthCheck } = require('../jobs/league-health-check');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
+const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
+const { syncRankRoles } = require('../jobs/rank-role-sync');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -225,6 +227,24 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT)');
+        // Hourly: Chat Reaction Cleanup
+        cron.schedule('0 * * * *', async () => {
+            try {
+                await cleanReactedMessages(client);
+            } catch (error) {
+                logger.error('[Cron] Chat Reaction Cleanup failed:', error);
+            }
+        });
+
+        // Weekly: Rank Role Sync - Wednesday midnight Chicago
+        cron.schedule('0 0 * * 3', async () => {
+            try {
+                await syncRankRoles(client);
+            } catch (error) {
+                logger.error('[Cron] Rank Role Sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT)');
     },
 };

@@ -97,7 +97,11 @@ const handleApplyBaseLeagueModal = async (interaction) => {
         if (existingServer.length > 0) {
             return await interaction.editReply(
                 noticePayload(
-                    'This server is already registered as a Base League.',
+                    [
+                        'This server is already registered as a league. Each server can only be registered once.',
+                        '',
+                        '-# If you believe this is an error or want to dispute ownership, please open a ticket so our team can help resolve it.',
+                    ],
                     { title: 'Already Registered', subtitle: 'Base League' }
                 )
             );

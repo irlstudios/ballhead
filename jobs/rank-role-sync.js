@@ -1,4 +1,5 @@
-const { schedule } = require('node-cron');
+'use strict';
+
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const logger = require('../utils/logger');
@@ -17,7 +18,7 @@ const EMOJIS = {
 const THREAD_ID = '1396935260008353944';
 const PARENT_CHANNEL_ID = '1083515855985442906';
 
-async function fetchMMRData () {
+async function fetchMMRData() {
     const sheets = await getSheetsClient();
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
     const season = meta.data.sheets
@@ -31,7 +32,7 @@ async function fetchMMRData () {
     return res.data.values || [];
 }
 
-async function updateRoles (client) {
+async function updateRoles(client) {
     const guild = await client.guilds.fetch(process.env.GUILD_ID);
     const data = await fetchMMRData();
     const changes = [];
@@ -64,52 +65,45 @@ async function updateRoles (client) {
     return { changes, invalidIds };
 }
 
-module.exports = {
-    name: 'clientReady',
-    execute (client) {
-        schedule(
-            '0 0 * * 3k',
-            async () => {
-                logger.info('Running rank task');
-                let result;
-                try {
-                    result = await updateRoles(client);
-                } catch (e) {
-                    logger.info('Rank task error during updateRoles()', e);
-                    return;
-                }
-                const { changes = [], invalidIds = [] } = result || {};
-                if (!changes.length && !invalidIds.length) {
-                    logger.info('Rank task: no changes detected; no rank updates made');
-                    return;
-                }
-                logger.info(`Rank task: ${changes.length} change(s); ${invalidIds.length} invalid id(s)`);        
-                const lines = changes.map(c => `<@${c.id}>, ${EMOJIS[c.old] || ''} --> ${EMOJIS[c.now]}`);
-                if (invalidIds.length) {
-                    lines.push('', 'Invalid Discord IDs:', invalidIds.join(', '));
-                }
-                const description = lines.join('\n');
-                const logContainer = new ContainerBuilder();
-                logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Rank Change Log'));
-                logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
-                let thread;
-                try {
-                    thread = await client.channels.fetch(THREAD_ID);
-                } catch (error) {
-                    logger.error('Failed to fetch rank change log thread:', error);
-                }
-                if (!thread) {
-                    const parent = await client.channels.fetch(PARENT_CHANNEL_ID);
-                    thread = await parent.threads.create({ name: 'rank-change-log', autoArchiveDuration: 10080 });
-                }
-                if (thread.archived) await thread.setArchived(false);
-                try {
-                    await thread.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
-                } catch (e) {
-                    logger.info('thread send error', e);
-                }
-            },
-            { timezone: 'America/Chicago' }
-        );
+async function syncRankRoles(client) {
+    logger.info('Running rank task');
+    let result;
+    try {
+        result = await updateRoles(client);
+    } catch (e) {
+        logger.info('Rank task error during updateRoles()', e);
+        return;
     }
-};
+    const { changes = [], invalidIds = [] } = result || {};
+    if (!changes.length && !invalidIds.length) {
+        logger.info('Rank task: no changes detected; no rank updates made');
+        return;
+    }
+    logger.info(`Rank task: ${changes.length} change(s); ${invalidIds.length} invalid id(s)`);
+    const lines = changes.map(c => `<@${c.id}>, ${EMOJIS[c.old] || ''} --> ${EMOJIS[c.now]}`);
+    if (invalidIds.length) {
+        lines.push('', 'Invalid Discord IDs:', invalidIds.join(', '));
+    }
+    const description = lines.join('\n');
+    const logContainer = new ContainerBuilder();
+    logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Rank Change Log'));
+    logContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent(description));
+    let thread;
+    try {
+        thread = await client.channels.fetch(THREAD_ID);
+    } catch (error) {
+        logger.error('Failed to fetch rank change log thread:', error);
+    }
+    if (!thread) {
+        const parent = await client.channels.fetch(PARENT_CHANNEL_ID);
+        thread = await parent.threads.create({ name: 'rank-change-log', autoArchiveDuration: 10080 });
+    }
+    if (thread.archived) await thread.setArchived(false);
+    try {
+        await thread.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+    } catch (e) {
+        logger.info('thread send error', e);
+    }
+}
+
+module.exports = { syncRankRoles };
