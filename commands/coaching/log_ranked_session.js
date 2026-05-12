@@ -126,7 +126,6 @@ module.exports = {
                     .setDescription('Did the participant pass? (5+ makes = Pass)')
                     .setStringSelectMenuComponent(passFailSelect)
             );
-
         await interaction.showModal(modal);
     }
 };

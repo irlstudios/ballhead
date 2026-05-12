@@ -1,10 +1,10 @@
-const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize, OverwriteType } = require('discord.js');
 const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
 
 const BLACKLIST_USER_IDS = new Set();
-const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
+const BLACKLIST_ROLE_IDS = new Set(['847977550731149364', '1125497495678615582']);
 const BLACKLIST_DENY_OVERWRITE = {
     Connect: false,
     Speak: false,
@@ -99,14 +99,16 @@ module.exports = {
         .addSubcommand(subcommand =>
             subcommand
                 .setName('invite')
-                .setDescription('Invite users to the room.')
+                .setDescription('Invite users or roles to the room.')
                 .addUserOption(option => option.setName('user').setDescription('User to invite'))
+                .addRoleOption(option => option.setName('role').setDescription('Role to invite'))
         )
         .addSubcommand(subcommand =>
             subcommand
                 .setName('uninvite')
-                .setDescription('Uninvite users from the room.')
+                .setDescription('Uninvite users or roles from the room.')
                 .addUserOption(option => option.setName('user').setDescription('User to uninvite'))
+                .addRoleOption(option => option.setName('role').setDescription('Role to uninvite'))
         )
         .addSubcommand(subcommand =>
             subcommand
@@ -201,9 +203,15 @@ module.exports = {
             const members = Array.from(roomChannel.members.values()).map(member => ({
                 id: member.id,
                 isMuted: member.voice.serverMute || !roomChannel.permissionsFor(member).has('Speak') }));
-            const invited = Array.from(roomChannel.permissionOverwrites.cache.values())
-                .filter(overwrite => overwrite.allow.has('Connect') && !overwrite.deny.has('Connect'))
+            const invitedOverwrites = Array.from(roomChannel.permissionOverwrites.cache.values())
+                .filter(overwrite => overwrite.allow.has('Connect') && !overwrite.deny.has('Connect'));
+            const invitedUsers = invitedOverwrites
+                .filter(overwrite => overwrite.type === OverwriteType.Member)
                 .map(overwrite => `<@${overwrite.id}>`);
+            const invitedRoles = invitedOverwrites
+                .filter(overwrite => overwrite.type === OverwriteType.Role)
+                .map(overwrite => `<@&${overwrite.id}>`);
+            const invited = [...invitedUsers, ...invitedRoles];
             const mutedMembers = members.filter(m => m.isMuted).map(m => `<@${m.id}>`);
             const nonMutedMembers = members.filter(m => !m.isMuted).map(m => `<@${m.id}>`);
             const membersList = members.map(m => `<@${m.id}>`).join('\n') || 'None';
@@ -310,27 +318,37 @@ module.exports = {
             }
             await applyBlacklistPermissions(roomChannel);
             const inviteUser = interaction.options.getUser('user');
+            const inviteRole = interaction.options.getRole('role');
+            if (!inviteUser && !inviteRole) {
+                return replyRoomNotice(interaction, {
+                    title: 'Target Missing',
+                    subtitle: 'Room Invite',
+                    lines: ['No user or role specified.']
+                });
+            }
+            const results = [];
             if (inviteUser) {
                 if (await isUserBlacklisted(interaction.guild, inviteUser.id)) {
                     await enforceBlacklistForUser(roomChannel, inviteUser.id);
-                    return replyRoomNotice(interaction, {
-                        title: 'Invite Blocked',
-                        subtitle: 'Room Invite',
-                        lines: ['That user is blacklisted from joining rooms.']
-                    });
+                    results.push(`<@${inviteUser.id}> is blacklisted and cannot be invited.`);
+                } else {
+                    await roomChannel.permissionOverwrites.edit(inviteUser.id, { Connect: true });
+                    results.push(`<@${inviteUser.id}> invited.`);
                 }
-                await roomChannel.permissionOverwrites.edit(inviteUser.id, { Connect: true });
-                await applyBlacklistPermissions(roomChannel);
-                return replyRoomNotice(interaction, {
-                    title: 'Invite Sent',
-                    subtitle: 'Room Invite',
-                    lines: [`<@${inviteUser.id}> invited.`]
-                });
             }
+            if (inviteRole) {
+                if (BLACKLIST_ROLE_IDS.has(inviteRole.id)) {
+                    results.push(`<@&${inviteRole.id}> is blacklisted and cannot be invited.`);
+                } else {
+                    await roomChannel.permissionOverwrites.edit(inviteRole.id, { Connect: true });
+                    results.push(`<@&${inviteRole.id}> invited.`);
+                }
+            }
+            await applyBlacklistPermissions(roomChannel);
             return replyRoomNotice(interaction, {
-                title: 'User Missing',
-                subtitle: 'Room Invite',
-                lines: ['No user specified.']
+                title: 'Room Invite',
+                subtitle: 'Invite Results',
+                lines: results
             });
         }
         case 'uninvite': {
@@ -364,19 +382,32 @@ module.exports = {
             }
             await applyBlacklistPermissions(roomChannel);
             const uninviteUser = interaction.options.getUser('user');
-            if (uninviteUser) {
-                await roomChannel.permissionOverwrites.delete(uninviteUser.id);
-                await applyBlacklistPermissions(roomChannel);
+            const uninviteRole = interaction.options.getRole('role');
+            if (!uninviteUser && !uninviteRole) {
                 return replyRoomNotice(interaction, {
-                    title: 'Invite Removed',
+                    title: 'Target Missing',
                     subtitle: 'Room Uninvite',
-                    lines: [`<@${uninviteUser.id}> uninvited.`]
+                    lines: ['No user or role specified.']
                 });
             }
+            const results = [];
+            if (uninviteUser) {
+                await roomChannel.permissionOverwrites.delete(uninviteUser.id);
+                results.push(`<@${uninviteUser.id}> uninvited.`);
+            }
+            if (uninviteRole) {
+                if (BLACKLIST_ROLE_IDS.has(uninviteRole.id)) {
+                    results.push(`<@&${uninviteRole.id}> is blacklisted and cannot be uninvited.`);
+                } else {
+                    await roomChannel.permissionOverwrites.delete(uninviteRole.id);
+                    results.push(`<@&${uninviteRole.id}> uninvited.`);
+                }
+            }
+            await applyBlacklistPermissions(roomChannel);
             return replyRoomNotice(interaction, {
-                title: 'User Missing',
-                subtitle: 'Room Uninvite',
-                lines: ['No user specified.']
+                title: 'Room Uninvite',
+                subtitle: 'Uninvite Results',
+                lines: results
             });
         }
         case 'host': {

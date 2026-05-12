@@ -14,7 +14,7 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     throw new Error('Action failed after retries');
 };
 const BLACKLIST_USER_IDS = new Set();
-const BLACKLIST_ROLE_IDS = new Set(['847977550731149364']);
+const BLACKLIST_ROLE_IDS = new Set(['847977550731149364', '1125497495678615582']);
 const BLACKLIST_DENY_PERMISSIONS = [
     PermissionFlagsBits.Connect,
     PermissionFlagsBits.Speak,
@@ -74,13 +74,7 @@ module.exports = {
         const VC_BLACK_LIST_ID = '1125497495678615582';
         const ADMIN_ID = '781397829808553994';
 
-        if (oldState.channelId !== specificVCID && newState.channelId === specificVCID && isBlacklisted(newState.member)) {
-            await newState.setChannel(null);
-            return;
-        }
-
-        if (newState.channelId && client.vcHosts && client.vcHosts.has(newState.channelId) && isBlacklisted(newState.member)) {
-            await applyBlacklistPermissions(newState.channel);
+        if (newState.channelId && newState.channelId !== oldState.channelId && isBlacklisted(newState.member)) {
             await newState.setChannel(null);
             return;
         }
