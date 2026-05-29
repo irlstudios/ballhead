@@ -3,7 +3,7 @@
 const moment = require('moment-timezone');
 const logger = require('../utils/logger');
 const { getSheetsClient } = require('../utils/sheets_cache');
-const { getGameIdeasSummary, fetchGameIdeasThreadsInRange } = require('../db');
+const { getGameIdeasSummary } = require('../db');
 const {
     BUG_REPORTS_FORUM_CHANNEL_ID,
     BUG_REPORT_ESCALATED_TAG_ID,
@@ -16,23 +16,14 @@ const TIMEZONE = 'America/Chicago';
 const MAX_ARCHIVED_PAGES = 10;
 const ARCHIVED_PAGE_SIZE = 100;
 
-const SHEET_TABS = Object.freeze({
-    WEEKLY_SUMMARY: {
-        title: 'Weekly Summary',
-        headers: [
-            'Generated At', 'Range Start', 'Range End',
-            'Game Ideas Threads', 'Game Ideas Messages', 'Unique Participants',
-            'Bug Reports Total', 'Bug Reports Escalated', 'Bug Reports Un-escalated',
-        ],
-    },
-    GAME_IDEAS_THREADS: {
-        title: 'Game Ideas Threads',
-        headers: ['Generated At', 'Range Start', 'Range End', 'Thread Name', 'Starter ID', 'Created At', 'URL'],
-    },
-    BUG_REPORTS: {
-        title: 'Bug Reports',
-        headers: ['Generated At', 'Range Start', 'Range End', 'Thread Name', 'Escalated', 'Created At', 'URL'],
-    },
+// All metrics are appended as one row per run into the existing "Data" tab.
+const DATA_TAB = Object.freeze({
+    title: 'Data',
+    headers: [
+        'Generated At', 'Range Start', 'Range End',
+        'Game Ideas Threads', 'Game Ideas Messages', 'Unique Participants',
+        'Bug Reports Total', 'Bug Reports Escalated', 'Bug Reports Un-escalated',
+    ],
 });
 
 const formatTimestamp = (value) => {
@@ -44,9 +35,7 @@ const formatTimestamp = (value) => {
 };
 
 const getGameIdeasMetrics = async (start, end) => {
-    const summary = await getGameIdeasSummary(start, end);
-    const threads = await fetchGameIdeasThreadsInRange(start, end);
-    return { ...summary, threads };
+    return getGameIdeasSummary(start, end);
 };
 
 // Collects active + archived threads from a forum channel, paginating archived
@@ -114,89 +103,86 @@ const getBugReportMetrics = async (client, start, end) => {
     };
 };
 
-const ensureSheetTabs = async (sheets) => {
+// Ensures the "Data" tab exists and has a header row before any append.
+const ensureDataTab = async (sheets) => {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_COMMUNITY_METRICS });
-    const existingTitles = new Set((meta.data.sheets || []).map((s) => s.properties.title));
+    const exists = (meta.data.sheets || []).some((s) => s.properties.title === DATA_TAB.title);
 
-    const missing = Object.values(SHEET_TABS).filter((tab) => !existingTitles.has(tab.title));
-    if (missing.length === 0) {
-        return;
+    if (!exists) {
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
+            resource: { requests: [{ addSheet: { properties: { title: DATA_TAB.title } } }] },
+        });
+        logger.info(`[CommunityMetrics] Created sheet tab: ${DATA_TAB.title}`);
     }
 
-    await sheets.spreadsheets.batchUpdate({
+    const header = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        resource: {
-            requests: missing.map((tab) => ({ addSheet: { properties: { title: tab.title } } })),
-        },
+        range: `${DATA_TAB.title}!A1:I1`,
     });
+    const hasHeader = Array.isArray(header.data.values)
+        && header.data.values.length > 0
+        && (header.data.values[0] || []).length > 0;
 
-    for (const tab of missing) {
+    if (!hasHeader) {
         await sheets.spreadsheets.values.update({
             spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-            range: `${tab.title}!A1`,
+            range: `${DATA_TAB.title}!A1`,
             valueInputOption: 'RAW',
-            resource: { values: [tab.headers] },
+            resource: { values: [DATA_TAB.headers] },
         });
+        logger.info(`[CommunityMetrics] Wrote header row to ${DATA_TAB.title}`);
     }
-
-    logger.info(`[CommunityMetrics] Created sheet tab(s): ${missing.map((t) => t.title).join(', ')}`);
-};
-
-const appendRows = async (sheets, tabTitle, rows) => {
-    if (!rows || rows.length === 0) {
-        return;
-    }
-    await sheets.spreadsheets.values.append({
-        spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        range: `${tabTitle}!A:Z`,
-        valueInputOption: 'USER_ENTERED',
-        resource: { values: rows },
-    });
 };
 
 const appendMetricsToSheet = async (metrics) => {
     const sheets = await getSheetsClient();
-    await ensureSheetTabs(sheets);
+    await ensureDataTab(sheets);
 
-    const generatedAt = formatTimestamp(new Date());
-    const rangeStart = formatTimestamp(metrics.range.start);
-    const rangeEnd = formatTimestamp(metrics.range.end);
-
-    await appendRows(sheets, SHEET_TABS.WEEKLY_SUMMARY.title, [[
-        generatedAt, rangeStart, rangeEnd,
+    const row = [
+        formatTimestamp(new Date()),
+        formatTimestamp(metrics.range.start),
+        formatTimestamp(metrics.range.end),
         metrics.gameIdeas.threadCount,
         metrics.gameIdeas.messageCount,
         metrics.gameIdeas.uniqueParticipants,
         metrics.bugReports.total,
         metrics.bugReports.escalated,
         metrics.bugReports.unescalated,
-    ]]);
+    ];
 
-    await appendRows(
-        sheets,
-        SHEET_TABS.GAME_IDEAS_THREADS.title,
-        metrics.gameIdeas.threads.map((t) => [
-            generatedAt, rangeStart, rangeEnd,
-            t.name || '', t.starter_id || '', formatTimestamp(t.created_at), t.url || '',
-        ]),
-    );
-
-    await appendRows(
-        sheets,
-        SHEET_TABS.BUG_REPORTS.title,
-        metrics.bugReports.threads.map((t) => [
-            generatedAt, rangeStart, rangeEnd,
-            t.name || '', t.escalated ? 'Yes' : 'No', formatTimestamp(t.createdAt), t.url || '',
-        ]),
-    );
+    await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
+        range: `${DATA_TAB.title}!A:I`,
+        valueInputOption: 'USER_ENTERED',
+        resource: { values: [row] },
+    });
 };
 
 // Computes the full metrics set for a date range and optionally appends to the sheet.
+// Each source is isolated: a failure in one (e.g. a DB hiccup) still lets the other
+// be reported and the sheet row to be written.
 const runCommunityMetrics = async (client, { start, end, appendSheet = false } = {}) => {
-    const [gameIdeas, bugReports] = await Promise.all([
+    const [gameIdeasResult, bugReportsResult] = await Promise.allSettled([
         getGameIdeasMetrics(start, end),
         getBugReportMetrics(client, start, end),
     ]);
+
+    let gameIdeas;
+    if (gameIdeasResult.status === 'fulfilled') {
+        gameIdeas = gameIdeasResult.value;
+    } else {
+        logger.error('[CommunityMetrics] Failed to read game ideas metrics:', gameIdeasResult.reason);
+        gameIdeas = { threadCount: 0, messageCount: 0, uniqueParticipants: 0, unavailable: true };
+    }
+
+    let bugReports;
+    if (bugReportsResult.status === 'fulfilled') {
+        bugReports = bugReportsResult.value;
+    } else {
+        logger.error('[CommunityMetrics] Failed to read bug report metrics:', bugReportsResult.reason);
+        bugReports = { total: 0, escalated: 0, unescalated: 0, threads: [], unavailable: true };
+    }
 
     const metrics = { range: { start, end }, gameIdeas, bugReports, appended: false, appendError: null };
 
@@ -233,5 +219,5 @@ module.exports = {
     runCommunityMetrics,
     runWeeklyCommunityMetrics,
     appendMetricsToSheet,
-    ensureSheetTabs,
+    ensureDataTab,
 };

@@ -84,6 +84,10 @@ module.exports = {
                 `- Total in range: ${metrics.bugReports.total}`,
             ];
 
+            if (metrics.gameIdeas.unavailable) {
+                lines.push('', '_Game-ideas data could not be read; counts shown as 0._');
+            }
+
             if (metrics.bugReports.unavailable) {
                 lines.push('', '_Bug report forum could not be read; counts shown as 0._');
             }
