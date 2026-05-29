@@ -85,6 +85,46 @@ const modalConfig = {
             }
         ],
     },
+    'ffOfficialApplicationModal': {
+        title: 'FF Official Application',
+        fields: [
+            {
+                id: 'ffUsername',
+                label: 'In-Game Username',
+                style: 'Short',
+                placeholder: 'Enter your in-game username',
+                required: true,
+            },
+            {
+                id: 'ffOfficiatingDuration',
+                label: 'How long have you been officiating?',
+                style: 'Short',
+                placeholder: 'e.g. 3 months, 1 year',
+                required: true,
+            },
+            {
+                id: 'ffRulesUnderstanding',
+                label: 'Have you read/understand the FF rules?',
+                style: 'Short',
+                placeholder: 'Yes/No',
+                required: true,
+            },
+            {
+                id: 'ffMotivation',
+                label: 'Why do you want to become an FF Official?',
+                style: 'Paragraph',
+                placeholder: 'Share your motivation',
+                required: true,
+            },
+            {
+                id: 'ffStatsLink',
+                label: 'Link to recent FF stats/submissions',
+                style: 'Short',
+                placeholder: 'Paste a link to your recent FF stats',
+                required: true,
+            },
+        ],
+    },
     'LfgSystem1Create' : {
         title: 'Create LFG Post',
         fields: [

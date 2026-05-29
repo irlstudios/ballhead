@@ -4,7 +4,8 @@ const cron = require('node-cron');
 const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
     ensureSquadStateTable, ensureTransferRequestsTable,
-    fetchExpiredPendingTransfers, updateTransferRequestStatus } = require('../db');
+    fetchExpiredPendingTransfers, updateTransferRequestStatus,
+    ensureFfOfficialApplicationsTable, ensureGameIdeasTables } = require('../db');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
@@ -14,6 +15,7 @@ const { runLeagueHealthCheck } = require('../jobs/league-health-check');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
 const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
 const { syncRankRoles } = require('../jobs/rank-role-sync');
+const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -147,6 +149,8 @@ module.exports = {
         await ensureSquadStateTable();
         await ensureTransferRequestsTable();
         await ensureLeagueActivitySchema();
+        await ensureFfOfficialApplicationsTable();
+        await ensureGameIdeasTables();
 
         // Load top squad state from DB
         await loadTopSquadFromDB();
@@ -245,6 +249,15 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT)');
+        // Weekly: Community Metrics - Monday 9:00 AM Chicago (summarizes trailing 7 days)
+        cron.schedule('0 9 * * 1', async () => {
+            try {
+                await runWeeklyCommunityMetrics(client);
+            } catch (error) {
+                logger.error('[Cron] Community Metrics failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT)');
     },
 };

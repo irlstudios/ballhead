@@ -11,6 +11,7 @@ const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants'
 // Handler modules
 const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
+const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprove, handleFfOfficialApplicationReject } = require('./handlers/ff_officials');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
@@ -181,6 +182,7 @@ const handleModalSubmit = async (interaction) => {
     const modalRoutes = {
         'report-bug': () => handleBugReport(interaction, customId),
         'officialApplicationModal': () => handleOfficialsApplicationSubmission(interaction),
+        'ffOfficialApplicationModal': () => handleFfOfficialApplicationSubmission(interaction),
         'generateTemplateModal_kotc': () => handleGenerateTemplateModal(interaction),
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
@@ -219,6 +221,8 @@ const handleButton = async (interaction, client) => {
             'prev2': () => handlePrev2(interaction),
             'approve': () => handleOfficialsApplicationApprove(interaction, client),
             'reject': () => handleOfficialsApplicationReject(interaction, client),
+            'ffApprove': () => handleFfOfficialApplicationApprove(interaction, client),
+            'ffReject': () => handleFfOfficialApplicationReject(interaction, client),
             'officialsQna': () => handleQnAInteraction(interaction),
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),

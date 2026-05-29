@@ -60,6 +60,134 @@ const deleteOfficialApplication = async (discordId) => {
     );
 };
 
+// FF Official application queries
+const ensureFfOfficialApplicationsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS ff_official_applications (
+            discord_id TEXT PRIMARY KEY,
+            discord_username TEXT NOT NULL,
+            in_game_username TEXT NOT NULL,
+            current_role TEXT NOT NULL,
+            officiating_duration TEXT NOT NULL,
+            understands_rules BOOLEAN NOT NULL,
+            motivation TEXT NOT NULL,
+            stats_link TEXT NOT NULL,
+            application_url TEXT NOT NULL,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const findFfOfficialApplication = async (discordId) => {
+    const result = await executeQuery(
+        'SELECT * FROM ff_official_applications WHERE discord_id = $1',
+        [discordId]
+    );
+    return result.rows;
+};
+
+const insertFfOfficialApplication = async (params) => {
+    const {
+        discordId,
+        username,
+        inGameUsername,
+        currentRole,
+        officiatingDuration,
+        understandsRules,
+        motivation,
+        statsLink,
+        applicationUrl,
+    } = params;
+    await executeQuery(
+        `INSERT INTO ff_official_applications
+         (discord_id, discord_username, in_game_username, current_role, officiating_duration, understands_rules, motivation, stats_link, application_url, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
+        [discordId, username, inGameUsername, currentRole, officiatingDuration, understandsRules, motivation, statsLink, applicationUrl]
+    );
+};
+
+const deleteFfOfficialApplication = async (discordId) => {
+    await executeQuery(
+        'DELETE FROM ff_official_applications WHERE discord_id = $1',
+        [discordId]
+    );
+};
+
+// Game ideas metrics (durable tracking of forum threads + thread messages)
+const ensureGameIdeasTables = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS game_ideas_threads (
+            thread_id TEXT PRIMARY KEY,
+            starter_id TEXT,
+            name TEXT,
+            url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS game_ideas_messages (
+            message_id TEXT PRIMARY KEY,
+            thread_id TEXT NOT NULL,
+            author_id TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery(
+        'CREATE INDEX IF NOT EXISTS idx_game_ideas_threads_created_at ON game_ideas_threads (created_at)'
+    ).catch(() => {});
+    await executeQuery(
+        'CREATE INDEX IF NOT EXISTS idx_game_ideas_messages_created_at ON game_ideas_messages (created_at)'
+    ).catch(() => {});
+    await executeQuery(
+        'CREATE INDEX IF NOT EXISTS idx_game_ideas_messages_author ON game_ideas_messages (author_id)'
+    ).catch(() => {});
+};
+
+const insertGameIdeasThread = async ({ threadId, starterId, name, url, createdAt }) => {
+    await executeQuery(
+        `INSERT INTO game_ideas_threads (thread_id, starter_id, name, url, created_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, NOW()))
+         ON CONFLICT (thread_id) DO NOTHING`,
+        [threadId, starterId || null, name || null, url || null, createdAt || null]
+    );
+};
+
+const insertGameIdeasMessage = async ({ messageId, threadId, authorId, createdAt }) => {
+    await executeQuery(
+        `INSERT INTO game_ideas_messages (message_id, thread_id, author_id, created_at)
+         VALUES ($1, $2, $3, COALESCE($4, NOW()))
+         ON CONFLICT (message_id) DO NOTHING`,
+        [messageId, threadId, authorId, createdAt || null]
+    );
+};
+
+const getGameIdeasSummary = async (start, end) => {
+    const result = await executeQuery(
+        `SELECT
+            (SELECT COUNT(*) FROM game_ideas_threads WHERE created_at >= $1 AND created_at <= $2) AS thread_count,
+            (SELECT COUNT(*) FROM game_ideas_messages WHERE created_at >= $1 AND created_at <= $2) AS message_count,
+            (SELECT COUNT(DISTINCT author_id) FROM game_ideas_messages WHERE created_at >= $1 AND created_at <= $2) AS unique_participants`,
+        [start, end]
+    );
+    const row = result.rows[0] || {};
+    return {
+        threadCount: parseInt(row.thread_count, 10) || 0,
+        messageCount: parseInt(row.message_count, 10) || 0,
+        uniqueParticipants: parseInt(row.unique_participants, 10) || 0,
+    };
+};
+
+const fetchGameIdeasThreadsInRange = async (start, end) => {
+    const result = await executeQuery(
+        `SELECT thread_id, starter_id, name, url, created_at
+         FROM game_ideas_threads
+         WHERE created_at >= $1 AND created_at <= $2
+         ORDER BY created_at ASC`,
+        [start, end]
+    );
+    return result.rows;
+};
+
 // League queries (moved from interactionHandler.js to use pool)
 const findLeagueApplication = async (applicationMessageId) => {
     const result = await executeQuery(
@@ -620,6 +748,15 @@ module.exports = {
     findOfficialApplication,
     insertOfficialApplication,
     deleteOfficialApplication,
+    ensureFfOfficialApplicationsTable,
+    findFfOfficialApplication,
+    insertFfOfficialApplication,
+    deleteFfOfficialApplication,
+    ensureGameIdeasTables,
+    insertGameIdeasThread,
+    insertGameIdeasMessage,
+    getGameIdeasSummary,
+    fetchGameIdeasThreadsInRange,
     findLeagueApplication,
     updateLeagueApplicationApproval,
     updateLeagueApplicationDenial,
