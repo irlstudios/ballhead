@@ -4,6 +4,7 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBui
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
 const {
+    ensureFfOfficialApplicationsTable,
     findFfOfficialApplication,
     insertFfOfficialApplication,
     deleteFfOfficialApplication,
@@ -25,6 +26,8 @@ const resolveCurrentRole = (member) => {
 const handleFfOfficialApplicationSubmission = async (interaction) => {
     try {
         const discordId = interaction.user.id;
+
+        await ensureFfOfficialApplicationsTable();
 
         const existingRows = await findFfOfficialApplication(discordId);
         if (existingRows.length > 0) {

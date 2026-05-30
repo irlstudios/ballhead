@@ -145,12 +145,22 @@ module.exports = {
         await scheduleFutureRoleTimeouts(client);
         await processExpiredInvites(client);
 
-        // Ensure new DB tables
-        await ensureSquadStateTable();
-        await ensureTransferRequestsTable();
-        await ensureLeagueActivitySchema();
-        await ensureFfOfficialApplicationsTable();
-        await ensureGameIdeasTables();
+        // Ensure new DB tables. Each runs independently so a failure in one
+        // does not prevent the others from being created.
+        const migrations = [
+            ['squad_state', ensureSquadStateTable],
+            ['transfer_requests', ensureTransferRequestsTable],
+            ['league_activity', ensureLeagueActivitySchema],
+            ['ff_official_applications', ensureFfOfficialApplicationsTable],
+            ['game_ideas', ensureGameIdeasTables],
+        ];
+        for (const [name, ensure] of migrations) {
+            try {
+                await ensure();
+            } catch (error) {
+                logger.error(`[DB] Failed to ensure ${name} schema:`, error);
+            }
+        }
 
         // Load top squad state from DB
         await loadTopSquadFromDB();
