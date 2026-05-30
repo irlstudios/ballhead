@@ -67,7 +67,7 @@ const ensureFfOfficialApplicationsTable = async () => {
             discord_id TEXT PRIMARY KEY,
             discord_username TEXT NOT NULL,
             in_game_username TEXT NOT NULL,
-            current_role TEXT NOT NULL,
+            applicant_role TEXT NOT NULL,
             officiating_duration TEXT NOT NULL,
             understands_rules BOOLEAN NOT NULL,
             motivation TEXT NOT NULL,
@@ -100,7 +100,7 @@ const insertFfOfficialApplication = async (params) => {
     } = params;
     await executeQuery(
         `INSERT INTO ff_official_applications
-         (discord_id, discord_username, in_game_username, current_role, officiating_duration, understands_rules, motivation, stats_link, application_url, submitted_at)
+         (discord_id, discord_username, in_game_username, applicant_role, officiating_duration, understands_rules, motivation, stats_link, application_url, submitted_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
         [discordId, username, inGameUsername, currentRole, officiatingDuration, understandsRules, motivation, statsLink, applicationUrl]
     );
