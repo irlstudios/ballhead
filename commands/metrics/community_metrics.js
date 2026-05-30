@@ -78,11 +78,10 @@ module.exports = {
                 `- Unique participants: ${metrics.gameIdeas.uniqueParticipants}`,
                 `- Total messages: ${metrics.gameIdeas.messageCount}`,
                 '',
-                '**Bug Reports** (open = currently active, not closed)',
-                `- Open issues created in range: ${metrics.bugReports.openInRange}`,
-                `- Total open now: ${metrics.bugReports.totalOpen}`,
-                `- Open & escalated: ${metrics.bugReports.openEscalated}`,
-                `- Open & un-escalated: ${metrics.bugReports.openUnescalated}`,
+                '**Bug Reports** (opened in range, still open)',
+                `- Opened in range: ${metrics.bugReports.openInRange}`,
+                `- Escalated: ${metrics.bugReports.openInRangeEscalated}`,
+                `- Un-escalated: ${metrics.bugReports.openInRangeUnescalated}`,
             ];
 
             if (metrics.gameIdeas.unavailable) {

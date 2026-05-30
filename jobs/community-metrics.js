@@ -13,14 +13,14 @@ const {
 const TIMEZONE = 'America/Chicago';
 
 // All metrics are appended as one row per run into the existing "Data" tab.
-// Game-ideas columns cover the date range; bug columns are a point-in-time
-// snapshot of currently-open threads (plus one range-scoped open count).
+// Both game-ideas and bug columns are scoped to the date range; bug columns
+// count threads opened in the range that are still open.
 const DATA_TAB = Object.freeze({
     title: 'Data',
     headers: [
         'Generated At', 'Range Start', 'Range End',
         'Game Ideas Threads', 'Game Ideas Messages', 'Unique Participants',
-        'Bug Open In Range', 'Bug Total Open', 'Bug Open Escalated', 'Bug Open Un-escalated',
+        'Bug Opened In Range', 'Bug Opened In Range Escalated', 'Bug Opened In Range Un-escalated',
     ],
 });
 
@@ -41,10 +41,10 @@ const isEscalatedThread = (thread) => {
     return appliedTags.includes(BUG_REPORT_ESCALATED_TAG_ID);
 };
 
-// "Open" = a currently-active (non-archived) thread that has not been closed via
-// the forum's close button. Closing a post archives and locks it, and Discord
-// also auto-archives inactive posts, so active+unlocked threads are exactly the
-// ones shown as open in the forum. The unreliable "Closed" tag is ignored.
+// Bug metrics are scoped to the date range: threads CREATED within [start, end]
+// that are still open. "Open" = currently-active (non-archived) and not closed
+// via the forum's close button (closing archives + locks; auto-archive also
+// removes inactive posts). The unreliable "Closed" tag is ignored.
 const getBugReportMetrics = async (client, start, end) => {
     const startMs = start.getTime();
     const endMs = end.getTime();
@@ -52,23 +52,23 @@ const getBugReportMetrics = async (client, start, end) => {
     const forumChannel = await client.channels.fetch(BUG_REPORTS_FORUM_CHANNEL_ID).catch(() => null);
     if (!forumChannel || typeof forumChannel.threads?.fetchActive !== 'function') {
         logger.error(`[CommunityMetrics] Bug reports forum '${BUG_REPORTS_FORUM_CHANNEL_ID}' not found or not a forum.`);
-        return { totalOpen: 0, openEscalated: 0, openUnescalated: 0, openInRange: 0, unavailable: true };
+        return { openInRange: 0, openInRangeEscalated: 0, openInRangeUnescalated: 0, unavailable: true };
     }
 
     const active = [...(await forumChannel.threads.fetchActive()).threads.values()];
-    const open = active.filter((thread) => !thread.locked);
-
-    const openEscalated = open.filter(isEscalatedThread).length;
-    const openInRange = open.filter((thread) => {
+    const openInRange = active.filter((thread) => {
+        if (thread.locked) {
+            return false;
+        }
         const created = thread.createdTimestamp;
         return typeof created === 'number' && created >= startMs && created <= endMs;
-    }).length;
+    });
 
+    const escalated = openInRange.filter(isEscalatedThread).length;
     return {
-        totalOpen: open.length,
-        openEscalated,
-        openUnescalated: open.length - openEscalated,
-        openInRange,
+        openInRange: openInRange.length,
+        openInRangeEscalated: escalated,
+        openInRangeUnescalated: openInRange.length - escalated,
         unavailable: false,
     };
 };
@@ -88,7 +88,7 @@ const ensureDataTab = async (sheets) => {
 
     const header = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        range: `${DATA_TAB.title}!A1:J1`,
+        range: `${DATA_TAB.title}!A1:I1`,
     });
     const hasHeader = Array.isArray(header.data.values)
         && header.data.values.length > 0
@@ -117,14 +117,13 @@ const appendMetricsToSheet = async (metrics) => {
         metrics.gameIdeas.messageCount,
         metrics.gameIdeas.uniqueParticipants,
         metrics.bugReports.openInRange,
-        metrics.bugReports.totalOpen,
-        metrics.bugReports.openEscalated,
-        metrics.bugReports.openUnescalated,
+        metrics.bugReports.openInRangeEscalated,
+        metrics.bugReports.openInRangeUnescalated,
     ];
 
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        range: `${DATA_TAB.title}!A:J`,
+        range: `${DATA_TAB.title}!A:I`,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [row] },
     });
@@ -152,7 +151,7 @@ const runCommunityMetrics = async (client, { start, end, appendSheet = false } =
         bugReports = bugReportsResult.value;
     } else {
         logger.error('[CommunityMetrics] Failed to read bug report metrics:', bugReportsResult.reason);
-        bugReports = { totalOpen: 0, openEscalated: 0, openUnescalated: 0, openInRange: 0, unavailable: true };
+        bugReports = { openInRange: 0, openInRangeEscalated: 0, openInRangeUnescalated: 0, unavailable: true };
     }
 
     const metrics = { range: { start, end }, gameIdeas, bugReports, appended: false, appendError: null };
@@ -177,8 +176,9 @@ const runWeeklyCommunityMetrics = async (client) => {
     const metrics = await runCommunityMetrics(client, { start, end, appendSheet: true });
     logger.info(
         `[CommunityMetrics] Weekly run complete. Game ideas: ${metrics.gameIdeas.threadCount} threads, ` +
-        `${metrics.gameIdeas.uniqueParticipants} participants. Bug reports (open now): ${metrics.bugReports.totalOpen} total, ` +
-        `${metrics.bugReports.openEscalated} escalated, ${metrics.bugReports.openUnescalated} un-escalated. Appended: ${metrics.appended}.`,
+        `${metrics.gameIdeas.uniqueParticipants} participants. Bug reports (opened in range, still open): ` +
+        `${metrics.bugReports.openInRange} total, ${metrics.bugReports.openInRangeEscalated} escalated, ` +
+        `${metrics.bugReports.openInRangeUnescalated} un-escalated. Appended: ${metrics.appended}.`,
     );
     return metrics;
 };
