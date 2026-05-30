@@ -12,17 +12,15 @@ const {
 
 const TIMEZONE = 'America/Chicago';
 
-// Cap on archived-thread pagination so a historical query cannot loop unbounded.
-const MAX_ARCHIVED_PAGES = 10;
-const ARCHIVED_PAGE_SIZE = 100;
-
 // All metrics are appended as one row per run into the existing "Data" tab.
+// Game-ideas columns cover the date range; bug columns are a point-in-time
+// snapshot of currently-open threads (plus one range-scoped open count).
 const DATA_TAB = Object.freeze({
     title: 'Data',
     headers: [
         'Generated At', 'Range Start', 'Range End',
         'Game Ideas Threads', 'Game Ideas Messages', 'Unique Participants',
-        'Bug Reports Total', 'Bug Reports Escalated', 'Bug Reports Un-escalated',
+        'Bug Open In Range', 'Bug Total Open', 'Bug Open Escalated', 'Bug Open Un-escalated',
     ],
 });
 
@@ -38,32 +36,15 @@ const getGameIdeasMetrics = async (start, end) => {
     return getGameIdeasSummary(start, end);
 };
 
-// Collects active + archived threads from a forum channel, paginating archived
-// threads up to a safety cap. Returns the raw thread objects.
-const collectForumThreads = async (forumChannel) => {
-    const collected = new Map();
-
-    const active = await forumChannel.threads.fetchActive();
-    for (const thread of active.threads.values()) {
-        collected.set(thread.id, thread);
-    }
-
-    let before;
-    for (let page = 0; page < MAX_ARCHIVED_PAGES; page += 1) {
-        const archived = await forumChannel.threads.fetchArchived({ limit: ARCHIVED_PAGE_SIZE, before });
-        const threads = [...archived.threads.values()];
-        for (const thread of threads) {
-            collected.set(thread.id, thread);
-        }
-        if (!archived.hasMore || threads.length === 0) {
-            break;
-        }
-        before = threads[threads.length - 1].id;
-    }
-
-    return [...collected.values()];
+const isEscalatedThread = (thread) => {
+    const appliedTags = Array.isArray(thread.appliedTags) ? thread.appliedTags : [];
+    return appliedTags.includes(BUG_REPORT_ESCALATED_TAG_ID);
 };
 
+// "Open" = a currently-active (non-archived) thread that has not been closed via
+// the forum's close button. Closing a post archives and locks it, and Discord
+// also auto-archives inactive posts, so active+unlocked threads are exactly the
+// ones shown as open in the forum. The unreliable "Closed" tag is ignored.
 const getBugReportMetrics = async (client, start, end) => {
     const startMs = start.getTime();
     const endMs = end.getTime();
@@ -71,34 +52,23 @@ const getBugReportMetrics = async (client, start, end) => {
     const forumChannel = await client.channels.fetch(BUG_REPORTS_FORUM_CHANNEL_ID).catch(() => null);
     if (!forumChannel || typeof forumChannel.threads?.fetchActive !== 'function') {
         logger.error(`[CommunityMetrics] Bug reports forum '${BUG_REPORTS_FORUM_CHANNEL_ID}' not found or not a forum.`);
-        return { total: 0, escalated: 0, unescalated: 0, threads: [], unavailable: true };
+        return { totalOpen: 0, openEscalated: 0, openUnescalated: 0, openInRange: 0, unavailable: true };
     }
 
-    const allThreads = await collectForumThreads(forumChannel);
+    const active = [...(await forumChannel.threads.fetchActive()).threads.values()];
+    const open = active.filter((thread) => !thread.locked);
 
-    const inRange = allThreads.filter((thread) => {
+    const openEscalated = open.filter(isEscalatedThread).length;
+    const openInRange = open.filter((thread) => {
         const created = thread.createdTimestamp;
         return typeof created === 'number' && created >= startMs && created <= endMs;
-    });
+    }).length;
 
-    const threads = inRange.map((thread) => {
-        const appliedTags = Array.isArray(thread.appliedTags) ? thread.appliedTags : [];
-        const escalated = appliedTags.includes(BUG_REPORT_ESCALATED_TAG_ID);
-        return {
-            id: thread.id,
-            name: thread.name || '',
-            url: thread.url || '',
-            createdAt: thread.createdAt,
-            escalated,
-        };
-    });
-
-    const escalated = threads.filter((t) => t.escalated).length;
     return {
-        total: threads.length,
-        escalated,
-        unescalated: threads.length - escalated,
-        threads,
+        totalOpen: open.length,
+        openEscalated,
+        openUnescalated: open.length - openEscalated,
+        openInRange,
         unavailable: false,
     };
 };
@@ -118,7 +88,7 @@ const ensureDataTab = async (sheets) => {
 
     const header = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        range: `${DATA_TAB.title}!A1:I1`,
+        range: `${DATA_TAB.title}!A1:J1`,
     });
     const hasHeader = Array.isArray(header.data.values)
         && header.data.values.length > 0
@@ -146,14 +116,15 @@ const appendMetricsToSheet = async (metrics) => {
         metrics.gameIdeas.threadCount,
         metrics.gameIdeas.messageCount,
         metrics.gameIdeas.uniqueParticipants,
-        metrics.bugReports.total,
-        metrics.bugReports.escalated,
-        metrics.bugReports.unescalated,
+        metrics.bugReports.openInRange,
+        metrics.bugReports.totalOpen,
+        metrics.bugReports.openEscalated,
+        metrics.bugReports.openUnescalated,
     ];
 
     await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
-        range: `${DATA_TAB.title}!A:I`,
+        range: `${DATA_TAB.title}!A:J`,
         valueInputOption: 'USER_ENTERED',
         resource: { values: [row] },
     });
@@ -181,7 +152,7 @@ const runCommunityMetrics = async (client, { start, end, appendSheet = false } =
         bugReports = bugReportsResult.value;
     } else {
         logger.error('[CommunityMetrics] Failed to read bug report metrics:', bugReportsResult.reason);
-        bugReports = { total: 0, escalated: 0, unescalated: 0, threads: [], unavailable: true };
+        bugReports = { totalOpen: 0, openEscalated: 0, openUnescalated: 0, openInRange: 0, unavailable: true };
     }
 
     const metrics = { range: { start, end }, gameIdeas, bugReports, appended: false, appendError: null };
@@ -206,8 +177,8 @@ const runWeeklyCommunityMetrics = async (client) => {
     const metrics = await runCommunityMetrics(client, { start, end, appendSheet: true });
     logger.info(
         `[CommunityMetrics] Weekly run complete. Game ideas: ${metrics.gameIdeas.threadCount} threads, ` +
-        `${metrics.gameIdeas.uniqueParticipants} participants. Bug reports: ${metrics.bugReports.escalated} escalated, ` +
-        `${metrics.bugReports.unescalated} un-escalated. Appended: ${metrics.appended}.`,
+        `${metrics.gameIdeas.uniqueParticipants} participants. Bug reports (open now): ${metrics.bugReports.totalOpen} total, ` +
+        `${metrics.bugReports.openEscalated} escalated, ${metrics.bugReports.openUnescalated} un-escalated. Appended: ${metrics.appended}.`,
     );
     return metrics;
 };

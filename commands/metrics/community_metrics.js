@@ -73,15 +73,16 @@ module.exports = {
             const lines = [
                 `**Range:** ${start.format(DATE_FORMAT)} to ${end.format(DATE_FORMAT)} (US Central)`,
                 '',
-                '**Game Ideas**',
+                '**Game Ideas** (within range)',
                 `- Posts/threads: ${metrics.gameIdeas.threadCount}`,
                 `- Unique participants: ${metrics.gameIdeas.uniqueParticipants}`,
                 `- Total messages: ${metrics.gameIdeas.messageCount}`,
                 '',
-                '**Bug Reports**',
-                `- Escalated: ${metrics.bugReports.escalated}`,
-                `- Un-escalated: ${metrics.bugReports.unescalated}`,
-                `- Total in range: ${metrics.bugReports.total}`,
+                '**Bug Reports** (open = currently active, not closed)',
+                `- Open issues created in range: ${metrics.bugReports.openInRange}`,
+                `- Total open now: ${metrics.bugReports.totalOpen}`,
+                `- Open & escalated: ${metrics.bugReports.openEscalated}`,
+                `- Open & un-escalated: ${metrics.bugReports.openUnescalated}`,
             ];
 
             if (metrics.gameIdeas.unavailable) {
