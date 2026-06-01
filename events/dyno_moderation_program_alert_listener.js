@@ -8,14 +8,13 @@ const {
     extractEmbedData,
 } = require('../utils/dyno_moderation_parser');
 const {
-    matchProgramRoles,
+    resolveProgramMatches,
     buildAlertText,
 } = require('../utils/program_moderation_alert');
 const {
     DYNO_BOT_ID,
-    PROGRAM_ROLE_IDS,
+    PROGRAM_LEADS,
     PROGRAM_MODERATION_ALERT_CHANNEL_ID,
-    PROGRAM_LEAD_MENTION_ID,
 } = require('../config/constants');
 
 // In-memory guard against duplicate alerts within this runtime. Dyno can edit
@@ -48,27 +47,25 @@ const findModerationRecord = (message) => {
     return null;
 };
 
-// Resolve the program roles the moderated user holds (or held). Prefers a live
+// Resolve the role ids the moderated user holds (or held). Prefers a live
 // member fetch; on failure (typically a ban where the member is gone) falls
-// back to the durable snapshot. Returns matched role ids plus whether they came
-// from history.
-const resolveMatchedRoles = async (guild, userId) => {
+// back to the durable program-role snapshot. Returns the role ids plus whether
+// they came from history and whether resolution succeeded at all.
+const resolveMemberRoleIds = async (guild, userId) => {
     try {
         const member = await guild.members.fetch(userId);
-        const matched = matchProgramRoles([...member.roles.cache.keys()], PROGRAM_ROLE_IDS);
-        return { matched, historical: false, resolved: true };
+        return { roleIds: [...member.roles.cache.keys()], historical: false, resolved: true };
     } catch (fetchError) {
         logger.info(`[DynoModAlert] Member ${userId} not in guild (${fetchError.message}); trying snapshot.`);
         try {
             const snapshot = await getProgramRoleSnapshot(userId);
             if (snapshot) {
-                const matched = matchProgramRoles(snapshot.roleIds, PROGRAM_ROLE_IDS);
-                return { matched, historical: true, resolved: true };
+                return { roleIds: snapshot.roleIds, historical: true, resolved: true };
             }
         } catch (snapshotError) {
             logger.error(`[DynoModAlert] Snapshot lookup failed for ${userId}:`, snapshotError);
         }
-        return { matched: [], historical: true, resolved: false };
+        return { roleIds: [], historical: true, resolved: false };
     }
 };
 
@@ -114,7 +111,7 @@ module.exports = {
                 return;
             }
 
-            const { matched, historical, resolved } = await resolveMatchedRoles(guild, record.userId);
+            const { roleIds, historical, resolved } = await resolveMemberRoleIds(guild, record.userId);
 
             if (!resolved) {
                 logger.info(
@@ -124,7 +121,8 @@ module.exports = {
                 return;
             }
 
-            if (matched.length === 0) {
+            const matches = resolveProgramMatches(roleIds, PROGRAM_LEADS);
+            if (matches.length === 0) {
                 logger.info(
                     `[DynoModAlert] Case ${record.caseNumber} (${record.action}) for ${record.userId}: ` +
                     'not a program member; no alert sent.'
@@ -132,7 +130,9 @@ module.exports = {
                 return;
             }
 
-            const matchedRoleLabels = labelRoles(guild, matched);
+            const leadIds = [...new Set(matches.map((match) => match.leadId))];
+            const matchedRoleIds = [...new Set(matches.flatMap((match) => match.roleIds))];
+            const matchedRoleLabels = labelRoles(guild, matchedRoleIds);
             const body = buildAlertText({
                 action: record.action,
                 userId: record.userId,
@@ -153,15 +153,15 @@ module.exports = {
                 return;
             }
 
-            // Ping the lead in a plain-content message so they get a real
-            // notification. Components V2 messages cannot carry `content`, and a
-            // mention buried in the card is easy to miss, so the ping is sent as
-            // its own message just above the detail card.
-            // PROGRAM_LEAD_MENTION_ID resolves to a user account; switch to
-            // `<@&...>` (and `roles`) if it is ever a role.
+            // Ping the relevant lead(s) in a plain-content message so they get a
+            // real notification. Components V2 messages cannot carry `content`,
+            // and a mention buried in the card is easy to miss, so the ping is
+            // sent as its own message just above the detail card. Lead ids are
+            // user ids; every program the member belongs to gets its lead pinged.
+            const leadMentions = leadIds.map((leadId) => `<@${leadId}>`).join(' ');
             await channel.send({
-                content: `<@${PROGRAM_LEAD_MENTION_ID}> a program member just received a moderation action.`,
-                allowedMentions: { users: [PROGRAM_LEAD_MENTION_ID], roles: [PROGRAM_LEAD_MENTION_ID], parse: [] },
+                content: `${leadMentions} a program member just received a moderation action.`,
+                allowedMentions: { users: leadIds, parse: [] },
             });
 
             const container = new ContainerBuilder();
@@ -176,8 +176,8 @@ module.exports = {
             });
 
             logger.info(
-                `[DynoModAlert] Alerted lead: program member ${record.userId} received ${record.action} ` +
-                `(case ${record.caseNumber}).`
+                `[DynoModAlert] Alerted lead(s) ${leadIds.join(', ')}: program member ${record.userId} ` +
+                `received ${record.action} (case ${record.caseNumber}).`
             );
         } catch (error) {
             logger.error('[DynoModAlert] Failed to process Dyno moderation log:', error);

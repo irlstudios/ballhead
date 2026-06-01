@@ -5,10 +5,46 @@ const assert = require('node:assert');
 
 const {
     matchProgramRoles,
+    resolveProgramMatches,
     buildAlertText,
 } = require('../utils/program_moderation_alert');
 
 const PROGRAM_ROLE_IDS = ['111', '222', '333'];
+
+const PROGRAM_LEADS = [
+    { leadId: 'leadA', roleIds: ['a1', 'a2'] },
+    { leadId: 'leadB', roleIds: ['b1'] },
+    { leadId: 'leadC', roleIds: ['c1', 'c2'] },
+];
+
+// --- resolveProgramMatches ---------------------------------------------------
+
+test('resolveProgramMatches returns the single program a member belongs to', () => {
+    const matches = resolveProgramMatches(['x', 'b1', 'y'], PROGRAM_LEADS);
+    assert.deepStrictEqual(matches, [{ leadId: 'leadB', roleIds: ['b1'] }]);
+});
+
+test('resolveProgramMatches returns every program a member belongs to', () => {
+    const matches = resolveProgramMatches(['a2', 'c1', 'c2'], PROGRAM_LEADS);
+    assert.deepStrictEqual(matches, [
+        { leadId: 'leadA', roleIds: ['a2'] },
+        { leadId: 'leadC', roleIds: ['c1', 'c2'] },
+    ]);
+});
+
+test('resolveProgramMatches preserves per-program role order', () => {
+    const matches = resolveProgramMatches(['c2', 'c1'], PROGRAM_LEADS);
+    assert.deepStrictEqual(matches, [{ leadId: 'leadC', roleIds: ['c1', 'c2'] }]);
+});
+
+test('resolveProgramMatches returns empty when no program roles are held', () => {
+    assert.deepStrictEqual(resolveProgramMatches(['x', 'y'], PROGRAM_LEADS), []);
+});
+
+test('resolveProgramMatches tolerates a null or undefined member role list', () => {
+    assert.deepStrictEqual(resolveProgramMatches(null, PROGRAM_LEADS), []);
+    assert.deepStrictEqual(resolveProgramMatches(undefined, PROGRAM_LEADS), []);
+});
 
 // --- matchProgramRoles -------------------------------------------------------
 

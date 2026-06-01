@@ -80,19 +80,49 @@ const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 const DYNO_BOT_ID = '470723870270160917';
 // Moderation actions we alert on (must match Dyno's case title verbs).
 const DYNO_MODERATION_ACTIONS = ['Mute', 'Warn', 'Ban'];
-// Program roles whose members trigger a lead alert when moderated.
-const PROGRAM_ROLE_IDS = [
-    '1149910060382822430',
-    '1130151149798948974',
-    '1277796689230434427',
-    '1387830685489692763',
-    '863653826627895317',
-    '1227467931751813150',
+// Per-program lead mapping. When a moderated member holds a program's role(s),
+// that program's lead is pinged. A member in several programs pings each lead.
+// Each leadId is a user id; roleIds are that program's roles.
+const PROGRAM_LEADS = [
+    {
+        leadId: '524664088606015488',
+        roleIds: ['1125216796413263892', '1284249724513292350', '1205229212995428352', '982875514874232832'],
+    },
+    {
+        leadId: '1134504335162753105',
+        roleIds: [
+            '1361773617041641703', '1286098139513880648', '1430311362223149208', '1286098187223957617',
+            '1496678691395207239', '1377328210034819163', '1289776755132858460',
+        ],
+    },
+    {
+        leadId: '345424006230441986',
+        roleIds: [
+            '1317633044286406729', '981933984453890059', '1486014559503515678', '1486015299781398548',
+            '1419492790638739617', '1312965840974643320', '1273704152777883698',
+        ],
+    },
+    {
+        leadId: '579299881131311124',
+        roleIds: ['1227467931751813150', '863653826627895317', '1387830685489692763', '1149910060382822430'],
+    },
+    {
+        leadId: '993958151965655140',
+        roleIds: ['1273409981978251437'],
+    },
+    {
+        leadId: '873372645364731964',
+        roleIds: ['1268421645501071380'],
+    },
+    {
+        leadId: '781397829808553994',
+        roleIds: ['1172564690023497839', '1168736274635554898'],
+    },
 ];
+// Union of every program role id (membership check + role snapshot tracker).
+const PROGRAM_ROLE_IDS = [...new Set(PROGRAM_LEADS.flatMap((program) => program.roleIds))];
 // Channel that receives the program-moderation alert.
 const PROGRAM_MODERATION_ALERT_CHANNEL_ID = '828618109794385970';
-// Lead role (or user) pinged on the alert.
-const PROGRAM_LEAD_MENTION_ID = '579299881131311124';
 
 // Pagination
 const ITEMS_PER_PAGE = 10;
@@ -157,9 +187,9 @@ module.exports = {
     MODERATOR_ROLES,
     DYNO_BOT_ID,
     DYNO_MODERATION_ACTIONS,
+    PROGRAM_LEADS,
     PROGRAM_ROLE_IDS,
     PROGRAM_MODERATION_ALERT_CHANNEL_ID,
-    PROGRAM_LEAD_MENTION_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,

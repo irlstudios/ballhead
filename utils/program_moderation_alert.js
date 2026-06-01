@@ -11,6 +11,22 @@ const matchProgramRoles = (memberRoleIds, programRoleIds) => {
     return programRoleIds.filter((roleId) => held.has(roleId));
 };
 
+// Given a member's role ids and the per-program lead mapping, return one entry
+// per program the member belongs to: { leadId, roleIds } where roleIds are the
+// program's roles the member actually holds (in program order). Programs are
+// returned in mapping order; a member in several programs yields several
+// entries (so every relevant lead is pinged).
+const resolveProgramMatches = (memberRoleIds, programLeads) => {
+    const held = new Set(Array.isArray(memberRoleIds) ? memberRoleIds : []);
+    return programLeads.reduce((acc, program) => {
+        const roleIds = program.roleIds.filter((roleId) => held.has(roleId));
+        if (roleIds.length === 0) {
+            return acc;
+        }
+        return [...acc, { leadId: program.leadId, roleIds }];
+    }, []);
+};
+
 // Compose the alert body. `matchedRoleLabels` are display strings (role names
 // or ids) already resolved by the caller so this stays side-effect free.
 const buildAlertText = (params) => {
@@ -53,5 +69,6 @@ const buildAlertText = (params) => {
 
 module.exports = {
     matchProgramRoles,
+    resolveProgramMatches,
     buildAlertText,
 };
