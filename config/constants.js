@@ -33,6 +33,7 @@ const OFFICIAL_ROLE_IDS = [OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFF
 const FF_OFFICIAL_ROLE_ID = '1125216796413263892';
 // Roles eligible to apply for FF Official (Active Official, Senior Official)
 const FF_OFFICIAL_ELIGIBLE_ROLE_IDS = [OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_SENIOR_ROLE_ID];
+const FF_APPLICATION_MANAGERS = ['1134504335162753105','1069748536050196521','524664088606015488']
 
 const BASE_LEAGUE_ROLE_ID = '1298049143134224384';
 const ACTIVE_LEAGUE_ROLE_ID = '1298049189019783199';
@@ -72,6 +73,27 @@ const BOOSTER_ROLE_ID = '1251901885837873232';
 // Role IDs - Moderation
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 
+// Dyno moderation -> program member alerting
+// Dyno bot user id; its moderation log embeds are the only messages we react to.
+// This is the instance that posts moderation cases ("Case N | Action | user");
+// a separate Dyno (1357355069674225766) posts message edit/delete logs.
+const DYNO_BOT_ID = '470723870270160917';
+// Moderation actions we alert on (must match Dyno's case title verbs).
+const DYNO_MODERATION_ACTIONS = ['Mute', 'Warn', 'Ban'];
+// Program roles whose members trigger a lead alert when moderated.
+const PROGRAM_ROLE_IDS = [
+    '1149910060382822430',
+    '1130151149798948974',
+    '1277796689230434427',
+    '1387830685489692763',
+    '863653826627895317',
+    '1227467931751813150',
+];
+// Channel that receives the program-moderation alert.
+const PROGRAM_MODERATION_ALERT_CHANNEL_ID = '828618109794385970';
+// Lead role (or user) pinged on the alert.
+const PROGRAM_LEAD_MENTION_ID = '579299881131311124';
+
 // Pagination
 const ITEMS_PER_PAGE = 10;
 
@@ -90,6 +112,8 @@ const SL_EVENT_SQUAD = 3;
 const SL_PARENT_SQUAD = 6;
 const AD_ID = 1;
 const AD_PREFERENCE = 7;
+
+
 
 module.exports = {
     GYM_CLASS_GUILD_ID,
@@ -131,6 +155,11 @@ module.exports = {
     SQUAD_OWNER_ROLES,
     BOOSTER_ROLE_ID,
     MODERATOR_ROLES,
+    DYNO_BOT_ID,
+    DYNO_MODERATION_ACTIONS,
+    PROGRAM_ROLE_IDS,
+    PROGRAM_MODERATION_ALERT_CHANNEL_ID,
+    PROGRAM_LEAD_MENTION_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,

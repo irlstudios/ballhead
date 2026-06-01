@@ -188,6 +188,40 @@ const fetchGameIdeasThreadsInRange = async (start, end) => {
     return result.rows;
 };
 
+// Program role snapshots (durable "roles they had" record for moderation alerts)
+// Captures the program roles a member currently holds so that, after a ban or
+// leave, we can still tell whether the moderated user was a program member.
+const ensureProgramRoleSnapshotTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS program_role_snapshots (
+            user_id TEXT PRIMARY KEY,
+            role_ids TEXT[] NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const upsertProgramRoleSnapshot = async (userId, roleIds) => {
+    await executeQuery(
+        `INSERT INTO program_role_snapshots (user_id, role_ids, updated_at)
+         VALUES ($1, $2, NOW())
+         ON CONFLICT (user_id) DO UPDATE SET role_ids = EXCLUDED.role_ids, updated_at = NOW()`,
+        [userId, roleIds]
+    );
+};
+
+const getProgramRoleSnapshot = async (userId) => {
+    const result = await executeQuery(
+        'SELECT user_id, role_ids, updated_at FROM program_role_snapshots WHERE user_id = $1',
+        [userId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+        return null;
+    }
+    return { userId: row.user_id, roleIds: row.role_ids || [], updatedAt: row.updated_at };
+};
+
 // League queries (moved from interactionHandler.js to use pool)
 const findLeagueApplication = async (applicationMessageId) => {
     const result = await executeQuery(
@@ -757,6 +791,9 @@ module.exports = {
     insertGameIdeasMessage,
     getGameIdeasSummary,
     fetchGameIdeasThreadsInRange,
+    ensureProgramRoleSnapshotTable,
+    upsertProgramRoleSnapshot,
+    getProgramRoleSnapshot,
     findLeagueApplication,
     updateLeagueApplicationApproval,
     updateLeagueApplicationDenial,

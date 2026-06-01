@@ -14,6 +14,7 @@ const {
     FF_OFFICIAL_ELIGIBLE_ROLE_IDS,
     FF_OFFICIAL_ROLE_ID,
     OFFICIAL_SENIOR_ROLE_ID,
+    FF_APPLICATION_MANAGERS,
 } = require('../config/constants');
 
 const resolveCurrentRole = (member) => {
@@ -173,7 +174,7 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
     try {
         await interaction.deferReply({ ephemeral: true });
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        if (interaction.user.id !== FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to approve applications.', { title: 'Permission Denied', subtitle: 'FF Official Program' }),
                 ephemeral: true,

@@ -101,7 +101,7 @@ if (!token) {
 }
 
 const { startCacheWarmer } = require('./utils/cache_warmer');
-const { ensureLfgTable } = require('./db');
+const { ensureLfgTable, ensureProgramRoleSnapshotTable } = require('./db');
 
 client.login(token).then(async () => {
     logger.info('Bot logged in successfully.');
@@ -112,6 +112,13 @@ client.login(token).then(async () => {
         logger.info('[DB] LFG table ensured.');
     } catch (error) {
         logger.error('[DB] Failed to ensure LFG table:', error);
+    }
+
+    try {
+        await ensureProgramRoleSnapshotTable();
+        logger.info('[DB] Program role snapshot table ensured.');
+    } catch (error) {
+        logger.error('[DB] Failed to ensure program role snapshot table:', error);
     }
 
     // Start cache warming system
