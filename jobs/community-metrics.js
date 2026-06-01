@@ -73,6 +73,17 @@ const getBugReportMetrics = async (client, start, end) => {
     };
 };
 
+// True if the Data tab already has a row whose "Range End" (column C, index 2)
+// equals the given formatted timestamp. Guards against duplicate appends for the
+// same reporting window: a manual /community-metrics run after the weekly cron,
+// a re-run of the same range, or two bot instances firing the same Monday job.
+const hasRowForRangeEnd = (existingRows, rangeEnd) => {
+    if (!rangeEnd || !Array.isArray(existingRows)) {
+        return false;
+    }
+    return existingRows.some((row) => Array.isArray(row) && row[2] === rangeEnd);
+};
+
 // Ensures the "Data" tab exists and has a header row before any append.
 const ensureDataTab = async (sheets) => {
     const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_COMMUNITY_METRICS });
@@ -105,14 +116,28 @@ const ensureDataTab = async (sheets) => {
     }
 };
 
+// Appends one metrics row, unless a row for the same Range End already exists.
+// Returns { appended, skipped } so callers can distinguish a real write from a
+// no-op duplicate guard.
 const appendMetricsToSheet = async (metrics) => {
     const sheets = await getSheetsClient();
     await ensureDataTab(sheets);
 
+    const rangeEnd = formatTimestamp(metrics.range.end);
+    const existing = await sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_COMMUNITY_METRICS,
+        range: `${DATA_TAB.title}!C:C`,
+    });
+
+    if (hasRowForRangeEnd(existing.data.values, rangeEnd)) {
+        logger.info(`[CommunityMetrics] Skipped append; a row for range end '${rangeEnd}' already exists.`);
+        return { appended: false, skipped: true };
+    }
+
     const row = [
         formatTimestamp(new Date()),
         formatTimestamp(metrics.range.start),
-        formatTimestamp(metrics.range.end),
+        rangeEnd,
         metrics.gameIdeas.threadCount,
         metrics.gameIdeas.messageCount,
         metrics.gameIdeas.uniqueParticipants,
@@ -127,6 +152,8 @@ const appendMetricsToSheet = async (metrics) => {
         valueInputOption: 'USER_ENTERED',
         resource: { values: [row] },
     });
+
+    return { appended: true, skipped: false };
 };
 
 // Computes the full metrics set for a date range and optionally appends to the sheet.
@@ -154,12 +181,13 @@ const runCommunityMetrics = async (client, { start, end, appendSheet = false } =
         bugReports = { openInRange: 0, openInRangeEscalated: 0, openInRangeUnescalated: 0, unavailable: true };
     }
 
-    const metrics = { range: { start, end }, gameIdeas, bugReports, appended: false, appendError: null };
+    const metrics = { range: { start, end }, gameIdeas, bugReports, appended: false, appendSkipped: false, appendError: null };
 
     if (appendSheet) {
         try {
-            await appendMetricsToSheet(metrics);
-            metrics.appended = true;
+            const result = await appendMetricsToSheet(metrics);
+            metrics.appended = result.appended;
+            metrics.appendSkipped = result.skipped;
         } catch (error) {
             metrics.appendError = error.message;
             logger.error('[CommunityMetrics] Failed to append metrics to sheet:', error);
@@ -178,7 +206,8 @@ const runWeeklyCommunityMetrics = async (client) => {
         `[CommunityMetrics] Weekly run complete. Game ideas: ${metrics.gameIdeas.threadCount} threads, ` +
         `${metrics.gameIdeas.uniqueParticipants} participants. Bug reports (opened in range, still open): ` +
         `${metrics.bugReports.openInRange} total, ${metrics.bugReports.openInRangeEscalated} escalated, ` +
-        `${metrics.bugReports.openInRangeUnescalated} un-escalated. Appended: ${metrics.appended}.`,
+        `${metrics.bugReports.openInRangeUnescalated} un-escalated. Appended: ${metrics.appended}` +
+        `${metrics.appendSkipped ? ' (skipped: a row for this range end already exists)' : ''}.`,
     );
     return metrics;
 };
@@ -191,4 +220,5 @@ module.exports = {
     runWeeklyCommunityMetrics,
     appendMetricsToSheet,
     ensureDataTab,
+    hasRowForRangeEnd,
 };

@@ -93,9 +93,15 @@ module.exports = {
             }
 
             if (appendSheet) {
-                lines.push('', metrics.appended
-                    ? 'Appended to the community metrics Google Sheet.'
-                    : `Could not append to the sheet: ${metrics.appendError || 'unknown error'}.`);
+                let appendLine;
+                if (metrics.appended) {
+                    appendLine = 'Appended to the community metrics Google Sheet.';
+                } else if (metrics.appendSkipped) {
+                    appendLine = 'Skipped: a row for this date range already exists in the sheet.';
+                } else {
+                    appendLine = `Could not append to the sheet: ${metrics.appendError || 'unknown error'}.`;
+                }
+                lines.push('', appendLine);
             }
 
             await interaction.editReply(
