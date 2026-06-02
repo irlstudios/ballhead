@@ -1,6 +1,6 @@
 'use strict';
 
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, PermissionsBitField } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
 const {
@@ -174,7 +174,7 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
     try {
         await interaction.deferReply({ ephemeral: true });
 
-        if (interaction.user.id !== FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
+        if (!FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to approve applications.', { title: 'Permission Denied', subtitle: 'FF Official Program' }),
                 ephemeral: true,
@@ -246,7 +246,7 @@ const handleFfOfficialApplicationReject = async (interaction) => {
     try {
         await interaction.deferReply({ ephemeral: true });
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
+        if (!FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to deny applications.', { title: 'Permission Denied', subtitle: 'FF Official Program' }),
                 ephemeral: true,
