@@ -682,6 +682,17 @@ const updateLeagueStatus = async (leagueId, status) => {
     );
 };
 
+const markLeagueDisbanded = async (leagueId, ownerId) => {
+    const result = await executeQuery(
+        `UPDATE "Active Leagues"
+         SET league_status = 'Disbanded', co_owner_1 = NULL, co_owner_2 = NULL
+         WHERE league_id = $1 AND owner_id = $2 AND league_status <> 'Disbanded'
+         RETURNING league_id`,
+        [leagueId, ownerId]
+    );
+    return result.rowCount > 0;
+};
+
 const fetchCheckinForMonth = async (leagueId, checkinMonth) => {
     const result = await executeQuery(
         'SELECT * FROM league_checkins WHERE league_id = $1 AND checkin_month = $2',
@@ -826,6 +837,7 @@ module.exports = {
     insertLeagueCheckin,
     updateLeagueCheckinDate,
     updateLeagueStatus,
+    markLeagueDisbanded,
     fetchCheckinForMonth,
     updateLeagueInvite,
     fetchLeaguesByCoOwner,
