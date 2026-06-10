@@ -5,6 +5,10 @@ const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHA
 const { disambiguateSquad, AD_SQUAD_TYPE } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
+// Discord API error codes that all mean "the bot cannot deliver a DM to this user"
+// 50007: user has DMs disabled / blocked the bot
+// 50278: no mutual guilds (commonly the bot is blocked, even if they share a server)
+const UNDELIVERABLE_DM_CODES = new Set([50007, 50278]);
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -177,14 +181,14 @@ module.exports = {
                 inviteMessage = await targetUser.send({ flags: MessageFlags.IsComponentsV2, components: [inviteContainer] });
 
             } catch (dmError) {
-                if (dmError.code === 50007) {
-                    logger.info(`Cannot send DM to ${targetUserTag} (${targetUserId}) - DMs likely disabled.`);
+                if (UNDELIVERABLE_DM_CODES.has(dmError.code)) {
+                    logger.info(`Cannot send DM to ${targetUserTag} (${targetUserId}) - DMs disabled or bot blocked (code ${dmError.code}).`);
                     const dmFailedContainer = new ContainerBuilder()
                         .setAccentColor(0xF1C40F)
                         .addTextDisplayComponents(
                             new TextDisplayBuilder().setContent(`## Could Not Send Invite`),
-                            new TextDisplayBuilder().setContent(`<@${targetUserId}> has DMs disabled or has blocked the bot.`),
-                            new TextDisplayBuilder().setContent(`-# Ask them to enable DMs and try again`)
+                            new TextDisplayBuilder().setContent(`<@${targetUserId}> isn't accepting DMs from the bot. This usually means they have DMs disabled or have blocked the bot.`),
+                            new TextDisplayBuilder().setContent(`-# Ask them to enable server DMs (or unblock the bot) and try again`)
                         );
                     await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [dmFailedContainer], ephemeral: true });
                 } else {

@@ -123,13 +123,13 @@ const handleApplyBaseLeagueModal = async (interaction) => {
             serverDescription, serverFeatures, ownerProfilePicture,
         ]);
 
-        const baseRole = interaction.guild.roles.cache.get(BASE_LEAGUE_ROLE_ID);
-        const mainRole = interaction.guild.roles.cache.get(LEAGUE_OWNER_ROLE_ID);
-        if (baseRole) {
-            await interaction.member.roles.add(baseRole);
-            if (mainRole) await interaction.member.roles.add(mainRole);
-        } else {
-            logger.error(`Role with ID ${BASE_LEAGUE_ROLE_ID} not found.`);
+        // Grant the tier role (Base League Owner) and the general League Owner role.
+        // Add each independently by ID so a failure on one role cannot block or
+        // silently swallow the other, and so failures are surfaced in the logs.
+        for (const roleId of [BASE_LEAGUE_ROLE_ID, LEAGUE_OWNER_ROLE_ID]) {
+            await interaction.member.roles.add(roleId).catch((error) => {
+                logger.error(`Failed to assign role ${roleId} to league owner ${user.id}:`, error.message);
+            });
         }
 
         await interaction.editReply(

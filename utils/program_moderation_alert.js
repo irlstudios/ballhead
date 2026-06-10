@@ -40,6 +40,8 @@ const buildAlertText = (params) => {
         matchedRoleLabels,
         messageUrl,
         rolesHistorical,
+        logLabel = 'Dyno log',
+        origin,
     } = params;
 
     const userReference = userId ? `<@${userId}> (\`${userId}\`)` : `**${targetName}**`;
@@ -52,9 +54,16 @@ const buildAlertText = (params) => {
         `A program member just received a **${action}** moderation action.`,
         '',
         `**User:** ${userReference}`,
-        `**Action:** ${action}`,
-        `**Moderator:** ${moderator || 'Unknown'}`,
     ];
+
+    // Origin tells the lead whether this was a Discord moderation or an in-game
+    // ban; omitted when the caller does not supply one (backward compatible).
+    if (origin) {
+        lines.push(`**Source:** ${origin}`);
+    }
+
+    lines.push(`**Action:** ${action}`);
+    lines.push(`**Moderator:** ${moderator || 'Unknown'}`);
 
     if (length) {
         lines.push(`**Length:** ${length}`);
@@ -62,7 +71,7 @@ const buildAlertText = (params) => {
 
     lines.push(`**Reason:** ${reason || 'No reason provided'}`);
     lines.push(roleSummary);
-    lines.push(`[Jump to Dyno log](${messageUrl})`);
+    lines.push(`[Jump to ${logLabel}](${messageUrl})`);
 
     return lines.join('\n');
 };

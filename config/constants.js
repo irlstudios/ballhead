@@ -38,7 +38,7 @@ const FF_APPLICATION_MANAGERS = ['1134504335162753105','1069748536050196521','52
 const BASE_LEAGUE_ROLE_ID = '1298049143134224384';
 const ACTIVE_LEAGUE_ROLE_ID = '1298049189019783199';
 const SPONSORED_LEAGUE_ROLE_ID = '1298049247073276014';
-const LEAGUE_OWNER_ROLE_ID = '1220577903603231805';
+const LEAGUE_OWNER_ROLE_ID = '1220577913603231805';
 const LEAGUE_CO_OWNER_ROLE_ID = '1378080039580471387';
 
 const LEVEL_5_ROLE_ID = '924522770057031740';
@@ -124,6 +124,15 @@ const PROGRAM_ROLE_IDS = [...new Set(PROGRAM_LEADS.flatMap((program) => program.
 // Channel that receives the program-moderation alert.
 const PROGRAM_MODERATION_ALERT_CHANNEL_ID = '828618109794385970';
 
+// In-game ban bot -> program member alerting.
+// This bot posts a plain-text line when an in-game ban command is run
+// ("<name> (and discord <@id>) has been banned ... by <mod> ..."). We only
+// react to its messages in the bans channel below; alerts still go to the
+// shared PROGRAM_MODERATION_ALERT_CHANNEL_ID above.
+const INGAME_BAN_BOT_ID = '853391399109132288';
+// Channel where the ban bot posts its ban announcements (the source we watch).
+const INGAME_BAN_CHANNEL_ID = '862387103656706049';
+
 // Pagination
 const ITEMS_PER_PAGE = 10;
 
@@ -191,6 +200,8 @@ module.exports = {
     PROGRAM_LEADS,
     PROGRAM_ROLE_IDS,
     PROGRAM_MODERATION_ALERT_CHANNEL_ID,
+    INGAME_BAN_BOT_ID,
+    INGAME_BAN_CHANNEL_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,

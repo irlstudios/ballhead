@@ -117,6 +117,37 @@ test('falls back to the target name when no user id is known', () => {
     assert.doesNotMatch(text, /<@null>/);
 });
 
+test('includes a Source line naming the ban origin when provided', () => {
+    const text = buildAlertText({
+        action: 'Ban',
+        userId: '1',
+        targetName: 'jitwilding',
+        moderator: 'mod',
+        length: 'permanent',
+        reason: 'cheating',
+        matchedRoleLabels: ['Official'],
+        messageUrl: 'https://discord.com/channels/1/2/3',
+        rolesHistorical: false,
+        origin: 'In-game ban',
+    });
+    assert.match(text, /\*\*Source:\*\* In-game ban/);
+});
+
+test('omits the Source line when no origin is provided', () => {
+    const text = buildAlertText({
+        action: 'Ban',
+        userId: '1',
+        targetName: 'jitwilding',
+        moderator: 'mod',
+        length: null,
+        reason: 'cheating',
+        matchedRoleLabels: ['Official'],
+        messageUrl: 'https://discord.com/channels/1/2/3',
+        rolesHistorical: false,
+    });
+    assert.doesNotMatch(text, /Source:/);
+});
+
 test('notes when matched roles are historical (member already left)', () => {
     const text = buildAlertText({
         action: 'Ban',
