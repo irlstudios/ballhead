@@ -165,8 +165,17 @@ module.exports = {
                 );
             }
 
+            // Acknowledge the button click with a cheap empty ack so we reliably
+            // land inside Discord's 3s window, then drive all content edits
+            // through the parent slash interaction (token valid ~15 min). This
+            // avoids "Unknown interaction" (10062) failures that would otherwise
+            // throw before the disband runs.
+            await choice.deferUpdate().catch((error) => {
+                logger.info(`[Disband League] Could not ack confirmation button: ${error.message}`);
+            });
+
             if (choice.customId === CANCEL_ID) {
-                return choice.update(
+                return interaction.editReply(
                     noticePayload('Disband cancelled. Your league is unchanged.', {
                         title: 'Cancelled',
                         subtitle: league.league_name,
@@ -176,7 +185,7 @@ module.exports = {
 
             // Replace the confirmation (removing the buttons) with a working
             // state before the slow teardown, then post the final result.
-            await choice.update(
+            await interaction.editReply(
                 noticePayload('Disbanding your league...', {
                     title: 'Disbanding',
                     subtitle: league.league_name,
