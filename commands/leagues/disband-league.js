@@ -136,7 +136,7 @@ module.exports = {
 
             if (!league) {
                 return interaction.editReply(
-                    noticePayload('You do not own an active league to disband.', {
+                    noticePayload('You do not own a league to disband.', {
                         title: 'No League Found',
                         subtitle: 'Disband League',
                     })
