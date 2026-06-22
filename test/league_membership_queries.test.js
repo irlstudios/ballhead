@@ -22,6 +22,7 @@ const {
     fetchLeaguesByOwner,
     fetchLeaguesByCoOwner,
     isUserCoOwnerAnywhere,
+    findActiveLeague,
 } = require('../db');
 
 const lastQuery = () => capturedQueries[capturedQueries.length - 1].text;
@@ -49,6 +50,27 @@ test('fetchLeaguesByCoOwner excludes disbanded leagues', async () => {
 
 test('isUserCoOwnerAnywhere excludes disbanded leagues', async () => {
     await isUserCoOwnerAnywhere('user-1');
+    assert.ok(
+        excludesDisbanded(lastQuery()),
+        `query should exclude disbanded leagues: ${lastQuery()}`
+    );
+});
+
+// findActiveLeague gates new league registration: by owner_id it blocks a user
+// who "already owns" a league, and by server_id it blocks a server that is
+// "already registered". A disbanded league frees up both, so neither guard may
+// count it.
+
+test('findActiveLeague by owner_id excludes disbanded leagues', async () => {
+    await findActiveLeague('owner_id', 'owner-1');
+    assert.ok(
+        excludesDisbanded(lastQuery()),
+        `query should exclude disbanded leagues: ${lastQuery()}`
+    );
+});
+
+test('findActiveLeague by server_id excludes disbanded leagues', async () => {
+    await findActiveLeague('server_id', 'server-1');
     assert.ok(
         excludesDisbanded(lastQuery()),
         `query should exclude disbanded leagues: ${lastQuery()}`

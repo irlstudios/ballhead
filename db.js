@@ -250,9 +250,12 @@ const findActiveLeague = async (key, value) => {
     if (!validKeys.includes(key)) {
         throw new Error(`Invalid key: ${key}`);
     }
+    // Disbanded leagues are soft-deleted: they keep their owner_id/server_id but
+    // must not count as an existing league, otherwise the registration guards
+    // wrongly block a user (or server) whose only league was disbanded.
     const query = key === 'owner_id'
-        ? 'SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = \'Base\''
-        : `SELECT * FROM "Active Leagues" WHERE ${key} = $1`;
+        ? 'SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = \'Base\' AND league_status <> \'Disbanded\''
+        : `SELECT * FROM "Active Leagues" WHERE ${key} = $1 AND league_status <> 'Disbanded'`;
     const result = await executeQuery(query, [value]);
     return result.rows;
 };
