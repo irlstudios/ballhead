@@ -634,7 +634,8 @@ const fetchAllLeaguesForCheckin = async () => {
 
 const fetchLeaguesByOwner = async (ownerId) => {
     const result = await executeQuery(
-        'SELECT * FROM "Active Leagues" WHERE owner_id = $1',
+        `SELECT * FROM "Active Leagues"
+         WHERE owner_id = $1 AND league_status <> 'Disbanded'`,
         [ownerId]
     );
     return result.rows;
@@ -715,7 +716,8 @@ const updateLeagueInvite = async (leagueId, invite, data) => {
 
 const fetchLeaguesByCoOwner = async (userId) => {
     const result = await executeQuery(
-        'SELECT * FROM "Active Leagues" WHERE co_owner_1 = $1 OR co_owner_2 = $1',
+        `SELECT * FROM "Active Leagues"
+         WHERE (co_owner_1 = $1 OR co_owner_2 = $1) AND league_status <> 'Disbanded'`,
         [userId]
     );
     return result.rows;
@@ -723,7 +725,9 @@ const fetchLeaguesByCoOwner = async (userId) => {
 
 const isUserCoOwnerAnywhere = async (userId) => {
     const result = await executeQuery(
-        'SELECT league_id FROM "Active Leagues" WHERE co_owner_1 = $1 OR co_owner_2 = $1 LIMIT 1',
+        `SELECT league_id FROM "Active Leagues"
+         WHERE (co_owner_1 = $1 OR co_owner_2 = $1) AND league_status <> 'Disbanded'
+         LIMIT 1`,
         [userId]
     );
     return result.rows.length > 0;
