@@ -133,6 +133,39 @@ function getPlatformData(platform, discordId, valuesByRange) {
     }
 }
 
+// Follower count must come from the most recent post, not the first row in the
+// sheet. Posts are matched by username OR platform P ID, and an Instagram P ID
+// can be reused after a username change. Reading the oldest row would surface a
+// stale follower count from the account's previous identity.
+function getLatestFollowerCount(userPosts) {
+    if (!userPosts || userPosts.length === 0) return 'N/A';
+
+    let bestTimestamp = null;
+    let bestFollowers = null;
+
+    for (const post of userPosts) {
+        if (!post) continue;
+        const followers = post[5];
+        if (followers === undefined || followers === null || followers.toString().trim() === '') {
+            continue;
+        }
+        const parsed = parseSpreadsheetDate(post[4]);
+        const timestamp = parsed ? parsed.valueOf() : null;
+
+        if (bestFollowers === null) {
+            bestFollowers = followers;
+            bestTimestamp = timestamp;
+            continue;
+        }
+        if (timestamp !== null && (bestTimestamp === null || timestamp >= bestTimestamp)) {
+            bestFollowers = followers;
+            bestTimestamp = timestamp;
+        }
+    }
+
+    return bestFollowers !== null ? bestFollowers : 'N/A';
+}
+
 function analyzeWeeklyProgress(userPosts, config) {
     if (!userPosts || userPosts.length === 0) {
         return {
@@ -145,7 +178,7 @@ function analyzeWeeklyProgress(userPosts, config) {
         };
     }
 
-    const followerCount = userPosts[0]?.[5] || 'N/A';
+    const followerCount = getLatestFollowerCount(userPosts);
 
     const weeklyStats = {};
     const weekDetails = {};
@@ -482,6 +515,7 @@ function canCheckOthers(member) {
 }
 
 module.exports = {
+    getLatestFollowerCount,
     data: new SlashCommandBuilder()
         .setName('cc-check-progress')
         .setDescription('Check your Content Creator application status and requirements progress across all platforms')
