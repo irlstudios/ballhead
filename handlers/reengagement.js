@@ -129,9 +129,20 @@ async function mirrorResponseToSheet(row) {
         const meta = await sheets.spreadsheets.get({ spreadsheetId: config.FF_SHEET_ID });
         const exists = (meta.data.sheets || []).some((s) => s.properties.title === RESPONSES_TAB);
         if (!exists) {
+            // A small grid is used deliberately: the FF workbook is near Google's
+            // 10M-cell limit, so a default-size (1000x26) tab fails to create.
             await sheets.spreadsheets.batchUpdate({
                 spreadsheetId: config.FF_SHEET_ID,
-                resource: { requests: [{ addSheet: { properties: { title: RESPONSES_TAB } } }] },
+                resource: {
+                    requests: [{
+                        addSheet: {
+                            properties: {
+                                title: RESPONSES_TAB,
+                                gridProperties: { rowCount: 1000, columnCount: RESPONSES_HEADERS.length },
+                            },
+                        },
+                    }],
+                },
             });
             await sheets.spreadsheets.values.update({
                 spreadsheetId: config.FF_SHEET_ID,
