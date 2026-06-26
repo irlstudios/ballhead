@@ -778,6 +778,114 @@ const removeCoOwner = async (leagueId, userId) => {
     }
 };
 
+// ---------------------------------------------------------------------------
+// Re-engagement system
+// ---------------------------------------------------------------------------
+
+// Tracks every outreach contact and every response, plus a global opt-out list.
+// The UNIQUE (user_id, program, last_active_season) constraint on the outreach
+// table is what guarantees a member is contacted at most once per lapse.
+const ensureReengagementTables = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS reengagement_outreach (
+            id SERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            program TEXT NOT NULL,
+            in_game_name TEXT,
+            last_active_season INTEGER,
+            lapsed_seasons INTEGER,
+            status TEXT NOT NULL,
+            message_id TEXT,
+            error TEXT,
+            sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (user_id, program, last_active_season)
+        )
+    `);
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS reengagement_responses (
+            id SERIAL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            program TEXT NOT NULL,
+            response TEXT NOT NULL,
+            reason TEXT,
+            would_return TEXT,
+            comments TEXT,
+            responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS reengagement_optout (
+            user_id TEXT PRIMARY KEY,
+            opted_out_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+// Reserves a contact row before the DM is sent. Relies on the UNIQUE constraint:
+// ON CONFLICT DO NOTHING means a second attempt for the same lapse is a no-op and
+// returns no row, so the caller knows not to send again. Returns the new row id
+// or null when the contact already existed.
+const reserveReengagementOutreach = async ({ userId, program, inGameName, lastActiveSeason, lapsedSeasons }) => {
+    const result = await executeQuery(
+        `INSERT INTO reengagement_outreach
+            (user_id, program, in_game_name, last_active_season, lapsed_seasons, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending')
+         ON CONFLICT (user_id, program, last_active_season) DO NOTHING
+         RETURNING id`,
+        [userId, program, inGameName, lastActiveSeason, lapsedSeasons]
+    );
+    return result.rows[0]?.id ?? null;
+};
+
+const updateReengagementOutreachStatus = async (id, status, { messageId = null, error = null } = {}) => {
+    await executeQuery(
+        `UPDATE reengagement_outreach
+            SET status = $2, message_id = $3, error = $4
+          WHERE id = $1`,
+        [id, status, messageId, error]
+    );
+};
+
+// Most recent outreach row for a user+program, used to enrich a staff note
+// (their in-game name and which season they last played) when they respond.
+const getLatestReengagementOutreach = async (userId, program) => {
+    const result = await executeQuery(
+        `SELECT user_id, program, in_game_name, last_active_season, lapsed_seasons
+           FROM reengagement_outreach
+          WHERE user_id = $1 AND program = $2
+          ORDER BY sent_at DESC
+          LIMIT 1`,
+        [userId, program]
+    );
+    return result.rows[0] || null;
+};
+
+const insertReengagementResponse = async ({ userId, program, response, reason = null, wouldReturn = null, comments = null }) => {
+    await executeQuery(
+        `INSERT INTO reengagement_responses
+            (user_id, program, response, reason, would_return, comments)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [userId, program, response, reason, wouldReturn, comments]
+    );
+};
+
+const isOptedOutOfReengagement = async (userId) => {
+    const result = await executeQuery(
+        'SELECT 1 FROM reengagement_optout WHERE user_id = $1',
+        [userId]
+    );
+    return result.rows.length > 0;
+};
+
+const optOutOfReengagement = async (userId) => {
+    await executeQuery(
+        `INSERT INTO reengagement_optout (user_id)
+         VALUES ($1)
+         ON CONFLICT (user_id) DO NOTHING`,
+        [userId]
+    );
+};
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -851,4 +959,11 @@ module.exports = {
     isUserCoOwnerAnywhere,
     addCoOwner,
     removeCoOwner,
+    ensureReengagementTables,
+    reserveReengagementOutreach,
+    updateReengagementOutreachStatus,
+    getLatestReengagementOutreach,
+    insertReengagementResponse,
+    isOptedOutOfReengagement,
+    optOutOfReengagement,
 };
