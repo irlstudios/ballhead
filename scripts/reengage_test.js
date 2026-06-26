@@ -24,7 +24,7 @@ process.env.REENGAGE_FORCE_USER_IDS = process.env.REENGAGE_FORCE_USER_IDS || TES
 
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const logger = require('../utils/logger');
-const interactionHandler = require('../interactionHandler');
+const { isReengagementInteraction, handleReengagementInteraction } = require('../handlers/reengagement');
 const { ensureReengagementTables } = require('../db');
 const { runReengagementSweep } = require('../jobs/reengagement');
 
@@ -39,9 +39,21 @@ const client = new Client({
     partials: [Partials.Channel, Partials.Message],
 });
 
-client.on('interactionCreate', (interaction) => interactionHandler(interaction, client));
+// This standalone harness only owns re-engagement interactions. It deliberately
+// ignores everything else (commands, other components) so it neither needs the
+// full bot's command registry nor competes with a running production bot.
+client.on('interactionCreate', async (interaction) => {
+    if (!isReengagementInteraction(interaction.customId)) {
+        return;
+    }
+    try {
+        await handleReengagementInteraction(interaction, client);
+    } catch (error) {
+        logger.error(`[ReengageTest] Interaction error: ${error.message}`);
+    }
+});
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     logger.info(`[ReengageTest] Logged in as ${client.user.tag}.`);
     logger.info(`[ReengageTest] Allowlist: ${process.env.REENGAGE_ALLOWLIST}`);
     logger.info(`[ReengageTest] Force targets: ${process.env.REENGAGE_FORCE_USER_IDS}`);
