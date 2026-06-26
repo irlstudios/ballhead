@@ -166,6 +166,15 @@ async function handleSurveyModal(interaction, program, reason) {
     const wouldReturn = interaction.fields.getTextInputValue('would_return') || '';
     const comments = interaction.fields.getTextInputValue('comments') || '';
 
+    // Acknowledge first. The DB write and (slower) sheet mirror below can exceed
+    // Discord's 3-second interaction window; deferring keeps the token valid so
+    // the closing edit does not fail with "Unknown interaction".
+    try {
+        await interaction.deferUpdate();
+    } catch (err) {
+        logger.error(`[Reengage] Failed to defer survey: ${err.message}`);
+    }
+
     await insertReengagementResponse({
         userId: interaction.user.id,
         program,
@@ -188,7 +197,7 @@ async function handleSurveyModal(interaction, program, reason) {
         comments,
     ]);
 
-    await interaction.update({
+    await interaction.editReply({
         flags: MessageFlags.IsComponentsV2,
         components: [container([
             'Thank you for the feedback, it genuinely helps.',
