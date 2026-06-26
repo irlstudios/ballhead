@@ -869,6 +869,17 @@ const insertReengagementResponse = async ({ userId, program, response, reason = 
     );
 };
 
+// Removes a user's outreach history so they become eligible for a fresh contact.
+// Intended for the test harness; the once-per-lapse guard otherwise prevents
+// re-sending to the same person for the same lapse.
+const deleteReengagementOutreach = async (userId) => {
+    const result = await executeQuery(
+        'DELETE FROM reengagement_outreach WHERE user_id = $1',
+        [userId]
+    );
+    return result.rowCount;
+};
+
 const isOptedOutOfReengagement = async (userId) => {
     const result = await executeQuery(
         'SELECT 1 FROM reengagement_optout WHERE user_id = $1',
@@ -963,6 +974,7 @@ module.exports = {
     reserveReengagementOutreach,
     updateReengagementOutreachStatus,
     getLatestReengagementOutreach,
+    deleteReengagementOutreach,
     insertReengagementResponse,
     isOptedOutOfReengagement,
     optOutOfReengagement,

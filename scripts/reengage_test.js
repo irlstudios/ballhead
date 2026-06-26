@@ -25,8 +25,9 @@ process.env.REENGAGE_FORCE_USER_IDS = process.env.REENGAGE_FORCE_USER_IDS || TES
 const { Client, GatewayIntentBits, Partials } = require('discord.js');
 const logger = require('../utils/logger');
 const { isReengagementInteraction, handleReengagementInteraction } = require('../handlers/reengagement');
-const { ensureReengagementTables } = require('../db');
+const { ensureReengagementTables, deleteReengagementOutreach } = require('../db');
 const { runReengagementSweep } = require('../jobs/reengagement');
+const { getForceUserIds } = require('../programs/reengagement/config');
 
 const KEEPALIVE_MS = Number(process.env.REENGAGE_TEST_KEEPALIVE_MS || 600000);
 
@@ -60,6 +61,17 @@ client.once('clientReady', async () => {
 
     try {
         await ensureReengagementTables();
+
+        // By default, clear the test targets' outreach history first so every run
+        // delivers a fresh DM. Set REENGAGE_TEST_NO_RESET=true to keep history and
+        // exercise the once-per-lapse dedup instead.
+        if (process.env.REENGAGE_TEST_NO_RESET !== 'true') {
+            for (const userId of getForceUserIds()) {
+                const removed = await deleteReengagementOutreach(userId);
+                logger.info(`[ReengageTest] Reset: cleared ${removed} outreach row(s) for ${userId}.`);
+            }
+        }
+
         const summaries = await runReengagementSweep(client, { force: true });
         logger.info(`[ReengageTest] Sweep summary: ${JSON.stringify(summaries)}`);
     } catch (error) {
