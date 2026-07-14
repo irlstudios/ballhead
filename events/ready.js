@@ -5,7 +5,7 @@ const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
     ensureSquadStateTable, ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
-    ensureFfOfficialApplicationsTable, ensureGameIdeasTables } = require('../db');
+    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables } = require('../db');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
@@ -16,6 +16,7 @@ const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = requ
 const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
 const { syncRankRoles } = require('../jobs/rank-role-sync');
 const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
+const { runReengagementSweep } = require('../jobs/reengagement');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -153,6 +154,7 @@ module.exports = {
             ['league_activity', ensureLeagueActivitySchema],
             ['ff_official_applications', ensureFfOfficialApplicationsTable],
             ['game_ideas', ensureGameIdeasTables],
+            ['reengagement', ensureReengagementTables],
         ];
         for (const [name, ensure] of migrations) {
             try {
@@ -265,6 +267,17 @@ module.exports = {
                 await runWeeklyCommunityMetrics(client);
             } catch (error) {
                 logger.error('[Cron] Community Metrics failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Weekly: Re-engagement sweep - Tuesday 10:00 AM Chicago. The sweep is a
+        // no-op unless REENGAGE_ENABLED=true, and the sender further refuses to DM
+        // anyone outside REENGAGE_ALLOWLIST when that is set.
+        cron.schedule('0 10 * * 2', async () => {
+            try {
+                await runReengagementSweep(client);
+            } catch (error) {
+                logger.error('[Cron] Re-engagement sweep failed:', error);
             }
         }, { timezone: 'America/Chicago' });
 

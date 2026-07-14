@@ -23,6 +23,7 @@ const {
     ERROR_LOG_CHANNEL_ID: FF_LEADERBOARD_ERROR_LOG_CHANNEL_ID,
     ERROR_LOG_GUILD_ID: FF_LEADERBOARD_ERROR_LOG_GUILD_ID,
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
+const { isReengagementInteraction, handleReengagementInteraction } = require('./handlers/reengagement');
 const { handleInviteButton } = require('./handlers/invites');
 const { handleReportApprove, handleReportDeny, handleReportInfo } = require('./handlers/reports');
 const {
@@ -150,6 +151,10 @@ const handleCommand = async (interaction, client) => {
 };
 
 const handleSelectMenu = async (interaction) => {
+    if (isReengagementInteraction(interaction.customId)) {
+        await handleReengagementInteraction(interaction, interaction.client);
+        return;
+    }
     if (interaction.customId === 'select-platform') {
         const selectedPlatform = interaction.values[0];
         const modal = createModal(selectedPlatform);
@@ -177,6 +182,10 @@ const handleSelectMenu = async (interaction) => {
 };
 
 const handleModalSubmit = async (interaction) => {
+    if (isReengagementInteraction(interaction.customId)) {
+        await handleReengagementInteraction(interaction, interaction.client);
+        return;
+    }
     const [action, customId] = interaction.customId.split(':');
 
     const modalRoutes = {
@@ -209,6 +218,11 @@ const handleModalSubmit = async (interaction) => {
 
 const handleButton = async (interaction, client) => {
     try {
+        if (isReengagementInteraction(interaction.customId)) {
+            await handleReengagementInteraction(interaction, client);
+            return;
+        }
+
         const [action, customId] = interaction.customId.split('_');
         if (!interaction.isButton() || interaction.message.partial) {
             await interaction.message.fetch();
