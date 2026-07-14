@@ -170,7 +170,7 @@ const handleReportInfo = async (interaction) => {
                     reportedUser ? `**Reported Player:** ${reportedUser}` : null,
                     '',
                     'Your report requires additional information.',
-                    'Please open a support ticket so our team can follow up and gather more details.',
+                    'Please head to <#1525522211753037824> and select the **Ban Discussion** dropdown option so our team can follow up and gather more details.',
                 ],
             });
             if (block) dmContainer.addTextDisplayComponents(block);
