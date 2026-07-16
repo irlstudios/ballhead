@@ -15,6 +15,14 @@ const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprov
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
+const {
+    handleRequestOfficialModal,
+    handleAssignOfficialButton,
+    handleAssignOfficialSelect,
+    handleDenyOfficialButton,
+    handleSubmitGameReportButton,
+    handleGameReportModal,
+} = require('./handlers/league-officials');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
 const { handleLfgButton } = require('./handlers/lfg');
 const {
@@ -179,6 +187,10 @@ const handleSelectMenu = async (interaction) => {
         await handleSquadLeaderboardSelect(interaction);
         return;
     }
+    if (interaction.customId.startsWith('assignOfficialSelect:')) {
+        await handleAssignOfficialSelect(interaction);
+        return;
+    }
 };
 
 const handleModalSubmit = async (interaction) => {
@@ -197,6 +209,8 @@ const handleModalSubmit = async (interaction) => {
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
         'league-checkin-modal': () => handleLeagueCheckinModal(interaction),
         'update-league-invite-modal': () => handleUpdateLeagueInviteModal(interaction),
+        'request-official-modal': () => handleRequestOfficialModal(interaction),
+        'game-report-modal': () => handleGameReportModal(interaction),
         'denyLeagueModal': () => handleDenyLeagueModal(interaction),
         'koHostApplicationModal': () => handleKoHostApplication(interaction),
         'rankedSessionModal': () => handleRankedSessionModal(interaction),
@@ -241,6 +255,9 @@ const handleButton = async (interaction, client) => {
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),
             'denyLeague': () => handleDenyLeagueButton(interaction),
+            'assignOfficial': () => handleAssignOfficialButton(interaction),
+            'denyOfficial': () => handleDenyOfficialButton(interaction),
+            'submitGameReport': () => handleSubmitGameReportButton(interaction),
             'reportApprove': () => handleReportApprove(interaction),
             'reportDeny': () => handleReportDeny(interaction),
             'reportInfo': () => handleReportInfo(interaction),

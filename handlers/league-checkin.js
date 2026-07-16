@@ -8,6 +8,7 @@ const {
     insertLeagueCheckin,
     updateLeagueCheckinDate,
     updateLeagueStatus,
+    countVerifiedGames,
 } = require('../db');
 const {
     GYM_CLASS_GUILD_ID,
@@ -100,9 +101,9 @@ const handleLeagueCheckinModal = async (interaction) => {
                     logger.error(`[Checkin] Failed to restore roles for league ${league.league_id}:`, error.message);
                 }
 
-                results.push(`**${league.league_name}** - reactivated`);
+                results.push(`**${league.league_name}** - reactivated (verified games: ${await countVerifiedGames(league.league_id)})`);
             } else {
-                results.push(`**${league.league_name}** - confirmed`);
+                results.push(`**${league.league_name}** - confirmed (verified games: ${await countVerifiedGames(league.league_id)})`);
             }
         }
 

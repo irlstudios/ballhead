@@ -5,7 +5,8 @@ const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
     ensureSquadStateTable, ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
-    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables } = require('../db');
+    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables,
+    ensureLeagueGamesSchema } = require('../db');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
@@ -152,6 +153,7 @@ module.exports = {
             ['squad_state', ensureSquadStateTable],
             ['transfer_requests', ensureTransferRequestsTable],
             ['league_activity', ensureLeagueActivitySchema],
+            ['league_games', ensureLeagueGamesSchema],
             ['ff_official_applications', ensureFfOfficialApplicationsTable],
             ['game_ideas', ensureGameIdeasTables],
             ['reengagement', ensureReengagementTables],

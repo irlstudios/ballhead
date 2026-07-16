@@ -717,6 +717,14 @@ const updateLeagueInvite = async (leagueId, invite, data) => {
     );
 };
 
+const fetchLeagueById = async (leagueId) => {
+    const result = await executeQuery(
+        'SELECT * FROM "Active Leagues" WHERE league_id = $1',
+        [leagueId]
+    );
+    return result.rows[0] || null;
+};
+
 const fetchLeaguesByCoOwner = async (userId) => {
     const result = await executeQuery(
         `SELECT * FROM "Active Leagues"
@@ -897,6 +905,326 @@ const optOutOfReengagement = async (userId) => {
     );
 };
 
+// ---------------------------------------------------------------------------
+// League officials, requests, games, and post-game reports (Phase 2)
+// ---------------------------------------------------------------------------
+
+const { VERIFIED_STATUSES } = require('./utils/league_officials');
+
+// All four tables key off league_id, the "Active Leagues" identity column.
+const ensureLeagueGamesSchema = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_officials (
+            id SERIAL PRIMARY KEY,
+            official_id BIGINT NOT NULL UNIQUE,
+            discord_username TEXT,
+            sports TEXT,
+            tier TEXT,
+            quality_rating NUMERIC,
+            is_available BOOLEAN NOT NULL DEFAULT TRUE,
+            added_by BIGINT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_official_requests (
+            request_id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            requested_by BIGINT NOT NULL,
+            sport TEXT,
+            game_mode TEXT,
+            scheduled_at TEXT,
+            officials_requested INTEGER NOT NULL DEFAULT 1,
+            rules_document_url TEXT,
+            league_invite TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            assigned_official_1 BIGINT,
+            assigned_official_2 BIGINT,
+            assigned_official_3 BIGINT,
+            ops_message_id TEXT,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_games (
+            game_id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            request_id INTEGER,
+            sport TEXT,
+            game_type TEXT,
+            scheduled_at TEXT,
+            completed_at TIMESTAMPTZ,
+            team_1 TEXT,
+            team_2 TEXT,
+            final_score TEXT,
+            winning_team TEXT,
+            player_count INTEGER,
+            official_id BIGINT,
+            host_id BIGINT,
+            verification_status TEXT NOT NULL DEFAULT 'Self Reported',
+            verification_method TEXT,
+            proof_url TEXT,
+            reported_by BIGINT,
+            reviewed_by BIGINT,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_game_reports (
+            report_id SERIAL PRIMARY KEY,
+            request_id INTEGER NOT NULL,
+            league_id INTEGER NOT NULL,
+            official_id BIGINT NOT NULL,
+            final_score TEXT,
+            winning_team TEXT,
+            match_stats TEXT,
+            disconnects TEXT,
+            forfeits TEXT,
+            rule_violations TEXT,
+            sportsmanship_notes TEXT,
+            proof_url TEXT,
+            game_completed BOOLEAN NOT NULL DEFAULT TRUE,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+
+    // Indexes for the hot lookups, plus two integrity backstops. The app already
+    // guards these paths with atomic status transitions
+    // (assignOfficialsToRequest / completeOfficialRequest); the UNIQUE indexes
+    // are the last line of defence for races that slip past the app layer.
+    const indexes = [
+        'CREATE INDEX IF NOT EXISTS idx_official_requests_league ON league_official_requests (league_id)',
+        'CREATE INDEX IF NOT EXISTS idx_official_requests_status ON league_official_requests (status)',
+        'CREATE INDEX IF NOT EXISTS idx_official_requests_message ON league_official_requests (ops_message_id)',
+        'CREATE INDEX IF NOT EXISTS idx_league_games_league_status ON league_games (league_id, verification_status)',
+
+        // Backstop 1 - at most ONE verified game per official request.
+        // Protects the games-played metric from double-counting if two report
+        // submissions (double-click, or two assigned officials) ever race past
+        // completeOfficialRequest(). Partial (request_id IS NOT NULL) so future
+        // manually-entered games that have no originating request stay
+        // unconstrained.
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_league_games_request ON league_games (request_id) WHERE request_id IS NOT NULL',
+
+        // Backstop 2 - at most ONE post-game report per request. A duplicate
+        // report insert fails at the DB even if it slips past the app-level
+        // status guard, keeping league_game_reports one-row-per-request.
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_game_reports_request ON league_game_reports (request_id)',
+    ];
+    for (const sql of indexes) {
+        await executeQuery(sql).catch((error) => {
+            logger.error('[DB] Failed to ensure league games index:', error.message);
+        });
+    }
+};
+
+// --- Officials roster --------------------------------------------------------
+
+const upsertRosterOfficial = async ({ officialId, username, sports, tier, addedBy }) => {
+    await executeQuery(
+        `INSERT INTO league_officials (official_id, discord_username, sports, tier, added_by)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (official_id) DO UPDATE SET
+            discord_username = EXCLUDED.discord_username,
+            sports = EXCLUDED.sports,
+            tier = EXCLUDED.tier,
+            is_available = TRUE`,
+        [officialId, username, sports, tier, addedBy]
+    );
+};
+
+const removeRosterOfficial = async (officialId) => {
+    const result = await executeQuery(
+        'DELETE FROM league_officials WHERE official_id = $1 RETURNING official_id',
+        [officialId]
+    );
+    return result.rowCount > 0;
+};
+
+const fetchRosterOfficial = async (officialId) => {
+    const result = await executeQuery(
+        'SELECT * FROM league_officials WHERE official_id = $1',
+        [officialId]
+    );
+    return result.rows[0] || null;
+};
+
+const fetchAllRosterOfficials = async () => {
+    const result = await executeQuery(
+        'SELECT * FROM league_officials ORDER BY created_at ASC'
+    );
+    return result.rows;
+};
+
+// Available officials, optionally narrowed to those covering a sport (or 'Any').
+const fetchAvailableOfficials = async (sport = null) => {
+    if (!sport) {
+        const result = await executeQuery(
+            'SELECT * FROM league_officials WHERE is_available = TRUE ORDER BY created_at ASC'
+        );
+        return result.rows;
+    }
+    const result = await executeQuery(
+        `SELECT * FROM league_officials
+         WHERE is_available = TRUE
+           AND (sports IS NULL OR sports ILIKE '%Any%' OR sports ILIKE '%' || $1 || '%')
+         ORDER BY created_at ASC`,
+        [sport]
+    );
+    return result.rows;
+};
+
+// --- Official requests -------------------------------------------------------
+
+const insertOfficialRequest = async ({ leagueId, requestedBy, sport, gameMode, scheduledAt, officialsRequested, rulesDocumentUrl, leagueInvite }) => {
+    const result = await executeQuery(
+        `INSERT INTO league_official_requests
+            (league_id, requested_by, sport, game_mode, scheduled_at, officials_requested, rules_document_url, league_invite, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Pending')
+         RETURNING *`,
+        [leagueId, requestedBy, sport, gameMode, scheduledAt, officialsRequested, rulesDocumentUrl, leagueInvite]
+    );
+    return result.rows[0];
+};
+
+const fetchOfficialRequest = async (requestId) => {
+    const result = await executeQuery(
+        'SELECT * FROM league_official_requests WHERE request_id = $1',
+        [requestId]
+    );
+    return result.rows[0] || null;
+};
+
+const fetchOfficialRequestByMessageId = async (messageId) => {
+    const result = await executeQuery(
+        'SELECT * FROM league_official_requests WHERE ops_message_id = $1',
+        [messageId]
+    );
+    return result.rows[0] || null;
+};
+
+const setOfficialRequestMessageId = async (requestId, messageId) => {
+    await executeQuery(
+        'UPDATE league_official_requests SET ops_message_id = $1, updated_at = NOW() WHERE request_id = $2',
+        [messageId, requestId]
+    );
+};
+
+// Atomic assignment: only succeeds if the request is still open. Returns true
+// if THIS call won, false if another staff member already assigned/closed it.
+const assignOfficialsToRequest = async (requestId, { one, two, three }) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET assigned_official_1 = $1, assigned_official_2 = $2, assigned_official_3 = $3,
+             status = 'Assigned', updated_at = NOW()
+         WHERE request_id = $4 AND status IN ('Pending', 'Approved')
+         RETURNING request_id`,
+        [one, two, three, requestId]
+    );
+    return result.rowCount > 0;
+};
+
+// Atomic denial: only from an open state. Returns true if this call closed it.
+const denyOfficialRequest = async (requestId) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET status = 'Denied', updated_at = NOW()
+         WHERE request_id = $1 AND status IN ('Pending', 'Approved')
+         RETURNING request_id`,
+        [requestId]
+    );
+    return result.rowCount > 0;
+};
+
+// Atomic completion claim: only from 'Assigned'. Returns true if this call won
+// the claim; a second report submission gets false and must abort (idempotency).
+const completeOfficialRequest = async (requestId) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET status = 'Completed', updated_at = NOW()
+         WHERE request_id = $1 AND status = 'Assigned'
+         RETURNING request_id`,
+        [requestId]
+    );
+    return result.rowCount > 0;
+};
+
+// Open (in-flight) requests for a league: used to cap per-league request spam.
+const countOpenRequestsForLeague = async (leagueId) => {
+    const result = await executeQuery(
+        `SELECT COUNT(*)::int AS count FROM league_official_requests
+         WHERE league_id = $1 AND status IN ('Pending', 'Approved', 'Assigned')`,
+        [leagueId]
+    );
+    return result.rows[0].count;
+};
+
+const updateOfficialRequestStatus = async (requestId, status) => {
+    await executeQuery(
+        'UPDATE league_official_requests SET status = $1, updated_at = NOW() WHERE request_id = $2',
+        [status, requestId]
+    );
+};
+
+// --- Post-game reports and verified games ------------------------------------
+
+const insertGameReport = async ({ requestId, leagueId, officialId, finalScore, winningTeam, playerCount, sportsmanshipNotes, proofUrl }) => {
+    await executeQuery(
+        `INSERT INTO league_game_reports
+            (request_id, league_id, official_id, final_score, winning_team, sportsmanship_notes, proof_url)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [requestId, leagueId, officialId, finalScore, winningTeam, sportsmanshipNotes, proofUrl]
+    );
+    // player_count lives on league_games; the report row keeps the qualitative record.
+    return playerCount;
+};
+
+// Insert a league_games row from a buildVerifiedGameRecord() object.
+const insertLeagueGame = async (record) => {
+    const result = await executeQuery(
+        `INSERT INTO league_games
+            (league_id, request_id, sport, game_type, scheduled_at, completed_at,
+             final_score, winning_team, player_count, official_id,
+             verification_status, verification_method, proof_url, reported_by, reviewed_by, notes)
+         VALUES ($1, $2, $3, $4, $5, NOW(), $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         RETURNING *`,
+        [
+            record.league_id, record.request_id, record.sport, record.game_type, record.scheduled_at,
+            record.final_score, record.winning_team, record.player_count, record.official_id,
+            record.verification_status, record.verification_method, record.proof_url,
+            record.reported_by, record.reviewed_by, record.notes,
+        ]
+    );
+    return result.rows[0];
+};
+
+// Games-played metric: verified games only. Optional recent-window filter.
+const countVerifiedGames = async (leagueId, sinceDays = null) => {
+    const params = [leagueId, VERIFIED_STATUSES];
+    let sql = `SELECT COUNT(*)::int AS count FROM league_games
+               WHERE league_id = $1 AND verification_status = ANY($2)`;
+    if (sinceDays) {
+        params.push(sinceDays);
+        sql += ' AND created_at >= NOW() - ($3 * INTERVAL \'1 day\')';
+    }
+    const result = await executeQuery(sql, params);
+    return result.rows[0].count;
+};
+
+const countReportedGames = async (leagueId) => {
+    const result = await executeQuery(
+        'SELECT COUNT(*)::int AS count FROM league_games WHERE league_id = $1',
+        [leagueId]
+    );
+    return result.rows[0].count;
+};
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -967,6 +1295,7 @@ module.exports = {
     fetchCheckinForMonth,
     updateLeagueInvite,
     fetchLeaguesByCoOwner,
+    fetchLeagueById,
     isUserCoOwnerAnywhere,
     addCoOwner,
     removeCoOwner,
@@ -978,4 +1307,23 @@ module.exports = {
     insertReengagementResponse,
     isOptedOutOfReengagement,
     optOutOfReengagement,
+    ensureLeagueGamesSchema,
+    upsertRosterOfficial,
+    removeRosterOfficial,
+    fetchRosterOfficial,
+    fetchAllRosterOfficials,
+    fetchAvailableOfficials,
+    insertOfficialRequest,
+    fetchOfficialRequest,
+    fetchOfficialRequestByMessageId,
+    setOfficialRequestMessageId,
+    assignOfficialsToRequest,
+    denyOfficialRequest,
+    completeOfficialRequest,
+    countOpenRequestsForLeague,
+    updateOfficialRequestStatus,
+    insertGameReport,
+    insertLeagueGame,
+    countVerifiedGames,
+    countReportedGames,
 };

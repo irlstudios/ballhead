@@ -20,6 +20,10 @@ const BUG_REPORTS_FORUM_CHANNEL_ID = '1047355363223163010';
 // Threads in BUG_REPORTS_FORUM_CHANNEL_ID without this tag are counted as un-escalated.
 const BUG_REPORT_ESCALATED_TAG_ID = '1265408485361975338';
 const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
+// Officials ops channel: where league official-requests post for staff to
+// assign/deny. TODO: replace with the real channel id before deploy. Falls back
+// to LEAGUE_LOG_CHANNEL_ID at runtime if left unset.
+const LEAGUE_OFFICIALS_CHANNEL_ID = process.env.LEAGUE_OFFICIALS_CHANNEL_ID || LEAGUE_LOG_CHANNEL_ID;
 const SQUAD_PRACTICE_CHANNEL_ID = '1233854185276051516';
 const GYM_CLASS_GENERAL_CHANNEL_ID = '752216589792706624';
 
@@ -166,6 +170,7 @@ module.exports = {
     BUG_REPORTS_FORUM_CHANNEL_ID,
     BUG_REPORT_ESCALATED_TAG_ID,
     LEAGUE_LOG_CHANNEL_ID,
+    LEAGUE_OFFICIALS_CHANNEL_ID,
     SQUAD_PRACTICE_CHANNEL_ID,
     GYM_CLASS_GENERAL_CHANNEL_ID,
     OFFICIAL_PROSPECT_ROLE_ID,

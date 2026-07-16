@@ -293,6 +293,89 @@ const modalConfig = {
             },
         ],
     },
+    'request-official-modal': {
+        title: 'Request an Official',
+        fields: [
+            {
+                id: 'sport',
+                label: 'Sport / Game',
+                placeholder: 'e.g. Soccer, Basketball',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'game-mode',
+                label: 'Game Mode / Format',
+                placeholder: 'e.g. 3v3, best of 3',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'scheduled-at',
+                label: 'Date & Time',
+                placeholder: 'e.g. Fri Jul 18, 8pm ET',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'officials-needed',
+                label: 'Officials Needed (1-3)',
+                placeholder: '1',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'rules-doc',
+                label: 'Rules Document URL (optional)',
+                placeholder: 'https://docs.google.com/...',
+                style: 'Short',
+                required: false,
+            },
+        ],
+    },
+    // Post-game report. Discord caps modals at 5 inputs, so the qualitative
+    // fields (disconnects, forfeits, violations, sportsmanship) are collapsed
+    // into one "Issues / notes" box; the granular DB columns exist for later.
+    'game-report-modal': {
+        title: 'Submit Game Report',
+        fields: [
+            {
+                id: 'final-score',
+                label: 'Final Score',
+                placeholder: 'e.g. 3-2',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'winning-team',
+                label: 'Winning Team',
+                placeholder: 'Team / league name',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'player-count',
+                label: 'Players in Match',
+                placeholder: 'e.g. 6',
+                style: 'Short',
+                required: false,
+            },
+            {
+                id: 'proof-url',
+                label: 'Proof URL (VOD / screenshot)',
+                placeholder: 'https://...',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'issues-notes',
+                label: 'Issues / notes (optional)',
+                placeholder: 'Disconnects, forfeits, rule violations, sportsmanship',
+                style: 'Paragraph',
+                required: false,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;
