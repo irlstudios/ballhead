@@ -7,7 +7,7 @@ const { appendToList } = require('../../utils/poll_logic');
 const { buildUserListReply } = require('../../utils/poll_view');
 
 const notice = (interaction, message, subtitle = 'Top 5') =>
-    interaction.reply({ ...noticePayload(message, { title: 'Top 5', subtitle }), ephemeral: true });
+    interaction.editReply({ ...noticePayload(message, { title: 'Top 5', subtitle }) });
 
 module.exports = {
     data: new ContextMenuCommandBuilder()
@@ -15,6 +15,7 @@ module.exports = {
         .setType(ApplicationCommandType.Message),
 
     async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
         // A forum post's messages live in the post's thread, so the message's
         // channelId is the thread id we index in poll_posts.
         const threadId = interaction.targetMessage.channelId;
@@ -37,6 +38,6 @@ module.exports = {
             return notice(interaction, msg);
         }
         await saveUserBoardList(interaction.user.id, board, res.list);
-        return interaction.reply({ ...(await buildUserListReply(interaction.user.id, board)), ephemeral: true });
+        return interaction.editReply(await buildUserListReply(interaction.user.id, board));
     },
 };

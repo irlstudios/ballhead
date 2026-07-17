@@ -15,7 +15,7 @@ const BOARD_CHOICES = [
 ];
 
 const notice = (interaction, message, subtitle = 'Top 5') =>
-    interaction.reply({ ...noticePayload(message, { title: 'Top 5', subtitle }), ephemeral: true });
+    interaction.editReply({ ...noticePayload(message, { title: 'Top 5', subtitle }) });
 
 const addToList = async (interaction, board) => {
     const threadId = interaction.options.getString('post');
@@ -32,7 +32,7 @@ const addToList = async (interaction, board) => {
         return notice(interaction, msg);
     }
     await saveUserBoardList(interaction.user.id, board, res.list);
-    return interaction.reply({ ...(await buildUserListReply(interaction.user.id, board)), ephemeral: true });
+    return interaction.editReply(await buildUserListReply(interaction.user.id, board));
 };
 
 module.exports = {
@@ -50,12 +50,13 @@ module.exports = {
             .addStringOption((o) => o.setName('board').setDescription('Which list').setRequired(true).addChoices(...BOARD_CHOICES))),
 
     async execute(interaction) {
+        await interaction.deferReply({ ephemeral: true });
         const board = interaction.options.getString('board');
         const sub = interaction.options.getSubcommand();
         if (sub === 'add') {
             return addToList(interaction, board);
         }
-        return interaction.reply({ ...(await buildUserListReply(interaction.user.id, board)), ephemeral: true });
+        return interaction.editReply(await buildUserListReply(interaction.user.id, board));
     },
 
     async autocomplete(interaction) {

@@ -6,6 +6,7 @@ const { buildUserListReply } = require('../utils/poll_view');
 
 // custom_id shape: poll:<action>:<board>:<index>  (index is 0-based)
 const handlePollButton = async (interaction) => {
+    await interaction.deferUpdate();
     const [, action, board, indexRaw] = interaction.customId.split(':');
     const index = parseInt(indexRaw, 10);
 
@@ -22,7 +23,7 @@ const handlePollButton = async (interaction) => {
     if (next !== list) {
         await saveUserBoardList(interaction.user.id, board, next);
     }
-    await interaction.update(await buildUserListReply(interaction.user.id, board));
+    await interaction.editReply(await buildUserListReply(interaction.user.id, board));
 };
 
 module.exports = { handlePollButton };
