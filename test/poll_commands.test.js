@@ -25,3 +25,12 @@ test('myideas add has an autocomplete post option and a 3-choice board', () => {
 test('myideas provides an autocomplete handler', () => {
     assert.strictEqual(typeof myideas.autocomplete, 'function');
 });
+
+const leaderboard = require('../commands/poll/leaderboard');
+
+test('leaderboard has a 3-choice board option', () => {
+    const json = leaderboard.data.toJSON();
+    assert.strictEqual(json.name, 'leaderboard');
+    const board = json.options.find((o) => o.name === 'board');
+    assert.strictEqual(board.choices.length, 3);
+});
