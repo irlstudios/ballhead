@@ -188,6 +188,128 @@ const fetchGameIdeasThreadsInRange = async (start, end) => {
     return result.rows;
 };
 
+// Top-5 community poll: post catalog (poll_posts) + per-user ranked picks (poll_votes).
+const ensurePollTables = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS poll_posts (
+            thread_id TEXT NOT NULL,
+            board TEXT NOT NULL,
+            title TEXT,
+            url TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (thread_id, board)
+        )
+    `);
+    await executeQuery(
+        'CREATE INDEX IF NOT EXISTS idx_poll_posts_board ON poll_posts (board)'
+    ).catch(() => {});
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS poll_votes (
+            user_id TEXT NOT NULL,
+            board TEXT NOT NULL,
+            thread_id TEXT NOT NULL,
+            position SMALLINT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (user_id, board, thread_id),
+            UNIQUE (user_id, board, position)
+        )
+    `);
+    await executeQuery(
+        'CREATE INDEX IF NOT EXISTS idx_poll_votes_board_thread ON poll_votes (board, thread_id)'
+    ).catch(() => {});
+};
+
+const upsertPollPost = async ({ threadId, board, title, url, createdAt }) => {
+    await executeQuery(
+        `INSERT INTO poll_posts (thread_id, board, title, url, created_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, NOW()))
+         ON CONFLICT (thread_id, board) DO UPDATE
+             SET title = EXCLUDED.title, url = EXCLUDED.url`,
+        [threadId, board, title || null, url || null, createdAt || null]
+    );
+};
+
+// Remove any board rows for this thread that are not in the given list.
+// boards = [] removes every row for the thread (e.g. thread deleted or de-tagged).
+const deletePollPostBoardsExcept = async (threadId, boards) => {
+    await executeQuery(
+        'DELETE FROM poll_posts WHERE thread_id = $1 AND NOT (board = ANY($2::text[]))',
+        [threadId, boards]
+    );
+};
+
+const searchPollPosts = async (board, query, limit = 25) => {
+    const q = (query || '').trim();
+    const result = await executeQuery(
+        `SELECT thread_id, title, url
+         FROM poll_posts
+         WHERE board = $1 AND ($2 = '' OR title ILIKE '%' || $2 || '%')
+         ORDER BY (title ILIKE $2 || '%') DESC, created_at DESC
+         LIMIT $3`,
+        [board, q, limit]
+    );
+    return result.rows;
+};
+
+const getPollPostBoards = async (threadId) => {
+    const result = await executeQuery(
+        'SELECT board FROM poll_posts WHERE thread_id = $1',
+        [threadId]
+    );
+    return result.rows.map((r) => r.board);
+};
+
+const getUserBoardList = async (userId, board) => {
+    const result = await executeQuery(
+        `SELECT v.thread_id, p.title, p.url
+         FROM poll_votes v
+         LEFT JOIN poll_posts p ON p.thread_id = v.thread_id AND p.board = v.board
+         WHERE v.user_id = $1 AND v.board = $2
+         ORDER BY v.position ASC`,
+        [userId, board]
+    );
+    return result.rows;
+};
+
+// Rewrite a user's whole list for one board in a single transaction: the list is
+// small (<=5) and rewriting avoids fiddly position-swap SQL and the UNIQUE(position)
+// races that piecemeal updates would hit.
+const saveUserBoardList = async (userId, board, threadIds) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM poll_votes WHERE user_id = $1 AND board = $2', [userId, board]);
+        for (let i = 0; i < threadIds.length; i++) {
+            await client.query(
+                'INSERT INTO poll_votes (user_id, board, thread_id, position) VALUES ($1, $2, $3, $4)',
+                [userId, board, threadIds[i], i + 1]
+            );
+        }
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+const getLeaderboard = async (board, limit = 10) => {
+    const result = await executeQuery(
+        `SELECT v.thread_id, p.title, p.url,
+                SUM(6 - v.position) AS points,
+                COUNT(*) AS voters
+         FROM poll_votes v
+         JOIN poll_posts p ON p.thread_id = v.thread_id AND p.board = v.board
+         WHERE v.board = $1
+         GROUP BY v.thread_id, p.title, p.url
+         ORDER BY points DESC, voters DESC, MIN(p.created_at) ASC
+         LIMIT $2`,
+        [board, limit]
+    );
+    return result.rows;
+};
+
 // Program role snapshots (durable "roles they had" record for moderation alerts)
 // Captures the program roles a member currently holds so that, after a ban or
 // leave, we can still tell whether the moderated user was a program member.
@@ -978,4 +1100,12 @@ module.exports = {
     insertReengagementResponse,
     isOptedOutOfReengagement,
     optOutOfReengagement,
+    ensurePollTables,
+    upsertPollPost,
+    deletePollPostBoardsExcept,
+    searchPollPosts,
+    getPollPostBoards,
+    getUserBoardList,
+    saveUserBoardList,
+    getLeaderboard,
 };
