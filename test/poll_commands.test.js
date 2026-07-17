@@ -34,3 +34,11 @@ test('leaderboard has a 3-choice board option', () => {
     const board = json.options.find((o) => o.name === 'board');
     assert.strictEqual(board.choices.length, 3);
 });
+
+const addMenu = require('../commands/poll/add-to-top5');
+
+test('add-to-top5 is a message context menu command', () => {
+    const json = addMenu.data.toJSON();
+    assert.strictEqual(json.name, 'Add to my Top 5');
+    assert.strictEqual(json.type, 3); // ApplicationCommandType.Message
+});
