@@ -5,7 +5,8 @@ const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
     ensureSquadStateTable, ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
-    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables } = require('../db');
+    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables,
+    ensurePollTables } = require('../db');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
@@ -155,6 +156,7 @@ module.exports = {
             ['ff_official_applications', ensureFfOfficialApplicationsTable],
             ['game_ideas', ensureGameIdeasTables],
             ['reengagement', ensureReengagementTables],
+            ['poll', ensurePollTables],
         ];
         for (const [name, ensure] of migrations) {
             try {

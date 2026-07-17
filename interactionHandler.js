@@ -44,11 +44,16 @@ const interactionHandler = async (interaction, client) => {
             await handleModalSubmit(interaction);
         } else if (interaction.isButton()) {
             await handleButton(interaction, client);
+        } else if (interaction.isAutocomplete()) {
+            const command = client.commands.get(interaction.commandName);
+            if (command && typeof command.autocomplete === 'function') {
+                await command.autocomplete(interaction).catch((err) => logger.error('Autocomplete error:', err));
+            }
         }
     } catch (error) {
         logger.error('Error handling interaction:', error);
 
-        if (!interaction.replied && !interaction.deferred) {
+        if (!interaction.isAutocomplete() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({
                 ...noticePayload(
                     'We encountered an error while processing your request. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.',
@@ -256,6 +261,12 @@ const handleButton = async (interaction, client) => {
             const { handleTransferButton } = require('./handlers/transfer');
             const transferAction = interaction.customId.startsWith('transfer-accept') ? 'accept' : 'decline';
             await handleTransferButton(interaction, transferAction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('poll:')) {
+            const { handlePollButton } = require('./handlers/poll');
+            await handlePollButton(interaction);
             return;
         }
 
