@@ -264,6 +264,12 @@ const handleButton = async (interaction, client) => {
             return;
         }
 
+        if (interaction.customId.startsWith('poll:')) {
+            const { handlePollButton } = require('./handlers/poll');
+            await handlePollButton(interaction);
+            return;
+        }
+
         const handler = buttonRoutes[action];
         if (handler) {
             await handler();
