@@ -20,11 +20,9 @@ const BUG_REPORTS_FORUM_CHANNEL_ID = '1047355363223163010';
 // Threads in BUG_REPORTS_FORUM_CHANNEL_ID without this tag are counted as un-escalated.
 const BUG_REPORT_ESCALATED_TAG_ID = '1265408485361975338';
 // Forum tags on the game-ideas forum that map a post to a poll board.
-// Before the gameplay/skins boards go live, replace these empty strings with the
-// real tag IDs (Server Settings > forum > Tags, or right-click a tag). Until set,
-// resolveBoards yields no gameplay/skins boards and those boards stay empty; bugs works.
-const GAMEPLAY_TAG_ID = '';
-const SKINS_TAG_ID = '';
+// The bugs board is resolved by channel (the whole bug-report forum), so it needs no tag.
+const GAMEPLAY_TAG_ID = '1256306810722193489';
+const SKINS_TAG_ID = '1149459536835518555';
 const BOARD_TAG_MAP = { gameplay: GAMEPLAY_TAG_ID, skins: SKINS_TAG_ID };
 const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
 const SQUAD_PRACTICE_CHANNEL_ID = '1233854185276051516';
