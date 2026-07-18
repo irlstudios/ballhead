@@ -5,6 +5,7 @@ const { noticePayload } = require('../../utils/ui');
 const { getPollPostBoards, getUserBoardList, saveUserBoardList } = require('../../db');
 const { appendToList } = require('../../utils/poll_logic');
 const { buildUserListReply } = require('../../utils/poll_view');
+const { indexThread } = require('../../handlers/poll_tracker');
 
 const notice = (interaction, message, subtitle = 'Top 5') =>
     interaction.editReply({ ...noticePayload(message, { title: 'Top 5', subtitle }) });
@@ -19,6 +20,12 @@ module.exports = {
         // A forum post's messages live in the post's thread, so the message's
         // channelId is the thread id we index in poll_posts.
         const threadId = interaction.targetMessage.channelId;
+        // Index the post live so this works even if the catalog has not caught up
+        // yet (e.g. a brand-new post, or before the startup backfill finished).
+        const thread = await interaction.client.channels.fetch(threadId).catch(() => null);
+        if (thread) {
+            await indexThread(thread);
+        }
         const boards = await getPollPostBoards(threadId);
 
         if (boards.length === 0) {
