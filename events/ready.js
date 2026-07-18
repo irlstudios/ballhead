@@ -6,7 +6,8 @@ const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSch
     ensureSquadStateTable, ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
     ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables,
-    ensurePollTables } = require('../db');
+    ensurePollTables, getPollPostCount } = require('../db');
+const { backfillAllForums } = require('../utils/poll_backfill');
 const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
@@ -164,6 +165,19 @@ module.exports = {
             } catch (error) {
                 logger.error(`[DB] Failed to ensure ${name} schema:`, error);
             }
+        }
+
+        // One-time poll catalog catch-up: if poll_posts is empty (e.g. first run
+        // after deploy), index existing forum posts in the background so autocomplete
+        // and the context menu work without a manual script run. The forum listeners
+        // keep the catalog fresh afterwards.
+        try {
+            if ((await getPollPostCount()) === 0) {
+                logger.info('[Poll] Catalog empty; starting background backfill.');
+                backfillAllForums(client).catch((error) => logger.error('[Poll] Backfill failed:', error));
+            }
+        } catch (error) {
+            logger.error('[Poll] Backfill check failed:', error);
         }
 
         // Load top squad state from DB

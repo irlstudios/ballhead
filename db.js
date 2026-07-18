@@ -259,6 +259,11 @@ const getPollPostBoards = async (threadId) => {
     return result.rows.map((r) => r.board);
 };
 
+const getPollPostCount = async () => {
+    const result = await executeQuery('SELECT COUNT(*) AS n FROM poll_posts');
+    return parseInt(result.rows[0]?.n, 10) || 0;
+};
+
 const getUserBoardList = async (userId, board) => {
     const result = await executeQuery(
         `SELECT v.thread_id, p.title, p.url
@@ -1105,6 +1110,7 @@ module.exports = {
     deletePollPostBoardsExcept,
     searchPollPosts,
     getPollPostBoards,
+    getPollPostCount,
     getUserBoardList,
     saveUserBoardList,
     getLeaderboard,
