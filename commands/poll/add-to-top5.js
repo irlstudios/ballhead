@@ -6,6 +6,7 @@ const { getPollPostBoards, getUserBoardList, saveUserBoardList } = require('../.
 const { appendToList } = require('../../utils/poll_logic');
 const { buildUserListReply, buildAddBroadcast } = require('../../utils/poll_view');
 const { indexThread } = require('../../handlers/poll_tracker');
+const { GAME_IDEAS_FORUM_CHANNEL_ID } = require('../../config/constants');
 
 const notice = (interaction, message, subtitle = 'Top 5') =>
     interaction.editReply({ ...noticePayload(message, { title: 'Top 5', subtitle }) });
@@ -29,7 +30,16 @@ module.exports = {
         const boards = await getPollPostBoards(threadId);
 
         if (boards.length === 0) {
-            return notice(interaction, 'This post is not one of the tracked idea or bug boards.');
+            // A game-ideas post with no Gameplay/Skins tag has no board to go in;
+            // anything outside the two poll forums is not addable at all.
+            const needsTag = thread?.parentId === GAME_IDEAS_FORUM_CHANNEL_ID;
+            return notice(
+                interaction,
+                needsTag
+                    ? 'This idea needs a **Gameplay** or **Skins** tag before it can be added. Ask a mod to tag the post, then try again.'
+                    : 'This post is not in the game-ideas or bug-report forums, so it cannot be added to a Top 5.',
+                needsTag ? 'Needs a Tag' : 'Not a Poll Post'
+            );
         }
         if (boards.length > 1) {
             return notice(interaction, 'This post is in multiple boards. Use `/myideas add` to choose which list.', 'Choose a Board');
