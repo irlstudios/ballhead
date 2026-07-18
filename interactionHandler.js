@@ -15,6 +15,9 @@ const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprov
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
+const { handleOfficialsButton, handleOfficialsSelect, handleOfficialsModal } = require('./handlers/league-officials');
+const { handleAppealsButton, handleAppealsModal } = require('./handlers/league-appeals');
+const { handleRewardsButton, handleRewardsModal } = require('./handlers/league-rewards');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
 const { handleLfgButton } = require('./handlers/lfg');
 const {
@@ -160,6 +163,10 @@ const handleSelectMenu = async (interaction) => {
         await handleReengagementInteraction(interaction, interaction.client);
         return;
     }
+    if (interaction.customId.startsWith('official:')) {
+        await handleOfficialsSelect(interaction);
+        return;
+    }
     if (interaction.customId === 'select-platform') {
         const selectedPlatform = interaction.values[0];
         const modal = createModal(selectedPlatform);
@@ -189,6 +196,18 @@ const handleSelectMenu = async (interaction) => {
 const handleModalSubmit = async (interaction) => {
     if (isReengagementInteraction(interaction.customId)) {
         await handleReengagementInteraction(interaction, interaction.client);
+        return;
+    }
+    if (interaction.customId.startsWith('official:')) {
+        await handleOfficialsModal(interaction);
+        return;
+    }
+    if (interaction.customId.startsWith('appeal:')) {
+        await handleAppealsModal(interaction);
+        return;
+    }
+    if (interaction.customId.startsWith('reward:')) {
+        await handleRewardsModal(interaction);
         return;
     }
     const [action, customId] = interaction.customId.split(':');
@@ -225,6 +244,21 @@ const handleButton = async (interaction, client) => {
     try {
         if (isReengagementInteraction(interaction.customId)) {
             await handleReengagementInteraction(interaction, client);
+            return;
+        }
+
+        if (interaction.customId.startsWith('official:')) {
+            await handleOfficialsButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('appeal:')) {
+            await handleAppealsButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('reward:')) {
+            await handleRewardsButton(interaction);
             return;
         }
 

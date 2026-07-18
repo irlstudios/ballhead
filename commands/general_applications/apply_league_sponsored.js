@@ -1,7 +1,8 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { executeQuery } = require('../../db');
+const { executeQuery, countActiveStrikes } = require('../../db');
 const logger = require('../../utils/logger');
 const { LEAGUE_LOG_CHANNEL_ID } = require('../../config/constants');
+const { activeStrikeGate } = require('../../utils/league_enforcement');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -63,6 +64,17 @@ module.exports = {
                     lines: ['Your league does not have an invite link associated with it.', 'Please update your league information.']
                 });
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return;
+            }
+
+            // Enforcement gate: too many active strikes blocks upgrades.
+            const strikeGate = activeStrikeGate(await countActiveStrikes(leagueInfo.league_id));
+            if (!strikeGate.ok) {
+                await interaction.editReply({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [buildNoticeContainer({ title: strikeGate.title, subtitle: 'Sponsored League Application', lines: [strikeGate.message] })],
+                    ephemeral: true,
+                });
                 return;
             }
 
