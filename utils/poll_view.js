@@ -43,4 +43,17 @@ const buildUserListReply = async (userId, board) => {
     return { flags: MessageFlags.IsComponentsV2, components: [container, ...buttonRows] };
 };
 
-module.exports = { buildUserListReply, BOARD_LABEL };
+// Public, button-free one-liner announcing that someone added a post to a board,
+// so the community sees the activity. No components a bystander could interact with.
+const buildAddBroadcast = (name, board, post) => {
+    const label = BOARD_LABEL[board] || board;
+    const link = post && post.title
+        ? (post.url ? `[${post.title}](${post.url})` : `**${post.title}**`)
+        : 'a post';
+    const container = new ContainerBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`**${name}** added ${link} to the **${label}** Top 5.`)
+    );
+    return { flags: MessageFlags.IsComponentsV2, components: [container] };
+};
+
+module.exports = { buildUserListReply, buildAddBroadcast, BOARD_LABEL };

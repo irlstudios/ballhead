@@ -4,7 +4,7 @@ const { ContextMenuCommandBuilder, ApplicationCommandType } = require('discord.j
 const { noticePayload } = require('../../utils/ui');
 const { getPollPostBoards, getUserBoardList, saveUserBoardList } = require('../../db');
 const { appendToList } = require('../../utils/poll_logic');
-const { buildUserListReply } = require('../../utils/poll_view');
+const { buildUserListReply, buildAddBroadcast } = require('../../utils/poll_view');
 const { indexThread } = require('../../handlers/poll_tracker');
 
 const notice = (interaction, message, subtitle = 'Top 5') =>
@@ -45,6 +45,11 @@ module.exports = {
             return notice(interaction, msg);
         }
         await saveUserBoardList(interaction.user.id, board, res.list);
-        return interaction.editReply(await buildUserListReply(interaction.user.id, board));
+        // Private management reply (list + reorder buttons) stays ephemeral...
+        await interaction.editReply(await buildUserListReply(interaction.user.id, board));
+        // ...and a public one-liner announces the add so others see the activity.
+        const added = (await getUserBoardList(interaction.user.id, board)).find((r) => r.thread_id === threadId);
+        const name = interaction.member?.displayName ?? interaction.user.username;
+        return interaction.followUp(buildAddBroadcast(name, board, added));
     },
 };
