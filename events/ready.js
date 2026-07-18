@@ -11,7 +11,7 @@ const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
-const { ensureLeagueActivitySchema } = require('../db');
+const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema } = require('../db');
 const { runLeagueHealthCheck } = require('../jobs/league-health-check');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
 const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
@@ -153,6 +153,10 @@ module.exports = {
             ['squad_state', ensureSquadStateTable],
             ['transfer_requests', ensureTransferRequestsTable],
             ['league_activity', ensureLeagueActivitySchema],
+            ['league_officials', ensureLeagueOfficialsSchema],
+            ['league_content', ensureLeagueContentSchema],
+            ['league_enforcement', ensureLeagueEnforcementSchema],
+            ['league_rewards', ensureLeagueRewardsSchema],
             ['ff_official_applications', ensureFfOfficialApplicationsTable],
             ['game_ideas', ensureGameIdeasTables],
             ['reengagement', ensureReengagementTables],

@@ -1019,6 +1019,601 @@ const optOutOfReengagement = async (userId) => {
     );
 };
 
+// ---------------------------------------------------------------------------
+// League officials + games (Phase 2)
+// ---------------------------------------------------------------------------
+
+// Staff-managed roster of assignable officials, the request lifecycle, the
+// post-game report, and the verified-game records. Two UNIQUE backstops
+// (report per request, verified game per request) guarantee the games-played
+// metric can never be inflated past the app's atomic status transitions.
+const ensureLeagueOfficialsSchema = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_officials_roster (
+            discord_id TEXT PRIMARY KEY,
+            discord_name TEXT,
+            sport TEXT NOT NULL DEFAULT 'Any',
+            added_by TEXT,
+            added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            active BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_official_requests (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            requested_by TEXT NOT NULL,
+            sport TEXT,
+            match_details TEXT,
+            proposed_time TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            assigned_official_id TEXT,
+            assigned_by TEXT,
+            assigned_at TIMESTAMPTZ,
+            denial_reason TEXT,
+            denied_by TEXT,
+            ops_message_id TEXT,
+            completed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_league ON league_official_requests (league_id)').catch(() => {});
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_status ON league_official_requests (status)').catch(() => {});
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_ops ON league_official_requests (ops_message_id)').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_game_reports (
+            id SERIAL PRIMARY KEY,
+            request_id INTEGER NOT NULL,
+            league_id INTEGER NOT NULL,
+            official_id TEXT NOT NULL,
+            proof_url TEXT NOT NULL,
+            rules_doc_url TEXT,
+            score TEXT,
+            notes TEXT,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE UNIQUE INDEX IF NOT EXISTS idx_game_reports_request ON league_game_reports (request_id)').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_games (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            request_id INTEGER,
+            sport TEXT,
+            verification_status TEXT NOT NULL,
+            verified_by TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    // Partial unique: at most one verified game per official request. Manually
+    // entered games (no request) are exempt so a future manual-entry path works.
+    await executeQuery('CREATE UNIQUE INDEX IF NOT EXISTS idx_league_games_request ON league_games (request_id) WHERE request_id IS NOT NULL').catch(() => {});
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_games_league_status ON league_games (league_id, verification_status)').catch(() => {});
+};
+
+const fetchLeagueById = async (leagueId) => {
+    const result = await executeQuery('SELECT * FROM "Active Leagues" WHERE league_id = $1', [leagueId]);
+    return result.rows[0] || null;
+};
+
+// --- roster ---
+
+const addRosterOfficial = async ({ discordId, discordName, sport, addedBy }) => {
+    await executeQuery(
+        `INSERT INTO league_officials_roster (discord_id, discord_name, sport, added_by, active)
+         VALUES ($1, $2, $3, $4, TRUE)
+         ON CONFLICT (discord_id) DO UPDATE
+             SET discord_name = EXCLUDED.discord_name,
+                 sport = EXCLUDED.sport,
+                 added_by = EXCLUDED.added_by,
+                 active = TRUE`,
+        [discordId, discordName || null, sport || 'Any', addedBy || null]
+    );
+};
+
+const removeRosterOfficial = async (discordId) => {
+    const result = await executeQuery(
+        'UPDATE league_officials_roster SET active = FALSE WHERE discord_id = $1 AND active = TRUE RETURNING discord_id',
+        [discordId]
+    );
+    return result.rowCount > 0;
+};
+
+const listRosterOfficials = async () => {
+    const result = await executeQuery(
+        `SELECT discord_id, discord_name, sport, added_by, added_at
+         FROM league_officials_roster WHERE active = TRUE ORDER BY added_at ASC`
+    );
+    return result.rows;
+};
+
+// Officials offerable for a request's sport: active, and sport 'Any'/empty or a
+// case-insensitive match. Capped at Discord's 25-option select limit.
+const fetchAvailableOfficials = async (sport) => {
+    const result = await executeQuery(
+        `SELECT discord_id, discord_name, sport
+         FROM league_officials_roster
+         WHERE active = TRUE
+           AND (COALESCE(NULLIF(TRIM(sport), ''), 'Any') ILIKE 'Any' OR sport ILIKE $1)
+         ORDER BY added_at ASC
+         LIMIT 25`,
+        [(sport || '').trim()]
+    );
+    return result.rows;
+};
+
+// --- requests ---
+
+const countOpenOfficialRequests = async (leagueId) => {
+    const result = await executeQuery(
+        `SELECT COUNT(*)::int AS n FROM league_official_requests
+         WHERE league_id = $1 AND status IN ('Pending', 'Assigned')`,
+        [leagueId]
+    );
+    return result.rows[0]?.n ?? 0;
+};
+
+const insertOfficialRequest = async ({ leagueId, requestedBy, sport, matchDetails, proposedTime }) => {
+    const result = await executeQuery(
+        `INSERT INTO league_official_requests (league_id, requested_by, sport, match_details, proposed_time, status)
+         VALUES ($1, $2, $3, $4, $5, 'Pending') RETURNING *`,
+        [leagueId, requestedBy, sport || null, matchDetails || null, proposedTime || null]
+    );
+    return result.rows[0];
+};
+
+const setOfficialRequestOpsMessage = async (id, opsMessageId) => {
+    await executeQuery(
+        'UPDATE league_official_requests SET ops_message_id = $1 WHERE id = $2',
+        [opsMessageId, id]
+    );
+};
+
+// Compensating delete: if posting the ops card fails after insert, remove the
+// orphan request so it does not silently consume the open-request cap.
+const deleteOfficialRequest = async (id) => {
+    await executeQuery('DELETE FROM league_official_requests WHERE id = $1', [id]);
+};
+
+const fetchOfficialRequestById = async (id) => {
+    const result = await executeQuery('SELECT * FROM league_official_requests WHERE id = $1', [id]);
+    return result.rows[0] || null;
+};
+
+const fetchOfficialRequestByOpsMessage = async (opsMessageId) => {
+    const result = await executeQuery('SELECT * FROM league_official_requests WHERE ops_message_id = $1', [opsMessageId]);
+    return result.rows[0] || null;
+};
+
+// Atomic assign: only a still-Pending request can be claimed. Two staff racing
+// both run this; the loser gets no row back and is told it was already handled.
+const assignOfficialRequest = async (id, officialId, assignedBy) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET status = 'Assigned', assigned_official_id = $2, assigned_by = $3, assigned_at = NOW()
+         WHERE id = $1 AND status = 'Pending'
+         RETURNING *`,
+        [id, officialId, assignedBy]
+    );
+    return result.rows[0] || null;
+};
+
+// Atomic deny: only an open (Pending/Assigned) request can be denied.
+const denyOfficialRequest = async (id, reason, deniedBy) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET status = 'Denied', denial_reason = $2, denied_by = $3
+         WHERE id = $1 AND status IN ('Pending', 'Assigned')
+         RETURNING *`,
+        [id, reason || null, deniedBy]
+    );
+    return result.rows[0] || null;
+};
+
+// --- report + verified game (single atomic transaction) ---
+
+// Records the assigned official's post-game report and the verified game, and
+// flips the request to Completed, in one transaction. The completion UPDATE is
+// the claim: a double-click or a second assigned official loses the WHERE
+// status='Assigned' race and the whole thing rolls back. Returns the completed
+// request row, or null if the claim was lost.
+const completeOfficialRequestWithReport = async (id, officialId, report) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const claim = await client.query(
+            `UPDATE league_official_requests
+             SET status = 'Completed', completed_at = NOW()
+             WHERE id = $1 AND status = 'Assigned' AND assigned_official_id = $2
+             RETURNING *`,
+            [id, officialId]
+        );
+        if (claim.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return null;
+        }
+        const request = claim.rows[0];
+        await client.query(
+            `INSERT INTO league_game_reports (request_id, league_id, official_id, proof_url, rules_doc_url, score, notes)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [id, request.league_id, officialId, report.proofUrl, report.rulesDocUrl || null, report.score || null, report.notes || null]
+        );
+        await client.query(
+            `INSERT INTO league_games (league_id, request_id, sport, verification_status, verified_by)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [request.league_id, id, request.sport || null, 'Official Verified', officialId]
+        );
+        await client.query('COMMIT');
+        return request;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+const getLeagueGamesSummary = async (leagueId) => {
+    const result = await executeQuery(
+        `SELECT
+            (SELECT COUNT(*)::int FROM league_games
+                WHERE league_id = $1 AND verification_status IN ('Official Verified', 'Staff Verified')) AS verified,
+            (SELECT COUNT(*)::int FROM league_game_reports WHERE league_id = $1) AS reported`,
+        [leagueId]
+    );
+    const row = result.rows[0] || {};
+    return { verified: row.verified ?? 0, reported: row.reported ?? 0 };
+};
+
+const fetchRecentLeagueGames = async (leagueId, limit = 10) => {
+    const result = await executeQuery(
+        `SELECT id, sport, verification_status, created_at
+         FROM league_games WHERE league_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [leagueId, limit]
+    );
+    return result.rows;
+};
+
+// ---------------------------------------------------------------------------
+// League content + views (Phase 3)
+// ---------------------------------------------------------------------------
+
+const ensureLeagueContentSchema = async () => {
+    const columns = [
+        { name: 'sport', type: 'TEXT' },
+        { name: 'league_hashtag', type: 'TEXT' },
+        { name: 'content_tracking_enabled', type: 'BOOLEAN NOT NULL DEFAULT FALSE' },
+    ];
+    for (const col of columns) {
+        await executeQuery(`ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS ${col.name} ${col.type}`).catch(() => {});
+    }
+    // A hashtag, once set, is unique across leagues. Partial so many leagues can
+    // share a NULL hashtag.
+    await executeQuery('CREATE UNIQUE INDEX IF NOT EXISTS idx_active_leagues_hashtag ON "Active Leagues" (LOWER(league_hashtag)) WHERE league_hashtag IS NOT NULL').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_content_submissions (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            submitted_by TEXT NOT NULL,
+            url TEXT NOT NULL,
+            platform TEXT,
+            title TEXT,
+            latest_views INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_content_league ON league_content_submissions (league_id)').catch(() => {});
+};
+
+// Sets sport and/or hashtag; passing null for a field keeps the existing value.
+// content_tracking_enabled tracks whether a hashtag is set. Throws Postgres
+// 23505 on a duplicate hashtag so the caller can report it.
+const updateLeagueContentSettings = async (leagueId, { sport = null, hashtag = null }) => {
+    await executeQuery(
+        `UPDATE "Active Leagues"
+         SET sport = COALESCE($2, sport),
+             league_hashtag = COALESCE($3, league_hashtag),
+             content_tracking_enabled = (COALESCE($3, league_hashtag) IS NOT NULL)
+         WHERE league_id = $1`,
+        [leagueId, sport, hashtag]
+    );
+};
+
+const insertContentSubmission = async ({ leagueId, submittedBy, url, platform, title }) => {
+    const result = await executeQuery(
+        `INSERT INTO league_content_submissions (league_id, submitted_by, url, platform, title)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [leagueId, submittedBy, url, platform || null, title || null]
+    );
+    return result.rows[0];
+};
+
+const fetchLeagueContent = async (leagueId, limit = 10) => {
+    const result = await executeQuery(
+        `SELECT id, url, platform, title, latest_views, created_at
+         FROM league_content_submissions WHERE league_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [leagueId, limit]
+    );
+    return result.rows;
+};
+
+const getLeagueContentSummary = async (leagueId) => {
+    const result = await executeQuery(
+        `SELECT COUNT(*)::int AS count, COALESCE(SUM(latest_views), 0)::int AS total_views
+         FROM league_content_submissions WHERE league_id = $1`,
+        [leagueId]
+    );
+    const row = result.rows[0] || {};
+    return { count: row.count ?? 0, totalViews: row.total_views ?? 0 };
+};
+
+// ---------------------------------------------------------------------------
+// League enforcement: strikes + appeals (Phase 4)
+// ---------------------------------------------------------------------------
+
+const ensureLeagueEnforcementSchema = async () => {
+    await executeQuery('ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS health_status TEXT NOT NULL DEFAULT \'Healthy\'').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_strikes (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            reason TEXT NOT NULL,
+            issued_by TEXT NOT NULL,
+            active BOOLEAN NOT NULL DEFAULT TRUE,
+            resolved_by TEXT,
+            resolved_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_strikes_league ON league_strikes (league_id, active)').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_appeals (
+            id SERIAL PRIMARY KEY,
+            strike_id INTEGER NOT NULL,
+            league_id INTEGER NOT NULL,
+            submitted_by TEXT NOT NULL,
+            statement TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            reviewed_by TEXT,
+            review_notes TEXT,
+            ops_message_id TEXT,
+            reviewed_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_appeals_strike ON league_appeals (strike_id)').catch(() => {});
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_appeals_ops ON league_appeals (ops_message_id)').catch(() => {});
+    // Backstop for the check-then-insert in /league-appeal: at most one pending
+    // appeal per strike, even under concurrent submissions.
+    await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_league_appeals_pending
+        ON league_appeals (strike_id) WHERE status = 'Pending'`).catch(() => {});
+};
+
+const deleteAppeal = async (appealId) => {
+    await executeQuery('DELETE FROM league_appeals WHERE id = $1', [appealId]);
+};
+
+const insertStrike = async ({ leagueId, reason, issuedBy }) => {
+    const result = await executeQuery(
+        'INSERT INTO league_strikes (league_id, reason, issued_by) VALUES ($1, $2, $3) RETURNING *',
+        [leagueId, reason, issuedBy]
+    );
+    return result.rows[0];
+};
+
+const countActiveStrikes = async (leagueId) => {
+    const result = await executeQuery(
+        'SELECT COUNT(*)::int AS n FROM league_strikes WHERE league_id = $1 AND active = TRUE',
+        [leagueId]
+    );
+    return result.rows[0]?.n ?? 0;
+};
+
+const fetchActiveStrikes = async (leagueId) => {
+    const result = await executeQuery(
+        'SELECT id, reason, issued_by, created_at FROM league_strikes WHERE league_id = $1 AND active = TRUE ORDER BY created_at ASC',
+        [leagueId]
+    );
+    return result.rows;
+};
+
+const fetchStrikeById = async (strikeId) => {
+    const result = await executeQuery('SELECT * FROM league_strikes WHERE id = $1', [strikeId]);
+    return result.rows[0] || null;
+};
+
+// Atomic resolve: only a still-active strike flips. Returns the row or null.
+const resolveStrike = async (strikeId, resolvedBy) => {
+    const result = await executeQuery(
+        `UPDATE league_strikes SET active = FALSE, resolved_by = $2, resolved_at = NOW()
+         WHERE id = $1 AND active = TRUE RETURNING *`,
+        [strikeId, resolvedBy]
+    );
+    return result.rows[0] || null;
+};
+
+const setLeagueHealthStatus = async (leagueId, status) => {
+    await executeQuery('UPDATE "Active Leagues" SET health_status = $2 WHERE league_id = $1', [leagueId, status]);
+};
+
+const hasPendingAppealForStrike = async (strikeId) => {
+    const result = await executeQuery(
+        `SELECT 1 FROM league_appeals
+         WHERE strike_id = $1 AND status = 'Pending' LIMIT 1`,
+        [strikeId]
+    );
+    return result.rows.length > 0;
+};
+
+const insertAppeal = async ({ strikeId, leagueId, submittedBy, statement }) => {
+    const result = await executeQuery(
+        'INSERT INTO league_appeals (strike_id, league_id, submitted_by, statement) VALUES ($1, $2, $3, $4) RETURNING *',
+        [strikeId, leagueId, submittedBy, statement]
+    );
+    return result.rows[0];
+};
+
+const setAppealOpsMessage = async (appealId, opsMessageId) => {
+    await executeQuery('UPDATE league_appeals SET ops_message_id = $1 WHERE id = $2', [opsMessageId, appealId]);
+};
+
+const fetchAppealById = async (appealId) => {
+    const result = await executeQuery('SELECT * FROM league_appeals WHERE id = $1', [appealId]);
+    return result.rows[0] || null;
+};
+
+// Atomic appeal resolution: only a still-Pending appeal transitions.
+const resolveAppeal = async (appealId, status, reviewedBy, notes) => {
+    const result = await executeQuery(
+        `UPDATE league_appeals SET status = $2, reviewed_by = $3, review_notes = $4, reviewed_at = NOW()
+         WHERE id = $1 AND status = 'Pending' RETURNING *`,
+        [appealId, status, reviewedBy, notes || null]
+    );
+    return result.rows[0] || null;
+};
+
+// Accepting an appeal must lift its strike atomically: marking the appeal
+// Accepted and clearing the strike happen in one transaction so a failure can
+// never leave an accepted appeal with a still-active strike. Returns the appeal
+// row, or null if it was no longer pending (lost the claim).
+const acceptAppealAndLiftStrike = async (appealId, reviewerId) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const appealRes = await client.query(
+            `UPDATE league_appeals SET status = 'Accepted', reviewed_by = $2, reviewed_at = NOW()
+             WHERE id = $1 AND status = 'Pending' RETURNING *`,
+            [appealId, reviewerId]
+        );
+        if (appealRes.rowCount === 0) {
+            await client.query('ROLLBACK');
+            return null;
+        }
+        const appeal = appealRes.rows[0];
+        await client.query(
+            `UPDATE league_strikes SET active = FALSE, resolved_by = $2, resolved_at = NOW()
+             WHERE id = $1 AND active = TRUE`,
+            [appeal.strike_id, reviewerId]
+        );
+        await client.query('COMMIT');
+        return appeal;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+// ---------------------------------------------------------------------------
+// League reward requests (Phase 5) + directory
+// ---------------------------------------------------------------------------
+
+const ensureLeagueRewardsSchema = async () => {
+    // reward_poc_id names which owner/co-owner handles rewards for a Sponsored
+    // league; intake still allows any owner/co-owner in V1.
+    await executeQuery('ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS reward_poc_id TEXT').catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_reward_requests (
+            id SERIAL PRIMARY KEY,
+            league_id INTEGER NOT NULL,
+            requested_by TEXT NOT NULL,
+            reward_type TEXT NOT NULL,
+            details TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            external_fulfillment_status TEXT NOT NULL DEFAULT 'None',
+            reviewed_by TEXT,
+            review_notes TEXT,
+            ops_message_id TEXT,
+            reviewed_at TIMESTAMPTZ,
+            fulfilled_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_rewards_league ON league_reward_requests (league_id)').catch(() => {});
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_rewards_ops ON league_reward_requests (ops_message_id)').catch(() => {});
+};
+
+const setRewardPoc = async (leagueId, userId) => {
+    await executeQuery('UPDATE "Active Leagues" SET reward_poc_id = $2 WHERE league_id = $1', [leagueId, userId]);
+};
+
+const countRewardRequestsThisMonth = async (leagueId, month) => {
+    const result = await executeQuery(
+        `SELECT COUNT(*)::int AS n FROM league_reward_requests
+         WHERE league_id = $1 AND to_char(created_at, 'YYYY-MM') = $2`,
+        [leagueId, month]
+    );
+    return result.rows[0]?.n ?? 0;
+};
+
+const insertRewardRequest = async ({ leagueId, requestedBy, rewardType, details }) => {
+    const result = await executeQuery(
+        `INSERT INTO league_reward_requests (league_id, requested_by, reward_type, details)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [leagueId, requestedBy, rewardType, details || null]
+    );
+    return result.rows[0];
+};
+
+const setRewardOpsMessage = async (id, opsMessageId) => {
+    await executeQuery('UPDATE league_reward_requests SET ops_message_id = $1 WHERE id = $2', [opsMessageId, id]);
+};
+
+// Compensating delete: remove an orphan reward request if the ops card fails to
+// post, so it does not consume the monthly cap invisibly.
+const deleteRewardRequest = async (id) => {
+    await executeQuery('DELETE FROM league_reward_requests WHERE id = $1', [id]);
+};
+
+const fetchRewardRequestById = async (id) => {
+    const result = await executeQuery('SELECT * FROM league_reward_requests WHERE id = $1', [id]);
+    return result.rows[0] || null;
+};
+
+// Atomic approve/deny: only a still-Pending request transitions. fulfillment is
+// the external_fulfillment_status to set (e.g. 'Awaiting Fulfillment' on approve).
+const resolveRewardRequest = async (id, status, reviewedBy, notes, fulfillment) => {
+    const result = await executeQuery(
+        `UPDATE league_reward_requests
+         SET status = $2, external_fulfillment_status = $3, reviewed_by = $4, review_notes = $5, reviewed_at = NOW()
+         WHERE id = $1 AND status = 'Pending' RETURNING *`,
+        [id, status, fulfillment, reviewedBy, notes || null]
+    );
+    return result.rows[0] || null;
+};
+
+// Atomic fulfil: only an Approved request can be marked fulfilled.
+const markRewardFulfilled = async (id, fulfilledBy) => {
+    const result = await executeQuery(
+        `UPDATE league_reward_requests
+         SET status = 'Fulfilled', external_fulfillment_status = 'Fulfilled', reviewed_by = COALESCE(reviewed_by, $2), fulfilled_at = NOW()
+         WHERE id = $1 AND status = 'Approved' RETURNING *`,
+        [id, fulfilledBy]
+    );
+    return result.rows[0] || null;
+};
+
+// Public directory: active leagues grouped Sponsored -> Active -> Base.
+const fetchLeaguesForDirectory = async () => {
+    const result = await executeQuery(
+        `SELECT league_name, league_type, health_status, league_invite, member_count
+         FROM "Active Leagues"
+         WHERE league_status = 'Active'
+         ORDER BY CASE league_type WHEN 'Sponsored' THEN 0 WHEN 'Active' THEN 1 WHEN 'Base' THEN 2 ELSE 3 END,
+                  member_count DESC NULLS LAST, league_name ASC`
+    );
+    return result.rows;
+};
+
 module.exports = {
     executeQuery,
     removeRep,
@@ -1108,4 +1703,50 @@ module.exports = {
     getUserBoardList,
     saveUserBoardList,
     getLeaderboard,
+    ensureLeagueOfficialsSchema,
+    fetchLeagueById,
+    addRosterOfficial,
+    removeRosterOfficial,
+    listRosterOfficials,
+    fetchAvailableOfficials,
+    countOpenOfficialRequests,
+    insertOfficialRequest,
+    setOfficialRequestOpsMessage,
+    deleteOfficialRequest,
+    fetchOfficialRequestById,
+    fetchOfficialRequestByOpsMessage,
+    assignOfficialRequest,
+    denyOfficialRequest,
+    completeOfficialRequestWithReport,
+    getLeagueGamesSummary,
+    fetchRecentLeagueGames,
+    ensureLeagueContentSchema,
+    updateLeagueContentSettings,
+    insertContentSubmission,
+    fetchLeagueContent,
+    getLeagueContentSummary,
+    ensureLeagueEnforcementSchema,
+    insertStrike,
+    countActiveStrikes,
+    fetchActiveStrikes,
+    fetchStrikeById,
+    resolveStrike,
+    setLeagueHealthStatus,
+    hasPendingAppealForStrike,
+    insertAppeal,
+    setAppealOpsMessage,
+    fetchAppealById,
+    resolveAppeal,
+    acceptAppealAndLiftStrike,
+    deleteAppeal,
+    ensureLeagueRewardsSchema,
+    setRewardPoc,
+    countRewardRequestsThisMonth,
+    insertRewardRequest,
+    setRewardOpsMessage,
+    deleteRewardRequest,
+    fetchRewardRequestById,
+    resolveRewardRequest,
+    markRewardFulfilled,
+    fetchLeaguesForDirectory,
 };
