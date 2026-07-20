@@ -113,6 +113,56 @@ const deleteFfOfficialApplication = async (discordId) => {
     );
 };
 
+const ensureBugSquasherApplicationsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS community_bug_squasher_applications (
+            discord_id TEXT PRIMARY KEY,
+            discord_username TEXT NOT NULL,
+            requirements_aware BOOLEAN NOT NULL,
+            no_guarantee_aware BOOLEAN NOT NULL,
+            tos_aware BOOLEAN NOT NULL,
+            motivation TEXT NOT NULL,
+            value_add TEXT NOT NULL,
+            application_url TEXT NOT NULL,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const findBugSquasherApplication = async (discordId) => {
+    const result = await executeQuery(
+        'SELECT * FROM community_bug_squasher_applications WHERE discord_id = $1',
+        [discordId]
+    );
+    return result.rows;
+};
+
+const insertBugSquasherApplication = async (params) => {
+    const {
+        discordId,
+        username,
+        requirementsAware,
+        noGuaranteeAware,
+        tosAware,
+        motivation,
+        valueAdd,
+        applicationUrl,
+    } = params;
+    await executeQuery(
+        `INSERT INTO community_bug_squasher_applications
+         (discord_id, discord_username, requirements_aware, no_guarantee_aware, tos_aware, motivation, value_add, application_url, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [discordId, username, requirementsAware, noGuaranteeAware, tosAware, motivation, valueAdd, applicationUrl]
+    );
+};
+
+const deleteBugSquasherApplication = async (discordId) => {
+    await executeQuery(
+        'DELETE FROM community_bug_squasher_applications WHERE discord_id = $1',
+        [discordId]
+    );
+};
+
 // Game ideas metrics (durable tracking of forum threads + thread messages)
 const ensureGameIdeasTables = async () => {
     await executeQuery(`
@@ -1645,6 +1695,10 @@ module.exports = {
     findFfOfficialApplication,
     insertFfOfficialApplication,
     deleteFfOfficialApplication,
+    ensureBugSquasherApplicationsTable,
+    findBugSquasherApplication,
+    insertBugSquasherApplication,
+    deleteBugSquasherApplication,
     ensureGameIdeasTables,
     insertGameIdeasThread,
     insertGameIdeasMessage,
