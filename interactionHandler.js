@@ -12,6 +12,7 @@ const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants'
 const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
 const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprove, handleFfOfficialApplicationReject } = require('./handlers/ff_officials');
+const { handleBugSquasherApplicationSubmission, handleBugSquasherApplicationApprove, handleBugSquasherApplicationReject } = require('./handlers/bug_squasher');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
@@ -216,6 +217,7 @@ const handleModalSubmit = async (interaction) => {
         'report-bug': () => handleBugReport(interaction, customId),
         'officialApplicationModal': () => handleOfficialsApplicationSubmission(interaction),
         'ffOfficialApplicationModal': () => handleFfOfficialApplicationSubmission(interaction),
+        'bugSquasherApplicationModal': () => handleBugSquasherApplicationSubmission(interaction),
         'generateTemplateModal_kotc': () => handleGenerateTemplateModal(interaction),
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
@@ -276,6 +278,8 @@ const handleButton = async (interaction, client) => {
             'reject': () => handleOfficialsApplicationReject(interaction, client),
             'ffApprove': () => handleFfOfficialApplicationApprove(interaction, client),
             'ffReject': () => handleFfOfficialApplicationReject(interaction, client),
+            'cbsApprove': () => handleBugSquasherApplicationApprove(interaction, client),
+            'cbsReject': () => handleBugSquasherApplicationReject(interaction, client),
             'officialsQna': () => handleQnAInteraction(interaction),
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),

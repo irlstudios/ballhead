@@ -293,6 +293,46 @@ const modalConfig = {
             },
         ],
     },
+    'bugSquasherApplicationModal': {
+        title: 'Community Bug Squasher Application',
+        fields: [
+            {
+                id: 'cbsRequirementsAware',
+                label: 'Aware of the CBS requirements?',
+                placeholder: 'Yes/No',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'cbsNoGuarantee',
+                label: 'Aware applying doesn\'t guarantee the role?',
+                placeholder: 'Yes/No',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'cbsTosAware',
+                label: 'Aware TOS breaks / begging can bar the role?',
+                placeholder: 'Yes/No',
+                style: 'Short',
+                required: true,
+            },
+            {
+                id: 'cbsMotivation',
+                label: 'Why do you want Community Bug Squasher?',
+                placeholder: 'Share your motivation',
+                style: 'Paragraph',
+                required: true,
+            },
+            {
+                id: 'cbsValue',
+                label: 'What do you bring vs. other applicants?',
+                placeholder: 'What sets you apart',
+                style: 'Paragraph',
+                required: true,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;
