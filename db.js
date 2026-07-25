@@ -253,6 +253,12 @@ const ensurePollTables = async () => {
     await executeQuery(
         'CREATE INDEX IF NOT EXISTS idx_poll_posts_board ON poll_posts (board)'
     ).catch(() => {});
+    // When Ballhead posted the "add this to your Top 5" nudge in the post's thread;
+    // NULL means never nudged. Not swallowed like the index creations, because the
+    // nudge job selects on this column and would fail silently every run without it.
+    await executeQuery(
+        'ALTER TABLE poll_posts ADD COLUMN IF NOT EXISTS promoted_at TIMESTAMPTZ'
+    );
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS poll_votes (
             user_id TEXT NOT NULL,
@@ -269,10 +275,14 @@ const ensurePollTables = async () => {
     ).catch(() => {});
 };
 
+// A new board row inherits the thread's existing promoted_at. Nudges are posted
+// once per thread, so a post that gains or swaps a board tag after being nudged
+// must not look un-nudged again just because its row is new.
 const upsertPollPost = async ({ threadId, board, title, url, createdAt }) => {
     await executeQuery(
-        `INSERT INTO poll_posts (thread_id, board, title, url, created_at)
-         VALUES ($1, $2, $3, $4, COALESCE($5, NOW()))
+        `INSERT INTO poll_posts (thread_id, board, title, url, created_at, promoted_at)
+         VALUES ($1, $2, $3, $4, COALESCE($5, NOW()),
+                 (SELECT MAX(promoted_at) FROM poll_posts WHERE thread_id = $1))
          ON CONFLICT (thread_id, board) DO UPDATE
              SET title = EXCLUDED.title, url = EXCLUDED.url`,
         [threadId, board, title || null, url || null, createdAt || null]
@@ -312,6 +322,30 @@ const getPollPostBoards = async (threadId) => {
 const getPollPostCount = async () => {
     const result = await executeQuery('SELECT COUNT(*) AS n FROM poll_posts');
     return parseInt(result.rows[0]?.n, 10) || 0;
+};
+
+// Newest posts that have never had the Top 5 nudge posted in them. Grouped by
+// thread because a post tagged both Gameplay and Skins has one row per board but
+// only ever gets one nudge.
+const getUnpromotedPollPosts = async (limit, maxAgeDays) => {
+    const result = await executeQuery(
+        `SELECT thread_id, array_agg(board) AS boards, MIN(created_at) AS created_at
+         FROM poll_posts
+         WHERE created_at > NOW() - make_interval(days => $2)
+         GROUP BY thread_id
+         HAVING COUNT(promoted_at) = 0
+         ORDER BY MIN(created_at) DESC
+         LIMIT $1`,
+        [limit, maxAgeDays]
+    );
+    return result.rows;
+};
+
+const markPollPostPromoted = async (threadId) => {
+    await executeQuery(
+        'UPDATE poll_posts SET promoted_at = NOW() WHERE thread_id = $1',
+        [threadId]
+    );
 };
 
 const getUserBoardList = async (userId, board) => {
@@ -1760,6 +1794,8 @@ module.exports = {
     searchPollPosts,
     getPollPostBoards,
     getPollPostCount,
+    getUnpromotedPollPosts,
+    markPollPostPromoted,
     getUserBoardList,
     saveUserBoardList,
     getLeaderboard,

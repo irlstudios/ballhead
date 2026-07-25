@@ -1,12 +1,9 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { noticePayload } = require('../../utils/ui');
-const {
-    getPollPostBoards, getUserBoardList, saveUserBoardList, searchPollPosts,
-} = require('../../db');
-const { appendToList } = require('../../utils/poll_logic');
-const { buildUserListReply, buildAddBroadcast } = require('../../utils/poll_view');
+const { getPollPostBoards, searchPollPosts } = require('../../db');
+const { buildUserListReply } = require('../../utils/poll_view');
+const { notice, addPostToBoard } = require('../../utils/poll_add');
 
 const BOARD_CHOICES = [
     { name: 'Gameplay', value: 'gameplay' },
@@ -14,30 +11,13 @@ const BOARD_CHOICES = [
     { name: 'Bugs', value: 'bugs' },
 ];
 
-const notice = (interaction, message, subtitle = 'Top 5') =>
-    interaction.editReply({ ...noticePayload(message, { title: 'Top 5', subtitle }) });
-
 const addToList = async (interaction, board) => {
     const threadId = interaction.options.getString('post');
     const boards = await getPollPostBoards(threadId);
     if (!boards.includes(board)) {
         return notice(interaction, 'That post is not in the selected board. Pick a suggestion from the search list.');
     }
-    const current = (await getUserBoardList(interaction.user.id, board)).map((r) => r.thread_id);
-    const res = appendToList(current, threadId);
-    if (!res.ok) {
-        const msg = res.reason === 'full'
-            ? 'That list is already full (5). Remove one with `/myideas view` first.'
-            : 'That post is already in your list.';
-        return notice(interaction, msg);
-    }
-    await saveUserBoardList(interaction.user.id, board, res.list);
-    // Private management reply (list + reorder buttons) stays ephemeral...
-    await interaction.editReply(await buildUserListReply(interaction.user.id, board));
-    // ...and a public one-liner announces the add so others see the activity.
-    const added = (await getUserBoardList(interaction.user.id, board)).find((r) => r.thread_id === threadId);
-    const name = interaction.member?.displayName ?? interaction.user.username;
-    return interaction.followUp(buildAddBroadcast(name, board, added));
+    return addPostToBoard(interaction, threadId, board);
 };
 
 module.exports = {

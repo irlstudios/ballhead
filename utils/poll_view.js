@@ -56,4 +56,26 @@ const buildAddBroadcast = (name, board, post) => {
     return { flags: MessageFlags.IsComponentsV2, components: [container] };
 };
 
-module.exports = { buildUserListReply, buildAddBroadcast, BOARD_LABEL };
+// Promo Ballhead posts into a forum thread so readers learn the post can go in
+// their personal Top 5, with a one-click way to do it. The button carries no board
+// so a click resolves the thread's current boards then, not whatever they were
+// when this was posted.
+const buildNudge = (boards = []) => {
+    const label = boards.length === 1 ? BOARD_LABEL[boards[0]] : null;
+    const container = new ContainerBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent([
+            '### Like this one?',
+            `Add it to your **Top 5${label ? ` ${label}` : ''}** picks and it scores points on the community leaderboard the team reviews.`,
+            'Everyone gets five picks per board. Use `/myideas view` to reorder yours, or `/leaderboard` to see what is winning.',
+        ].join('\n'))
+    );
+    const buttonRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('poll:add')
+            .setLabel('Add to my Top 5')
+            .setStyle(ButtonStyle.Success)
+    );
+    return { flags: MessageFlags.IsComponentsV2, components: [container, buttonRow] };
+};
+
+module.exports = { buildUserListReply, buildAddBroadcast, buildNudge, BOARD_LABEL };

@@ -42,3 +42,23 @@ test('add-to-top5 is a message context menu command', () => {
     assert.strictEqual(json.name, 'Add to my Top 5');
     assert.strictEqual(json.type, 3); // ApplicationCommandType.Message
 });
+
+const { buildNudge } = require('../utils/poll_view');
+
+// The nudge button must stay on the poll: prefix (interactionHandler routes on it)
+// and carry no board, so handlePollButton resolves the thread's boards at click time.
+const nudgeButtons = (payload) => payload.components
+    .flatMap((c) => c.toJSON().components || [])
+    .filter((c) => typeof c.custom_id === 'string');
+
+test('nudge carries a single bare poll:add button', () => {
+    const buttons = nudgeButtons(buildNudge(['gameplay']));
+    assert.deepStrictEqual(buttons.map((b) => b.custom_id), ['poll:add']);
+});
+
+test('nudge names the board only when the post is in exactly one', () => {
+    const text = (payload) => JSON.stringify(payload.components[0].toJSON());
+    assert.match(text(buildNudge(['skins'])), /Top 5 Skins/);
+    assert.doesNotMatch(text(buildNudge(['gameplay', 'skins'])), /Top 5 \w/);
+    assert.doesNotMatch(text(buildNudge([])), /Top 5 \w/);
+});

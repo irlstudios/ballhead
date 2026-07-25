@@ -27,7 +27,9 @@ const indexThread = async (thread) => {
         boardTagMap: BOARD_TAG_MAP,
     });
 
-    await deletePollPostBoardsExcept(thread.id, boards);
+    // Upsert before deleting: a new board row inherits promoted_at from the rows
+    // being replaced (so retagging a post does not re-trigger its Top 5 nudge), and
+    // the post is never briefly absent from the catalog mid-reconcile.
     for (const board of boards) {
         await upsertPollPost({
             threadId: thread.id,
@@ -37,6 +39,7 @@ const indexThread = async (thread) => {
             createdAt: thread.createdAt || null,
         });
     }
+    await deletePollPostBoardsExcept(thread.id, boards);
     logger.info(`[Poll] Indexed thread ${thread.id} -> [${boards.join(', ') || 'none'}]`);
 };
 

@@ -19,6 +19,7 @@ const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
 const { syncRankRoles } = require('../jobs/rank-role-sync');
 const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
+const { runPollNudge } = require('../jobs/poll-nudge');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -301,6 +302,15 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT)');
+        // Daily: Top 5 nudge in idea/bug threads - 1:00 PM Chicago
+        cron.schedule('0 13 * * *', async () => {
+            try {
+                await runPollNudge(client);
+            } catch (error) {
+                logger.error('[Cron] Poll nudge failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT)');
     },
 };
