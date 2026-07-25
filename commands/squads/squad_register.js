@@ -12,7 +12,7 @@ const {
 } = require('../../config/constants');
 const {
     findUserSquads, findUserAllDataRows, isSquadNameTaken,
-    AD_SQUAD_NAME, AD_SQUAD_TYPE, AD_IS_LEADER, SL_SQUAD_NAME,
+    AD_SQUAD_NAME, AD_SQUAD_TYPE, AD_IS_LEADER,
 } = require('../../utils/squad_queries');
 const { calculateSquadWins } = require('../../utils/top_squad_sync');
 const { getSquadLevel } = require('../../utils/squad_level_sync');
@@ -172,12 +172,13 @@ module.exports = {
                 parentSquad,
             ];
 
-            await sheets.spreadsheets.values.append({
+            const leaderAppendResponse = await sheets.spreadsheets.values.append({
                 spreadsheetId: SPREADSHEET_SQUADS,
                 range: 'Squad Leaders!A1',
                 valueInputOption: 'RAW',
                 resource: { values: [newLeaderRow] },
             }).catch(err => { throw new Error(`Failed to append to Squad Leaders sheet: ${err.message}`); });
+            const appendedLeaderRange = leaderAppendResponse.data.updates?.updatedRange;
 
             // Add or update All Data entry
             const newAllDataRow = [
@@ -190,12 +191,26 @@ module.exports = {
                 'Yes',
                 'TRUE',
             ];
-            await sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'All Data!A1',
-                valueInputOption: 'RAW',
-                resource: { values: [newAllDataRow] },
-            }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
+            try {
+                await sheets.spreadsheets.values.append({
+                    spreadsheetId: SPREADSHEET_SQUADS,
+                    range: 'All Data!A1',
+                    valueInputOption: 'RAW',
+                    resource: { values: [newAllDataRow] },
+                });
+            } catch (error) {
+                if (appendedLeaderRange) {
+                    await sheets.spreadsheets.values.clear({
+                        spreadsheetId: SPREADSHEET_SQUADS,
+                        range: appendedLeaderRange,
+                    }).catch(rollbackError => {
+                        logger.error(
+                            `Failed to roll back orphaned leader row ${appendedLeaderRange}: ${rollbackError.message}`
+                        );
+                    });
+                }
+                throw new Error(`Failed to append to All Data sheet: ${error.message}`);
+            }
 
             try {
                 await interaction.member.roles.add(squadLeaderRole);

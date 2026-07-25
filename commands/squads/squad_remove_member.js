@@ -1,64 +1,89 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient, invalidateRanges } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
+const { getSheetsClient, getCachedValues, invalidateRanges } = require('../../utils/sheets_cache');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
 const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
-const { disambiguateSquad } = require('../../utils/squad_queries');
+const {
+    buildSquadMemberChoices,
+    findAllDataRowIndex,
+    findMemberRowIndex,
+    findUserSquads,
+    isSameSquad,
+    parseDiscordUserId,
+    resolveOwnedSquadForMember,
+    resolveSquadType,
+    SM_USERNAME,
+} = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 
 const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
-
-const SL_ID = 1;
-const SM_ID = 1;
-const SM_SQUAD_NAME = 2;
-const AD_SQUAD_TYPE = 3;
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('remove-from-squad')
         .setDescription('Remove a member from your squad (Squad Leaders only).')
-        .addUserOption(option =>
+        .addStringOption(option =>
             option.setName('member')
-                .setDescription('The member you want to remove from your squad.')
-                .setRequired(true))
+                .setDescription('Select a stored squad member, or paste their Discord ID.')
+                .setRequired(true)
+                .setAutocomplete(true))
         .addStringOption(option =>
             option.setName('squad')
-                .setDescription('Squad name (required if you own multiple)')
+                .setDescription('Only needed if the member appears in multiple squads you own.')
                 .setRequired(false)),
+
+    async autocomplete(interaction) {
+        try {
+            const sheets = await getSheetsClient();
+            const results = await getCachedValues({
+                sheets,
+                spreadsheetId: SPREADSHEET_SQUADS,
+                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E'],
+                ttlMs: 15000,
+            });
+            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
+            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
+            const specifiedSquad = interaction.options.getString('squad');
+            const ownedSquads = findUserSquads(squadLeaders, interaction.user.id);
+            const squadNames = ownedSquads
+                .filter(row => !specifiedSquad || isSameSquad(row[SL_SQUAD_NAME], specifiedSquad))
+                .map(row => row[SL_SQUAD_NAME]);
+            const choices = buildSquadMemberChoices(
+                squadMembers,
+                squadNames,
+                interaction.options.getFocused()
+            );
+
+            await interaction.respond(choices);
+        } catch (error) {
+            logger.error('[Remove From Squad] Autocomplete error:', error);
+            await interaction.respond([]).catch(() => {});
+        }
+    },
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
         const commandUserID = interaction.user.id;
         const commandUserTag = interaction.user.tag;
-        const targetUser = interaction.options.getUser('member');
+        const targetUserID = parseDiscordUserId(interaction.options.getString('member'));
+        let targetUserTag = targetUserID || 'unknown user';
         const guild = interaction.guild;
 
-        if (!targetUser) {
+        if (!targetUserID) {
             const container = new ContainerBuilder();
             container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## User Not Found'),
-                new TextDisplayBuilder().setContent('Could not find the specified user.')
+                new TextDisplayBuilder().setContent('## Invalid Discord ID'),
+                new TextDisplayBuilder().setContent('Select a member from the roster results, or paste a valid Discord user ID.')
             );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
         }
-        const targetUserID = targetUser.id;
-        const targetUserTag = targetUser.tag;
 
         if (commandUserID === targetUserID) {
             const container = new ContainerBuilder();
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Invalid Target'),
                 new TextDisplayBuilder().setContent('You cannot remove yourself from your own squad.\nUse `/leave-squad` or `/disband-squad`.')
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
-            return;
-        }
-        if (targetUser.bot) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Invalid Target'),
-                new TextDisplayBuilder().setContent('You cannot remove bots from squads.')
             );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
@@ -82,7 +107,13 @@ module.exports = {
             squadMembersData.shift();
 
             const specifiedSquad = interaction.options.getString('squad');
-            const { squad: leaderRow, error: disambigError } = disambiguateSquad(squadLeadersData, commandUserID, specifiedSquad);
+            const { squad: leaderRow, error: disambigError } = resolveOwnedSquadForMember(
+                squadLeadersData,
+                squadMembersData,
+                commandUserID,
+                targetUserID,
+                specifiedSquad
+            );
             if (disambigError) {
                 const container = new ContainerBuilder();
                 container.addTextDisplayComponents(
@@ -103,14 +134,8 @@ module.exports = {
                 return;
             }
 
-            let targetMemberRowIndex = -1;
-            const targetMemberRow = squadMembersData.find((row, index) => {
-                if (row && row.length > SM_SQUAD_NAME && row[SM_ID] === targetUserID && row[SM_SQUAD_NAME] === leaderSquadName) {
-                    targetMemberRowIndex = index;
-                    return true;
-                }
-                return false;
-            });
+            const targetMemberRowIndex = findMemberRowIndex(squadMembersData, targetUserID, leaderSquadName);
+            const targetMemberRow = targetMemberRowIndex === -1 ? null : squadMembersData[targetMemberRowIndex];
 
             if (!targetMemberRow || targetMemberRowIndex === -1) {
                 const container = new ContainerBuilder();
@@ -121,9 +146,9 @@ module.exports = {
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
                 return;
             }
+            targetUserTag = String(targetMemberRow[SM_USERNAME] ?? '').trim() || targetUserID;
 
-            const leaderAllDataRow = allData.find(row => row && row.length > AD_ID && row[AD_ID] === commandUserID);
-            const squadTypeForRoles = leaderAllDataRow ? leaderAllDataRow[AD_SQUAD_TYPE] : null;
+            const { squadType: squadTypeForRoles } = resolveSquadType(allData, commandUserID, leaderSquadName);
             const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? extendedCompRoles : [];
 
             const eventSquadName = leaderRow[SL_EVENT_SQUAD];
@@ -147,14 +172,7 @@ module.exports = {
                 range: clearRangeSM,
             }).catch(err => { throw new Error(`Failed to clear row in Squad Members sheet: ${err.message}`); });
 
-            let targetAllDataRowIndex = -1;
-            allData.find((row, index) => {
-                if (row && row.length > AD_ID && row[AD_ID] === targetUserID) {
-                    targetAllDataRowIndex = index;
-                    return true;
-                }
-                return false;
-            });
+            const targetAllDataRowIndex = findAllDataRowIndex(allData, targetUserID, leaderSquadName);
 
             if (targetAllDataRowIndex !== -1) {
                 const sheetRowIndexAD = targetAllDataRowIndex + 2;
@@ -173,8 +191,10 @@ module.exports = {
             logger.info(`Updated sheets for removing ${targetUserTag} from ${leaderSquadName}`);
             invalidateRanges(SPREADSHEET_SQUADS, ['Squad Members!A:E', 'All Data!A:H']);
 
+            let discordCleanupStatus = 'not-in-server';
             try {
                 const memberToRemove = await guild.members.fetch(targetUserID);
+                discordCleanupStatus = 'completed';
                 if (memberToRemove.nickname && memberToRemove.nickname.toUpperCase().startsWith(`[${leaderSquadName.toUpperCase()}]`)) {
                     logger.info(`Resetting nickname for ${targetUserTag}`);
                     await memberToRemove.setNickname(null).catch(nickErr => {
@@ -205,19 +225,20 @@ module.exports = {
                 }
 
             } catch (discordError) {
-                if (discordError.code === 10007) {
-                    logger.info(`Member ${targetUserTag} (${targetUserID}) left the server before nickname/roles could be updated.`);
+                if (discordError.code === 10007 || discordError.code === 10013) {
+                    logger.info(`Member ${targetUserTag} (${targetUserID}) is no longer in the server; stored squad membership was removed.`);
                 } else {
+                    discordCleanupStatus = 'failed';
                     logger.error(`Error updating Discord member ${targetUserTag}: ${discordError.message}`);
+                    const warningContainer = new ContainerBuilder();
+                    warningContainer.addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent('## Partial Cleanup'),
+                        new TextDisplayBuilder().setContent(`The squad record was removed, but Discord roles or nickname cleanup failed for ${targetUserTag}.`)
+                    );
+                    await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true }).catch(followUpError => {
+                        logger.error('Failed to send follow-up warning after remove-from-squad:', followUpError);
+                    });
                 }
-                const warningContainer = new ContainerBuilder();
-                warningContainer.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## Partial Cleanup'),
-                    new TextDisplayBuilder().setContent(`Could not reset nickname or remove roles for ${targetUserTag}.\nThey may have left the server.`)
-                );
-                await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true }).catch(followUpError => {
-                    logger.error('Failed to send follow-up warning after remove-from-squad:', followUpError);
-                });
             }
 
             try {
@@ -234,11 +255,16 @@ module.exports = {
             }
 
             const successContainer = new ContainerBuilder();
+            const cleanupMessage = discordCleanupStatus === 'completed'
+                ? 'Their squad roles and nickname were reset where applicable.'
+                : discordCleanupStatus === 'not-in-server'
+                    ? 'They are no longer in the server, so only their stored squad record needed to be removed.'
+                    : 'Their stored squad record was removed, but Discord role or nickname cleanup could not be completed.';
             successContainer.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Member Removed'),
                 new TextDisplayBuilder().setContent([
                     `<@${targetUserID}> has been successfully removed from **${leaderSquadName}**.`,
-                    'Their roles and nickname have been reset.'
+                    cleanupMessage
                 ].join('\n'))
             );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });

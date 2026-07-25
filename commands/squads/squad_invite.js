@@ -1,8 +1,20 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { insertInvite, fetchInviteById, deleteInvite } = require('../../db');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, MAX_SQUAD_MEMBERS } = require('../../config/constants');
-const { disambiguateSquad, AD_SQUAD_TYPE } = require('../../utils/squad_queries');
+const {
+    SPREADSHEET_SQUADS,
+    GYM_CLASS_GUILD_ID,
+    LOGGING_CHANNEL_ID,
+    BOT_BUGS_CHANNEL_ID,
+    MAX_SQUAD_MEMBERS,
+    COMPETITIVE_SQUAD_OWNER_ROLE_ID,
+} = require('../../config/constants');
+const {
+    disambiguateSquad,
+    isSameSquad,
+    normalizeId,
+    resolveSquadType,
+} = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 // Discord API error codes that all mean "the bot cannot deliver a DM to this user"
@@ -64,6 +76,17 @@ module.exports = {
             return;
         }
 
+        const targetGuildMember = invitedMember
+            || await interaction.guild?.members.fetch(targetUserId).catch(() => null);
+        if (!targetGuildMember) {
+            await interaction.editReply({
+                flags: MessageFlags.IsComponentsV2,
+                components: [new TextDisplayBuilder().setContent('That user is not currently in this server and cannot join a squad.')],
+                ephemeral: true,
+            });
+            return;
+        }
+
         const sheets = await getSheetsClient();
 
         try {
@@ -71,13 +94,14 @@ module.exports = {
             const results = await getCachedValues({
                 sheets,
                 spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['All Data!A:H', 'Squad Members!A:E', 'Squad Leaders!A:G'],
+                ranges: ['All Data!A:H', 'Squad Members!A:E', 'Squad Leaders!A:G', 'Applications!A:F'],
                 ttlMs: 30000,
             });
 
             const allData = (results.get('All Data!A:H') || []).slice(1);
             const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
             const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
+            const squadApplications = (results.get('Applications!A:F') || []).slice(1);
 
             const specifiedSquad = interaction.options.getString('squad');
             const { squad: inviterLeaderRow, error: disambigError } = disambiguateSquad(squadLeaders, commandUserID, specifiedSquad);
@@ -90,9 +114,6 @@ module.exports = {
                 return;
             }
             const squadName = inviterLeaderRow[2]?.trim();
-            // Get squad type from All Data (Squad Leaders col 3 is Event Squad, not type)
-            const inviterAllDataRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[1] === commandUserID && row[2]?.toUpperCase() === squadName?.toUpperCase());
-            const finalSquadType = inviterAllDataRow ? inviterAllDataRow[AD_SQUAD_TYPE]?.trim() : null;
             if (!squadName || squadName === 'N/A') {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
@@ -101,7 +122,18 @@ module.exports = {
                 });
                 return;
             }
+            const hasCompetitiveOwnerRole = Boolean(
+                interaction.member?.roles?.cache?.has(COMPETITIVE_SQUAD_OWNER_ROLE_ID)
+            );
+            const typeResolution = resolveSquadType(allData, commandUserID, squadName, {
+                applicationRows: squadApplications,
+                hasCompetitiveOwnerRole,
+            });
+            const finalSquadType = typeResolution.squadType;
             if (!finalSquadType || finalSquadType === 'N/A') {
+                logger.warn(
+                    `[Squad Invite] Could not resolve type for owner ${commandUserID}, squad ${squadName} (${typeResolution.source}).`
+                );
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
                     components: [new TextDisplayBuilder().setContent('Could not determine your squad type. Please contact an admin.')],
@@ -110,8 +142,11 @@ module.exports = {
                 return;
             }
 
-            const membersInSquad = squadMembers.filter(row => row && row.length > 2 && row[2]?.trim() === squadName);
-            const currentMemberCount = membersInSquad.length + 1;
+            const memberIdsInSquad = new Set(squadMembers
+                .filter(row => row && row.length > 2 && isSameSquad(row[2], squadName))
+                .map(row => normalizeId(row[1]))
+                .filter(Boolean));
+            const currentMemberCount = memberIdsInSquad.size + 1;
             if (currentMemberCount >= MAX_SQUAD_MEMBERS) {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
@@ -121,7 +156,9 @@ module.exports = {
                 return;
             }
 
-            const inviteeIsLeader = squadLeaders.find(row => row && row.length > 1 && row[1] === targetUserId);
+            const inviteeIsLeader = squadLeaders.find(
+                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
+            );
             if (inviteeIsLeader) {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
@@ -131,7 +168,9 @@ module.exports = {
                 return;
             }
 
-            const inviteeInSquad = squadMembers.find(row => row && row.length > 1 && row[1] === targetUserId);
+            const inviteeInSquad = squadMembers.find(
+                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
+            );
             if (inviteeInSquad) {
                 const existingSquad = inviteeInSquad[2] || 'another squad';
                 await interaction.editReply({
@@ -142,7 +181,9 @@ module.exports = {
                 return;
             }
 
-            const inviteeAllDataRow = allData.find(row => row && row.length > 1 && row[1] === targetUserId);
+            const inviteeAllDataRow = allData.find(
+                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
+            );
             if (inviteeAllDataRow && inviteeAllDataRow.length > 7 && inviteeAllDataRow[7] === 'FALSE') {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
@@ -160,7 +201,7 @@ module.exports = {
             const inviteContainer = new ContainerBuilder()
                 .setAccentColor(0x14B8A6)
                 .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`## You've Been Invited!`)
+                    new TextDisplayBuilder().setContent('## You\'ve Been Invited!')
                 )
                 .addSeparatorComponents(
                     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
@@ -186,9 +227,9 @@ module.exports = {
                     const dmFailedContainer = new ContainerBuilder()
                         .setAccentColor(0xF1C40F)
                         .addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent(`## Could Not Send Invite`),
+                            new TextDisplayBuilder().setContent('## Could Not Send Invite'),
                             new TextDisplayBuilder().setContent(`<@${targetUserId}> isn't accepting DMs from the bot. This usually means they have DMs disabled or have blocked the bot.`),
-                            new TextDisplayBuilder().setContent(`-# Ask them to enable server DMs (or unblock the bot) and try again`)
+                            new TextDisplayBuilder().setContent('-# Ask them to enable server DMs (or unblock the bot) and try again')
                         );
                     await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [dmFailedContainer], ephemeral: true });
                 } else {
@@ -197,15 +238,6 @@ module.exports = {
                 }
                 return;
             }
-
-            const row = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder().setCustomId(`invite_accept_${inviteMessage.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success),
-                    new ButtonBuilder().setCustomId(`invite_reject_${inviteMessage.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger),
-                );
-            await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [inviteContainer, row] }).catch(editErr => {
-                logger.error(`Failed to add buttons to invite DM ${inviteMessage.id}: ${editErr.message}`);
-            });
 
             let trackingMessage;
             try {
@@ -221,22 +253,78 @@ module.exports = {
                 logger.error(`Failed to send invite log message: ${logError.message}`);
             }
 
+            const postData = {
+                command_user_id: commandUserID,
+                invited_member_id: targetUserId,
+                squad_name: squadName,
+                message_id: inviteMessage.id,
+                tracking_message_id: trackingMessage ? trackingMessage.id : null,
+                squad_type: finalSquadType,
+            };
+            const expiresAt = new Date(Date.now() + INVITE_EXPIRY_MS);
             try {
-                const postData = {
-                    command_user_id: commandUserID,
-                    invited_member_id: targetUserId,
-                    squad_name: squadName,
-                    message_id: inviteMessage.id,
-                    tracking_message_id: trackingMessage ? trackingMessage.id : null,
-                    squad_type: finalSquadType,
-                    invite_status: 'Pending'
-                };
-                const expiresAt = new Date(Date.now() + INVITE_EXPIRY_MS);
-                await insertInvite(postData.command_user_id, postData.invited_member_id, postData.squad_name, postData.message_id, postData.tracking_message_id, postData.squad_type, expiresAt);
-                logger.info(`Posted invite data for DM ${inviteMessage.id}`);
-            } catch (apiError) {
-                logger.error(`Failed to post invite data: ${apiError.message}`);
+                await insertInvite(
+                    postData.command_user_id,
+                    postData.invited_member_id,
+                    postData.squad_name,
+                    postData.message_id,
+                    postData.tracking_message_id,
+                    postData.squad_type,
+                    expiresAt
+                );
+            } catch (databaseError) {
+                const unavailableContainer = new ContainerBuilder()
+                    .setAccentColor(0xE74C3C)
+                    .addTextDisplayComponents(
+                        new TextDisplayBuilder().setContent('## Invitation Unavailable'),
+                        new TextDisplayBuilder().setContent('The bot could not save this invitation. Ask the squad owner to try again.')
+                    );
+                await inviteMessage.edit({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [unavailableContainer],
+                }).catch(() => {});
+                if (trackingMessage) {
+                    const failedTrackingContainer = new ContainerBuilder()
+                        .setAccentColor(0xE74C3C)
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent('## Invite Failed'),
+                            new TextDisplayBuilder().setContent(`The invite to <@${targetUserId}> for **${squadName}** could not be saved.`)
+                        );
+                    await trackingMessage.edit({
+                        flags: MessageFlags.IsComponentsV2,
+                        components: [failedTrackingContainer],
+                    }).catch(() => {});
+                }
+                throw new Error(`Failed to save invite before enabling buttons: ${databaseError.message}`);
             }
+
+            const row = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder().setCustomId(`invite_accept_${inviteMessage.id}`).setLabel('Accept Invite').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`invite_reject_${inviteMessage.id}`).setLabel('Reject Invite').setStyle(ButtonStyle.Danger),
+                );
+            try {
+                await inviteMessage.edit({
+                    flags: MessageFlags.IsComponentsV2,
+                    components: [inviteContainer, row],
+                });
+            } catch (editError) {
+                await deleteInvite(inviteMessage.id).catch(() => {});
+                if (trackingMessage) {
+                    const failedTrackingContainer = new ContainerBuilder()
+                        .setAccentColor(0xE74C3C)
+                        .addTextDisplayComponents(
+                            new TextDisplayBuilder().setContent('## Invite Failed'),
+                            new TextDisplayBuilder().setContent(`The invite to <@${targetUserId}> for **${squadName}** could not be delivered with working buttons.`)
+                        );
+                    await trackingMessage.edit({
+                        flags: MessageFlags.IsComponentsV2,
+                        components: [failedTrackingContainer],
+                    }).catch(() => {});
+                }
+                throw new Error(`Failed to enable saved invite buttons: ${editError.message}`);
+            }
+            logger.info(`Saved and enabled invite ${inviteMessage.id}`);
 
             setTimeout(async () => {
                 try {
@@ -246,9 +334,9 @@ module.exports = {
                         const expiredContainer = new ContainerBuilder()
                             .setAccentColor(0x95A5A6)
                             .addTextDisplayComponents(
-                                new TextDisplayBuilder().setContent(`## Invitation Expired`),
+                                new TextDisplayBuilder().setContent('## Invitation Expired'),
                                 new TextDisplayBuilder().setContent(`The invite from <@${commandUserID}> to join **${squadName}** has expired.`),
-                                new TextDisplayBuilder().setContent(`-# Ask them to send a new invite if you're still interested`)
+                                new TextDisplayBuilder().setContent('-# Ask them to send a new invite if you\'re still interested')
                             );
                         await inviteMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [expiredContainer] }).catch(editErr => logger.warn(`Could not edit expired invite DM ${inviteMessage.id}: ${editErr.message}`));
                         if (trackingMessage) {
@@ -270,9 +358,9 @@ module.exports = {
             const successContainer = new ContainerBuilder()
                 .setAccentColor(0x2ECC71)
                 .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`## Invite Sent`),
+                    new TextDisplayBuilder().setContent('## Invite Sent'),
                     new TextDisplayBuilder().setContent(`<@${targetUserId}> has been invited to **${squadName}**.`),
-                    new TextDisplayBuilder().setContent(`-# They have 48 hours to respond`)
+                    new TextDisplayBuilder().setContent('-# They have 48 hours to respond')
                 );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
@@ -294,7 +382,7 @@ module.exports = {
             } catch (logError) { logger.error('Failed to log invite command error:', logError); }
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
-                components: [new TextDisplayBuilder().setContent(`Something went wrong. Please try again later.`)],
+                components: [new TextDisplayBuilder().setContent('Something went wrong. Please try again later.')],
                 ephemeral: true
             }).catch(logger.error);
         }

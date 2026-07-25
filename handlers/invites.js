@@ -7,6 +7,8 @@ const { fetchInviteById, updateInviteStatus, deleteInvite } = require('../db');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const { mascotSquads } = require('../config/squads');
 const { assignLevelRoleOnJoin } = require('../utils/squad_level_sync');
+const { withSquadLock } = require('../utils/squad_lock');
+const { isSameSquad, normalizeId, normalizeSquadName } = require('../utils/squad_queries');
 const {
     GYM_CLASS_GUILD_ID,
     BOT_BUGS_CHANNEL_ID,
@@ -15,7 +17,6 @@ const {
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
     SL_EVENT_SQUAD,
-    AD_ID,
     AD_PREFERENCE,
 } = require('../config/constants');
 
@@ -57,7 +58,7 @@ const handleInviteButton = async (interaction, action) => {
             try { await deleteInvite(interaction.message.id); } catch (e) { logger.error('Failed to delete expired invite:', e); }
             return;
         }
-        if (interaction.user.id !== invitedMemberId) {
+        if (interaction.user.id !== normalizeId(invitedMemberId)) {
             await interaction.editReply(noticePayload('You cannot interact with an invite meant for someone else.', { title: 'Invite Restricted', subtitle: 'Squad Invite' }));
             return;
         }
@@ -82,29 +83,40 @@ const handleInviteButton = async (interaction, action) => {
             trackingMessage = await trackingChannel.messages.fetch(trackingMessageId).catch(err => { logger.warn(`Failed to fetch tracking message ${trackingMessageId}: ${err.message}`); return null; });
         }
 
-        const commandUser = await interaction.client.users.fetch(commandUserID).catch(err => { logger.error(`Failed to fetch command user ${commandUserID}: ${err.message}`); return null; });
-        if (!commandUser) {
-            await interaction.editReply(noticePayload('Could not find the user who sent the invite.', { title: 'Invite Error', subtitle: 'Squad Invite' }));
-            return;
-        }
-
-        const inviteMessageChannel = interaction.channel || await interaction.client.channels.fetch(interaction.channelId).catch(err => { logger.error(`Failed to fetch invite message channel: ${err.message}`); return null; });
-        if (!inviteMessageChannel) {
-            await interaction.editReply(noticePayload('Failed to find the channel where the invite was sent.', { title: 'Channel Missing', subtitle: 'Squad Invite' }));
-            return;
-        }
-
-        const inviteMessage = await inviteMessageChannel.messages.fetch(interaction.message.id).catch(err => { logger.error(`Failed to fetch invite message: ${err.message}`); return null; });
-        if (!inviteMessage) {
-            await interaction.editReply(noticePayload('Failed to find the original invite message.', { title: 'Invite Missing', subtitle: 'Squad Invite' }));
-            return;
-        }
+        const commandUser = await interaction.client.users.fetch(commandUserID).catch(err => {
+            logger.warn(`Failed to fetch command user ${commandUserID}: ${err.message}`);
+            return null;
+        });
+        const inviteMessage = interaction.message;
 
         if (action === 'accept') {
-            const { withSquadLock } = require('../utils/squad_lock');
-            await withSquadLock(squadName, () => handleAcceptInvite(interaction, { guild, squadName, squadType, trackingMessage, trackingMessageId, commandUserID, invitedMemberId, commandUser, inviteMessage }));
+            await withSquadLock(`invitee:${invitedMemberId}`, () =>
+                withSquadLock(squadName, () =>
+                    handleAcceptInvite(interaction, {
+                        guild,
+                        squadName,
+                        squadType,
+                        trackingMessage,
+                        commandUserID,
+                        invitedMemberId,
+                        commandUser,
+                        inviteMessage,
+                    })
+                )
+            );
         } else if (action === 'reject') {
-            await handleRejectInvite(interaction, { squadName, trackingMessage, commandUserID, invitedMemberId, commandUser, inviteMessage });
+            await withSquadLock(`invitee:${invitedMemberId}`, () =>
+                withSquadLock(squadName, () =>
+                    handleRejectInvite(interaction, {
+                        squadName,
+                        trackingMessage,
+                        commandUserID,
+                        invitedMemberId,
+                        commandUser,
+                        inviteMessage,
+                    })
+                )
+            );
         } else {
             await interaction.editReply({ ...noticePayload('Unknown action specified.', { title: 'Unknown Action', subtitle: 'Squad Invite' }), ephemeral: true });
         }
@@ -142,8 +154,7 @@ const handleInviteButton = async (interaction, action) => {
 const handleAcceptInvite = async (interaction, ctx) => {
     const { guild, squadName, squadType, trackingMessage, commandUserID, invitedMemberId, commandUser, inviteMessage } = ctx;
 
-    // Re-check invite status inside the lock to prevent double-accept race
-    const freshInvite = await fetchInviteById(interaction.message.id).catch(() => null);
+    const freshInvite = await fetchInviteById(interaction.message.id);
     if (!freshInvite || freshInvite.invite_status !== 'Pending') {
         const status = freshInvite ? freshInvite.invite_status : 'unknown';
         await interaction.editReply(noticePayload(`This invite has already been processed (${status}).`, { title: 'Invite Processed', subtitle: 'Squad Invite' }));
@@ -162,15 +173,77 @@ const handleAcceptInvite = async (interaction, ctx) => {
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A:E' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A:H' }),
         sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A:G' }),
-    ]).catch(() => { throw new Error('Failed to retrieve sheet data for processing invite.'); });
+    ]).catch(error => {
+        throw new Error(`Failed to retrieve sheet data for processing invite: ${error.message}`);
+    });
 
     const squadMembersData = (squadMembersResponse.data.values || []).slice(1);
     const allData = allDataResponse.data.values || [];
     const allDataHeaderless = allData.slice(1);
     const squadLeadersData = (squadLeadersResponse.data.values || []).slice(1);
 
-    const membersInSquad = squadMembersData.filter(row => row && row.length > 2 && row[2]?.trim() === squadName);
-    const currentMemberCount = membersInSquad.length + 1;
+    const inviterStillOwnsSquad = squadLeadersData.some(
+        row => normalizeId(row?.[1]) === normalizeId(commandUserID) && isSameSquad(row?.[SL_SQUAD_NAME], squadName)
+    );
+    const inviterStillInGuild = await guild.members.fetch(commandUserID).catch(() => null);
+    if (!inviterStillOwnsSquad || !inviterStillInGuild) {
+        await interaction.editReply(noticePayload(
+            'This invite is no longer valid because the squad owner or squad is no longer active.',
+            { title: 'Invite Invalid', subtitle: 'Squad Invite' }
+        ));
+        await deleteInvite(interaction.message.id).catch(error =>
+            logger.error('[Invite Accept] Failed to delete invalid invite:', error.message)
+        );
+        const invalidContainer = buildNoticeContainer({
+            title: 'Invitation Unavailable',
+            subtitle: squadName,
+            lines: ['The squad owner or squad is no longer active.'],
+        });
+        await inviteMessage.edit({
+            flags: MessageFlags.IsComponentsV2,
+            components: [invalidContainer],
+        }).catch(() => {});
+        return;
+    }
+
+    const inviteeIsLeader = squadLeadersData.some(
+        row => normalizeId(row?.[1]) === normalizeId(invitedMemberId)
+    );
+    if (inviteeIsLeader) {
+        await interaction.editReply(noticePayload(
+            'You are already a squad leader and cannot join another squad as a member.',
+            { title: 'Already a Leader', subtitle: 'Squad Invite' }
+        ));
+        return;
+    }
+
+    const existingMembership = squadMembersData.find(
+        row => normalizeId(row?.[1]) === normalizeId(invitedMemberId)
+    );
+    if (existingMembership) {
+        if (isSameSquad(existingMembership[2], squadName)) {
+            await updateInviteStatus(interaction.message.id, 'Accepted').catch(error =>
+                logger.error('[Invite Accept] Failed to finalize idempotent invite:', error.message)
+            );
+            await interaction.editReply(noticePayload(
+                `You are already a member of **${squadName}**. This invite has been closed.`,
+                { title: 'Already Joined', subtitle: 'Squad Invite' }
+            ));
+            await deleteInvite(interaction.message.id).catch(() => {});
+        } else {
+            await interaction.editReply(noticePayload(
+                `You are already in **${existingMembership[2] || 'another squad'}**.`,
+                { title: 'Already in a Squad', subtitle: 'Squad Invite' }
+            ));
+        }
+        return;
+    }
+
+    const memberIdsInSquad = new Set(squadMembersData
+        .filter(row => isSameSquad(row?.[2], squadName))
+        .map(row => normalizeId(row?.[1]))
+        .filter(Boolean));
+    const currentMemberCount = memberIdsInSquad.size + 1;
 
     if (currentMemberCount >= MAX_SQUAD_MEMBERS) {
         await interaction.editReply({
@@ -193,20 +266,16 @@ const handleAcceptInvite = async (interaction, ctx) => {
         return;
     }
 
-    await interaction.editReply(noticePayload(`You have accepted the invite to join **${squadName}** (${squadType})!`, { title: 'Invite Accepted', subtitle: 'Squad Invite' }));
-    if (trackingMessage) {
-        const trackingContainer = buildNoticeContainer({ title: 'Invite Accepted', subtitle: squadName, lines: [`<@${member.id}> accepted invite from <@${commandUserID}> to join **${squadName}** (${squadType}).`] });
-        await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [trackingContainer] }).catch(e => logger.error('tracking edit fail:', e));
-    }
-    try { await updateInviteStatus(interaction.message.id, 'Accepted'); } catch (apiError) { logger.error('API Error updating invite status:', apiError.message); }
-
     const defaultEventSquad = 'N/A';
     const defaultOpenSquad = 'FALSE';
     const defaultIsLeader = 'No';
-    let existingPreference = 'TRUE';
     let eventSquadNameToAssign = null;
 
-    const leaderRow = squadLeadersData.find(row => row && row.length > SL_SQUAD_NAME && row[SL_SQUAD_NAME] === squadName);
+    const leaderRow = squadLeadersData.find(
+        row => row && row.length > SL_SQUAD_NAME
+            && normalizeId(row[1]) === normalizeId(commandUserID)
+            && isSameSquad(row[SL_SQUAD_NAME], squadName)
+    );
     if (leaderRow) {
         const leaderEventSquad = leaderRow[SL_EVENT_SQUAD];
         if (leaderEventSquad && leaderEventSquad !== 'N/A') {
@@ -214,25 +283,89 @@ const handleAcceptInvite = async (interaction, ctx) => {
         }
     }
 
-    const userInAllDataIndex = allDataHeaderless.findIndex(row => row && row.length > AD_ID && row[AD_ID] === invitedMemberId);
-
-    if (userInAllDataIndex !== -1) {
-        const sheetRowIndex = userInAllDataIndex + 2;
-        const existingRow = allDataHeaderless[userInAllDataIndex];
-        if (existingRow.length > AD_PREFERENCE && (existingRow[AD_PREFERENCE] === 'TRUE' || existingRow[AD_PREFERENCE] === 'FALSE')) {
-            existingPreference = existingRow[AD_PREFERENCE];
-        }
-        const updatedRowData = [member.user.username, member.id, squadName, squadType, eventSquadNameToAssign || defaultEventSquad, defaultOpenSquad, defaultIsLeader, existingPreference];
-        await sheets.spreadsheets.values.update({ spreadsheetId: SPREADSHEET_SQUADS, range: `All Data!A${sheetRowIndex}:H${sheetRowIndex}`, valueInputOption: 'RAW', resource: { values: [updatedRowData] } }).catch(err => { throw new Error(`Failed to update All Data sheet: ${err.message}`); });
-    } else {
-        const newRowData = [member.user.username, member.id, squadName, squadType, eventSquadNameToAssign || defaultEventSquad, defaultOpenSquad, defaultIsLeader, existingPreference];
-        await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1', valueInputOption: 'RAW', resource: { values: [newRowData] } }).catch(err => { throw new Error(`Failed to append to All Data sheet: ${err.message}`); });
+    const inviteeAllDataRows = allDataHeaderless
+        .map((row, index) => ({ row, index }))
+        .filter(item => normalizeId(item.row?.[1]) === normalizeId(invitedMemberId));
+    const availableAllDataRow = inviteeAllDataRows.find(item => {
+        const currentSquad = normalizeSquadName(item.row?.[2]);
+        return !currentSquad || currentSquad === 'N/A';
+    });
+    if (!availableAllDataRow && inviteeAllDataRows.length > 0) {
+        await interaction.editReply(noticePayload(
+            'Your squad profile is already assigned to another squad. Please contact an admin to correct it.',
+            { title: 'Squad Data Conflict', subtitle: 'Squad Invite' }
+        ));
+        return;
     }
 
+    const preferenceRow = availableAllDataRow?.row || inviteeAllDataRows[0]?.row;
+    const existingPreference = preferenceRow
+        && (preferenceRow[AD_PREFERENCE] === 'TRUE' || preferenceRow[AD_PREFERENCE] === 'FALSE')
+        ? preferenceRow[AD_PREFERENCE]
+        : 'TRUE';
+    const allDataRow = [
+        member.user.username,
+        member.id,
+        squadName,
+        squadType,
+        eventSquadNameToAssign || defaultEventSquad,
+        defaultOpenSquad,
+        defaultIsLeader,
+        existingPreference,
+    ];
     const currentDate = new Date();
     const dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
     const newSquadMemberRow = [member.user.username, member.id, squadName, eventSquadNameToAssign || defaultEventSquad, dateString];
-    await sheets.spreadsheets.values.append({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A1', valueInputOption: 'RAW', resource: { values: [newSquadMemberRow] } }).catch(err => { throw new Error(`Failed to append to Squad Members sheet: ${err.message}`); });
+    const memberAppendResponse = await sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_SQUADS,
+        range: 'Squad Members!A1',
+        valueInputOption: 'RAW',
+        resource: { values: [newSquadMemberRow] },
+    }).catch(error => {
+        throw new Error(`Failed to append to Squad Members sheet: ${error.message}`);
+    });
+    const appendedMemberRange = memberAppendResponse.data.updates?.updatedRange;
+
+    try {
+        if (availableAllDataRow) {
+            const sheetRowIndex = availableAllDataRow.index + 2;
+            await sheets.spreadsheets.values.update({
+                spreadsheetId: SPREADSHEET_SQUADS,
+                range: `All Data!A${sheetRowIndex}:H${sheetRowIndex}`,
+                valueInputOption: 'RAW',
+                resource: { values: [allDataRow] },
+            });
+        } else {
+            await sheets.spreadsheets.values.append({
+                spreadsheetId: SPREADSHEET_SQUADS,
+                range: 'All Data!A1',
+                valueInputOption: 'RAW',
+                resource: { values: [allDataRow] },
+            });
+        }
+    } catch (error) {
+        if (appendedMemberRange) {
+            await sheets.spreadsheets.values.clear({
+                spreadsheetId: SPREADSHEET_SQUADS,
+                range: appendedMemberRange,
+            }).catch(rollbackError =>
+                logger.error(`[Invite Accept] Failed to roll back ${appendedMemberRange}:`, rollbackError.message)
+            );
+        }
+        throw new Error(`Failed to update All Data sheet: ${error.message}`);
+    }
+
+    await updateInviteStatus(interaction.message.id, 'Accepted').catch(error =>
+        logger.error('[Invite Accept] Membership saved but invite status update failed:', error.message)
+    );
+    await interaction.editReply(noticePayload(
+        `You have accepted the invite to join **${squadName}** (${squadType})!`,
+        { title: 'Invite Accepted', subtitle: 'Squad Invite' }
+    ));
+    if (trackingMessage) {
+        const trackingContainer = buildNoticeContainer({ title: 'Invite Accepted', subtitle: squadName, lines: [`<@${member.id}> accepted invite from <@${commandUserID}> to join **${squadName}** (${squadType}).`] });
+        await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [trackingContainer] }).catch(e => logger.error('tracking edit fail:', e));
+    }
 
     try {
         await member.setNickname(`[${squadName}] ${member.user.username}`);
@@ -288,7 +421,9 @@ const handleAcceptInvite = async (interaction, ctx) => {
             new TextDisplayBuilder().setContent(`-# Assigned role: ${assignedMascotRoleName}`)
         );
     }
-    await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => { logger.info(`Failed to DM command user ${commandUserID}: ${err.message}`); });
+    if (commandUser) {
+        await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => { logger.info(`Failed to DM command user ${commandUserID}: ${err.message}`); });
+    }
 
     try { await deleteInvite(interaction.message.id); } catch (apiError) { logger.error('API Error deleting invite:', apiError.message); }
 };
@@ -296,14 +431,23 @@ const handleAcceptInvite = async (interaction, ctx) => {
 const handleRejectInvite = async (interaction, ctx) => {
     const { squadName, trackingMessage, commandUserID, invitedMemberId, commandUser, inviteMessage } = ctx;
 
+    const freshInvite = await fetchInviteById(interaction.message.id);
+    if (!freshInvite || freshInvite.invite_status !== 'Pending') {
+        const status = freshInvite ? freshInvite.invite_status : 'unknown';
+        await interaction.editReply(noticePayload(
+            `This invite has already been processed (${status}).`,
+            { title: 'Invite Processed', subtitle: 'Squad Invite' }
+        ));
+        return;
+    }
+
+    await updateInviteStatus(interaction.message.id, 'Rejected');
     await interaction.editReply({ ...noticePayload('You have rejected the invite.', { title: 'Invite Rejected', subtitle: 'Squad Invite' }), ephemeral: true });
 
     if (trackingMessage) {
         const trackingContainer = buildNoticeContainer({ title: 'Invite Rejected', subtitle: squadName, lines: [`<@${invitedMemberId}> rejected invite from <@${commandUserID}> for **${squadName}**.`] });
         await trackingMessage.edit({ flags: MessageFlags.IsComponentsV2, components: [trackingContainer] }).catch(e => logger.error('tracking edit fail:', e));
     }
-    try { await updateInviteStatus(interaction.message.id, 'Rejected'); } catch (apiError) { logger.error('API Error updating status:', apiError.message); }
-
     const rejectionContainer = new ContainerBuilder()
         .setAccentColor(0x95A5A6)
         .addTextDisplayComponents(
@@ -318,7 +462,9 @@ const handleRejectInvite = async (interaction, ctx) => {
             new TextDisplayBuilder().setContent('## Invite Declined'),
             new TextDisplayBuilder().setContent(`**${interaction.user.username}** declined your invite to **${squadName}**.`)
         );
-    await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmRejectionContainer] }).catch(err => { logger.info(`Failed to DM command user about rejection: ${err.message}`); });
+    if (commandUser) {
+        await commandUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmRejectionContainer] }).catch(err => { logger.info(`Failed to DM command user about rejection: ${err.message}`); });
+    }
 
     try { await deleteInvite(interaction.message.id); } catch (apiError) { logger.error('API Error deleting rejected invite:', apiError.message); }
 };

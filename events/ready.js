@@ -106,7 +106,7 @@ const scheduleFutureRoleTimeouts = async (client) => {
     }
 };
 
-const processExpiredInvites = async (client) => {
+const processExpiredInvites = async (_client) => {
     try {
         await ensureInvitesSchema();
         const expired = await fetchExpiredPendingInvites();
@@ -219,12 +219,12 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        // Daily: Prune Inactive Members - 11:59 PM Chicago
+        // Daily: Reconcile squad membership and disband ownerless squads - 11:59 PM Chicago
         cron.schedule('59 23 * * *', async () => {
             try {
                 await pruneInactiveMembers(client);
             } catch (error) {
-                logger.error('[Cron] Prune Inactive Members failed:', error);
+                logger.error('[Cron] Squad Membership Cleanup failed:', error);
             }
         }, { timezone: 'America/Chicago' });
 
@@ -311,6 +311,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Prune (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT)');
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT)');
     },
 };
