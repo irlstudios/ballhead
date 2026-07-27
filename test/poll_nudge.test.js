@@ -3,7 +3,15 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const { runPollNudge } = require('../jobs/poll-nudge');
+const { runPollNudge, nudgeNewThread } = require('../jobs/poll-nudge');
+const { buildNudge } = require('../utils/poll_view');
+
+// The rendered text of a nudge payload, for asserting on copy.
+const nudgeText = (payload) => payload.components
+    .flatMap((c) => c.toJSON().components || [])
+    .map((c) => c.content)
+    .filter(Boolean)
+    .join('\n');
 
 // A forum thread fake that records what the job sent to it.
 const thread = (id, overrides = {}) => ({
@@ -115,4 +123,58 @@ test('a failing query yields zero nudges instead of throwing', async () => {
         },
     });
     assert.strictEqual(posted, 0);
+});
+
+test('a bug post is asked to be confirmed, not liked', async () => {
+    const text = nudgeText(buildNudge(['bugs']));
+    assert.match(text, /Hit this bug too\?/);
+    assert.match(text, /Top 5 Bugs/);
+    assert.doesNotMatch(text, /Back this one/);
+});
+
+test('an idea post is asked to be backed', async () => {
+    const text = nudgeText(buildNudge(['gameplay']));
+    assert.match(text, /Back this one/);
+    assert.match(text, /Top 5 Gameplay/);
+});
+
+test('a post in two boards names no single board', async () => {
+    const text = nudgeText(buildNudge(['gameplay', 'skins']));
+    assert.match(text, /Back this one/);
+    assert.doesNotMatch(text, /Top 5 Gameplay|Top 5 Skins/);
+});
+
+test('a new thread is nudged and marked so the backfill skips it', async () => {
+    const t = thread('1');
+    const marked = [];
+
+    const sent = await nudgeNewThread(t, ['skins'], { markPromoted: async (id) => marked.push(id) });
+
+    assert.strictEqual(sent, true);
+    assert.strictEqual(t.sent.length, 1);
+    assert.deepStrictEqual(marked, ['1']);
+    assert.match(nudgeText(t.sent[0]), /Top 5 Skins/);
+});
+
+test('an untagged new thread is left for the backfill', async () => {
+    const t = thread('1');
+    const marked = [];
+
+    const sent = await nudgeNewThread(t, [], { markPromoted: async (id) => marked.push(id) });
+
+    assert.strictEqual(sent, false);
+    assert.strictEqual(t.sent.length, 0);
+    assert.deepStrictEqual(marked, []);
+});
+
+test('a new thread that cannot be posted in stays unmarked so the backfill retries', async () => {
+    const t = thread('1', { send: async () => {
+        throw new Error('missing permissions');
+    } });
+    const marked = [];
+
+    const sent = await nudgeNewThread(t, ['bugs'], { markPromoted: async (id) => marked.push(id) });
+
+    assert.strictEqual(sent, false);
+    assert.deepStrictEqual(marked, []);
 });
