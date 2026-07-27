@@ -53,4 +53,25 @@ const runPollNudge = async (client, deps = {}) => {
     return posted;
 };
 
-module.exports = { runPollNudge, NUDGE_LIMIT, NUDGE_MAX_AGE_DAYS };
+// Nudge a thread the moment it is created, which is the only time the author is
+// guaranteed to be reading. Marked only after a successful send, so a thread we
+// cannot post in yet is left for the daily job rather than written off here. That
+// job gets one further attempt at it, not unlimited retries - it marks before
+// sending so a permanently un-postable thread cannot jam the queue every run.
+// An untagged post has no board to add to, so it waits for the tag and the backfill.
+const nudgeNewThread = async (thread, boards, deps = {}) => {
+    const { markPromoted = markPollPostPromoted } = deps;
+    if (!boards || boards.length === 0) {
+        return false;
+    }
+    try {
+        await thread.send(buildNudge(boards));
+        await markPromoted(thread.id);
+        return true;
+    } catch (error) {
+        logger.error(`[PollNudge] Failed to nudge new thread ${thread.id}:`, error);
+        return false;
+    }
+};
+
+module.exports = { runPollNudge, nudgeNewThread, NUDGE_LIMIT, NUDGE_MAX_AGE_DAYS };

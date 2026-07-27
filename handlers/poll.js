@@ -3,18 +3,25 @@
 const { getUserBoardList, saveUserBoardList } = require('../db');
 const { moveItem, removeItem } = require('../utils/poll_logic');
 const { buildUserListReply } = require('../utils/poll_view');
-const { addPostFromThread } = require('../utils/poll_add');
+const { addPostFromThread, addPostToBoard } = require('../utils/poll_add');
 
 // custom_id shapes: poll:<up|down|remove>:<board>:<index> on a user's own ephemeral
-// list (index is 0-based), and a bare poll:add on the public nudge posted in a
-// forum thread, where the thread the button lives in is the post being added.
+// list (index is 0-based), a bare poll:add on the public nudge posted in a forum
+// thread, where the thread the button lives in is the post being added, and
+// poll:add:<board> on the picker that a two-board post's nudge click produces.
 const handlePollButton = async (interaction) => {
     const [, action, board, indexRaw] = interaction.customId.split(':');
 
     if (action === 'add') {
+        // No broadcast either way: the add already happened in the thread everyone is
+        // reading, so a public one-liner per click would just be noise.
+        if (board) {
+            // The picker is the user's own ephemeral reply, so replace it in place
+            // rather than stacking a second one underneath.
+            await interaction.deferUpdate();
+            return addPostToBoard(interaction, interaction.channelId, board, { broadcast: false });
+        }
         await interaction.deferReply({ ephemeral: true });
-        // No broadcast: the add already happened in the thread everyone is reading,
-        // so a public one-liner per click would just be noise.
         return addPostFromThread(interaction, interaction.channelId, { broadcast: false });
     }
 

@@ -11,12 +11,14 @@ const {
 
 // Reconcile a forum thread's rows in poll_posts with the boards it currently
 // belongs to. Called on create, update (tags change), and delete (boards = []).
+// Returns the boards the thread now belongs to, so a caller that just indexed a
+// post does not need a second query to find out where it landed.
 const indexThread = async (thread) => {
     if (!thread || !thread.parentId) {
-        return;
+        return [];
     }
     if (thread.parentId !== GAME_IDEAS_FORUM_CHANNEL_ID && thread.parentId !== BUG_REPORTS_FORUM_CHANNEL_ID) {
-        return;
+        return [];
     }
 
     const boards = resolveBoards({
@@ -41,6 +43,7 @@ const indexThread = async (thread) => {
     }
     await deletePollPostBoardsExcept(thread.id, boards);
     logger.info(`[Poll] Indexed thread ${thread.id} -> [${boards.join(', ') || 'none'}]`);
+    return boards;
 };
 
 module.exports = { indexThread };

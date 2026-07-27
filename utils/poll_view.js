@@ -60,14 +60,25 @@ const buildAddBroadcast = (name, board, post) => {
 // their personal Top 5, with a one-click way to do it. The button carries no board
 // so a click resolves the thread's current boards then, not whatever they were
 // when this was posted.
+//
+// This lands as the first reply under every new post, before anyone has read it, so
+// it stays two lines and speaks to the author as much as to a passer-by. A bug is
+// something you confirm rather than something you like, so it gets its own framing.
+// A post in two boards has no single label to name; the button still resolves it.
 const buildNudge = (boards = []) => {
     const label = boards.length === 1 ? BOARD_LABEL[boards[0]] : null;
+    const suffix = label ? ` ${label}` : '';
+    const lines = boards.includes('bugs')
+        ? [
+            '### Hit this bug too?',
+            `Add it to your **Top 5${suffix}** so the team can see how many people it affects.`,
+        ]
+        : [
+            '### Back this one.',
+            `Add it to your **Top 5${suffix}** picks - what the community ranks is what the team reviews.`,
+        ];
     const container = new ContainerBuilder().addTextDisplayComponents(
-        new TextDisplayBuilder().setContent([
-            '### Like this one?',
-            `Add it to your **Top 5${label ? ` ${label}` : ''}** picks and it scores points on the community leaderboard the team reviews.`,
-            'Everyone gets five picks per board. Use `/myideas view` to reorder yours, or `/leaderboard` to see what is winning.',
-        ].join('\n'))
+        new TextDisplayBuilder().setContent(lines.join('\n'))
     );
     const buttonRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -78,4 +89,23 @@ const buildNudge = (boards = []) => {
     return { flags: MessageFlags.IsComponentsV2, components: [container, buttonRow] };
 };
 
-module.exports = { buildUserListReply, buildAddBroadcast, buildNudge, BOARD_LABEL };
+// A post tagged into two boards has no single list to add it to. Rather than send
+// the clicker off to a slash command, offer the choice inline. These buttons live on
+// the ephemeral reply the click just produced, so naming the board in the custom_id
+// is safe here in a way it would not be on the public nudge.
+const buildBoardPicker = (boards) => {
+    const container = new ContainerBuilder().addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(
+            ['## Top 5', 'This post is in two boards. Which list should it go in?'].join('\n')
+        )
+    );
+    const buttonRow = new ActionRowBuilder().addComponents(
+        boards.map((board) => new ButtonBuilder()
+            .setCustomId(`poll:add:${board}`)
+            .setLabel(BOARD_LABEL[board] || board)
+            .setStyle(ButtonStyle.Primary))
+    );
+    return { flags: MessageFlags.IsComponentsV2, components: [container, buttonRow] };
+};
+
+module.exports = { buildUserListReply, buildAddBroadcast, buildNudge, buildBoardPicker, BOARD_LABEL };

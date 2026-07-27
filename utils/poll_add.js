@@ -3,7 +3,7 @@
 const { noticePayload } = require('./ui');
 const { getPollPostBoards, getUserBoardList, saveUserBoardList } = require('../db');
 const { appendToList } = require('./poll_logic');
-const { buildUserListReply, buildAddBroadcast } = require('./poll_view');
+const { buildUserListReply, buildAddBroadcast, buildBoardPicker } = require('./poll_view');
 const { indexThread } = require('../handlers/poll_tracker');
 const { GAME_IDEAS_FORUM_CHANNEL_ID } = require('../config/constants');
 
@@ -16,7 +16,8 @@ const notice = (interaction, message, subtitle = 'Top 5') =>
 
 // Which single board a forum thread belongs to, for callers that did not pick one.
 // Indexes the thread live first so this works on a brand-new post the catalog has
-// not caught up with yet. Returns { board } or { error, subtitle }.
+// not caught up with yet. Returns { board }, { choices } when the post is in more
+// than one and the user has to pick, or { error, subtitle }.
 const resolveSingleBoard = async (client, threadId) => {
     const thread = await client.channels.fetch(threadId).catch(() => null);
     if (thread) {
@@ -39,10 +40,7 @@ const resolveSingleBoard = async (client, threadId) => {
             };
     }
     if (boards.length > 1) {
-        return {
-            error: 'This post is in multiple boards. Use `/myideas add` to choose which list.',
-            subtitle: 'Choose a Board',
-        };
+        return { choices: boards };
     }
     return { board: boards[0] };
 };
@@ -74,6 +72,9 @@ const addPostToBoard = async (interaction, threadId, board, { broadcast = true }
 // the board has to be inferred rather than chosen.
 const addPostFromThread = async (interaction, threadId, options) => {
     const resolved = await resolveSingleBoard(interaction.client, threadId);
+    if (resolved.choices) {
+        return interaction.editReply(buildBoardPicker(resolved.choices));
+    }
     if (resolved.error) {
         return notice(interaction, resolved.error, resolved.subtitle);
     }

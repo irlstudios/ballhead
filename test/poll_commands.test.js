@@ -43,7 +43,7 @@ test('add-to-top5 is a message context menu command', () => {
     assert.strictEqual(json.type, 3); // ApplicationCommandType.Message
 });
 
-const { buildNudge } = require('../utils/poll_view');
+const { buildNudge, buildBoardPicker } = require('../utils/poll_view');
 
 // The nudge button must stay on the poll: prefix (interactionHandler routes on it)
 // and carry no board, so handlePollButton resolves the thread's boards at click time.
@@ -61,4 +61,13 @@ test('nudge names the board only when the post is in exactly one', () => {
     assert.match(text(buildNudge(['skins'])), /Top 5 Skins/);
     assert.doesNotMatch(text(buildNudge(['gameplay', 'skins'])), /Top 5 \w/);
     assert.doesNotMatch(text(buildNudge([])), /Top 5 \w/);
+});
+
+// A post in two boards cannot be resolved to one list, so the click has to offer a
+// choice. These ids are what handlePollButton parses as poll:<action>:<board>.
+test('the board picker offers one labelled button per board', () => {
+    const payload = buildBoardPicker(['gameplay', 'skins']);
+    const buttons = nudgeButtons(payload);
+    assert.deepStrictEqual(buttons.map((b) => b.custom_id), ['poll:add:gameplay', 'poll:add:skins']);
+    assert.deepStrictEqual(buttons.map((b) => b.label), ['Gameplay', 'Skins']);
 });
