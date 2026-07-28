@@ -65,6 +65,10 @@ module.exports = {
                 return;
             }
 
+            // ponytail: one-time import exposed as a command only because it has to
+            // run more than once (200-thread cap) and the database is reachable only
+            // from the bot host. Delete this subcommand, and backfillReports with it,
+            // once the reports forum is fully indexed.
             if (subcommand === 'backfill') {
                 if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
                     await interaction.editReply(noticePayload(
