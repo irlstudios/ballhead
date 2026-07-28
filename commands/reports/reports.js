@@ -1,9 +1,9 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { PermissionsBitField } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
+const { BOT_ADMIN_USER_ID } = require('../../config/constants');
 const { fetchReportsForPlayer, fetchReportStats } = require('../../utils/reports_queries');
 const { buildPlayerHistory, buildStatsCard } = require('../../utils/reports_view');
 const { backfillReports } = require('../../utils/reports_backfill');
@@ -70,9 +70,12 @@ module.exports = {
             // from the bot host. Delete this subcommand, and backfillReports with it,
             // once the reports forum is fully indexed.
             if (subcommand === 'backfill') {
-                if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+                // Locked to one account rather than the Administrator permission: this
+                // writes several hundred rows and should not be reachable by every
+                // moderator who happens to hold admin.
+                if (interaction.user.id !== BOT_ADMIN_USER_ID) {
                     await interaction.editReply(noticePayload(
-                        'Only an administrator can run the backfill.',
+                        'The backfill is restricted to the bot administrator.',
                         { title: 'Permission Denied', subtitle: 'Player Reports' }
                     ));
                     return;
