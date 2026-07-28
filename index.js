@@ -102,6 +102,7 @@ if (!token) {
 
 const { startCacheWarmer } = require('./utils/cache_warmer');
 const { ensureLfgTable, ensureProgramRoleSnapshotTable } = require('./db');
+const { ensurePlayerReportsSchema } = require('./utils/reports_queries');
 
 client.login(token).then(async () => {
     logger.info('Bot logged in successfully.');
@@ -119,6 +120,13 @@ client.login(token).then(async () => {
         logger.info('[DB] Program role snapshot table ensured.');
     } catch (error) {
         logger.error('[DB] Failed to ensure program role snapshot table:', error);
+    }
+
+    try {
+        await ensurePlayerReportsSchema();
+        logger.info('[DB] Player reports table ensured.');
+    } catch (error) {
+        logger.error('[DB] Failed to ensure player reports table:', error);
     }
 
     // Start cache warming system

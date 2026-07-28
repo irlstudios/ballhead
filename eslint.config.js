@@ -19,7 +19,8 @@ module.exports = [
                 setInterval: 'readonly',
                 clearTimeout: 'readonly',
                 clearInterval: 'readonly',
-                Promise: 'readonly'
+                Promise: 'readonly',
+                URL: 'readonly'
             }
         },
         rules: {

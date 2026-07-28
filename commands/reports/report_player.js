@@ -1,37 +1,19 @@
-const {SlashCommandBuilder} = require('@discordjs/builders');
-const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+'use strict';
+
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const {
+    MessageFlags, ContainerBuilder, MediaGalleryBuilder,
+    MediaGalleryItemBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+} = require('discord.js');
 const crypto = require('crypto');
 const logger = require('../../utils/logger');
+const { buildTextBlock, noticePayload } = require('../../utils/ui');
+const { REPORTS_FORUM_CHANNEL_ID } = require('../../config/constants');
+const { SEVERITIES, PROOF_ERRORS, severityLabel, validateReportProof } = require('../../utils/reports_logic');
+const { insertPlayerReport } = require('../../utils/reports_queries');
 
 function generateReportId() {
     return `RPT-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-}
-
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) {
-        parts.push(`## ${title}`);
-    }
-    if (subtitle) {
-        parts.push(subtitle);
-    }
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) {
-            parts.push('');
-        }
-        parts.push(...lines.filter(Boolean));
-    }
-    if (parts.length === 0) {
-        return null;
-    }
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
-}
-
-function buildNoticeContainer({ title, subtitle, lines}) {
-    const container = new ContainerBuilder();
-    const block = buildTextBlock({ title, subtitle, lines });
-            if (block) container.addTextDisplayComponents(block);
-    return container;
 }
 
 module.exports = {
@@ -47,6 +29,15 @@ module.exports = {
                 .setDescription('Describe the rule broken by the player')
                 .setRequired(true))
         .addStringOption(option =>
+            option.setName('severity')
+                .setDescription('What kind of behaviour was it?')
+                .setRequired(true)
+                .addChoices(...SEVERITIES.map(s => ({ name: s.label, value: s.value }))))
+        .addStringOption(option =>
+            option.setName('proof-description')
+                .setDescription('What does your proof show, and when does it happen?')
+                .setRequired(true))
+        .addStringOption(option =>
             option.setName('time-of-offense')
                 .setDescription('Time of offense (e.g., 2025-03-10 14:30 UTC)')
                 .setRequired(true))
@@ -56,103 +47,132 @@ module.exports = {
                 .setRequired(true))
         .addAttachmentOption(option =>
             option.setName('proof')
-                .setDescription('(Optional) Provide a video of the user breaking the guidelines')
+                .setDescription('Screenshot or video of the offense (required unless you paste a link)')
+                .setRequired(false))
+        .addStringOption(option =>
+            option.setName('proof-link')
+                .setDescription('Link to a clip (Medal, YouTube, Streamable) if your file is too big to upload')
                 .setRequired(false)),
 
     async execute(interaction) {
         try {
-            await interaction.deferReply({ephemeral: true});
+            await interaction.deferReply({ ephemeral: true });
 
-            const reporter = interaction.user.tag;
             const reportedUser = interaction.options.getString('username');
             const ruleBroken = interaction.options.getString('rule-broken');
+            const severity = interaction.options.getString('severity');
             const timeOfOffense = interaction.options.getString('time-of-offense');
             const lobbyName = interaction.options.getString('lobby-name');
             const proof = interaction.options.getAttachment('proof');
 
+            // The real proof gate. Rejected reports never reach the forum, so
+            // moderators no longer spend a review on an empty report.
+            const validation = validateReportProof({
+                attachment: proof,
+                link: interaction.options.getString('proof-link'),
+                description: interaction.options.getString('proof-description'),
+            });
+            if (!validation.ok) {
+                await interaction.editReply(noticePayload(
+                    [PROOF_ERRORS[validation.reason], '', 'Nothing was submitted. Run the command again with proof attached.'],
+                    { title: 'Proof Required', subtitle: 'Player Report' }
+                ));
+                return;
+            }
+
             const refId = generateReportId();
 
             const reportContainer = new ContainerBuilder();
-            const reportLines = [
-                `**Reference ID:** ${refId}`,
-                `**Report From:** ${reporter}`,
-                `**User Reported:** ${reportedUser}`,
-                `**Rule Broken:** ${ruleBroken}`,
-                `**Time of Offense:** ${timeOfOffense}`,
-                `**Lobby Name:** ${lobbyName}`
-            ];
             const block = buildTextBlock({
                 title: `Player Report: ${reportedUser}`,
                 subtitle: 'Submitted to Gym Class VR moderation',
-                lines: reportLines
+                lines: [
+                    `**Reference ID:** ${refId}`,
+                    `**Report From:** ${interaction.user.tag}`,
+                    `**User Reported:** ${reportedUser}`,
+                    `**Severity:** ${severityLabel(severity)}`,
+                    `**Rule Broken:** ${ruleBroken}`,
+                    `**Time of Offense:** ${timeOfOffense}`,
+                    `**Lobby Name:** ${lobbyName}`,
+                    `**Proof Shows:** ${validation.description}`,
+                    validation.link ? `**Proof Link:** ${validation.link}` : null,
+                ],
             });
             if (block) reportContainer.addTextDisplayComponents(block);
 
-            const files = [];
+            // Posting the attachment into the thread is what makes it durable:
+            // the signed URL on the interaction expires, the copy Discord hosts
+            // in this message does not.
             if (proof) {
-                const contentType = proof.contentType || '';
-                if (contentType.startsWith('image/') || contentType.startsWith('video/')) {
-                    reportContainer.addMediaGalleryComponents(
+                reportContainer.addMediaGalleryComponents(
                     new MediaGalleryBuilder().addItems(
                         new MediaGalleryItemBuilder().setURL(proof.url)
                     )
                 );
-                } else {
-                    const proofAttachment = new AttachmentBuilder(proof.url, {name: proof.name});
-                    files.push(proofAttachment);
-                }
             }
 
             const reporterId = interaction.user.id;
+            const actionRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`reportApprove_${reporterId}`)
+                    .setLabel('Approved')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId(`reportDeny_${reporterId}`)
+                    .setLabel('Denied')
+                    .setStyle(ButtonStyle.Danger),
+                new ButtonBuilder()
+                    .setCustomId(`reportInfo_${reporterId}`)
+                    .setLabel('Needs More Information')
+                    .setStyle(ButtonStyle.Secondary)
+            );
 
-            const approveButton = new ButtonBuilder()
-                .setCustomId(`reportApprove_${reporterId}`)
-                .setLabel('Approved')
-                .setStyle(ButtonStyle.Success);
-
-            const denyButton = new ButtonBuilder()
-                .setCustomId(`reportDeny_${reporterId}`)
-                .setLabel('Denied')
-                .setStyle(ButtonStyle.Danger);
-
-            const infoButton = new ButtonBuilder()
-                .setCustomId(`reportInfo_${reporterId}`)
-                .setLabel('Needs More Information')
-                .setStyle(ButtonStyle.Secondary);
-
-            const actionRow = new ActionRowBuilder().addComponents(approveButton, denyButton, infoButton);
-
-            const forumChannel = interaction.guild.channels.cache.get('1139975178013655183');
+            const forumChannel = interaction.guild.channels.cache.get(REPORTS_FORUM_CHANNEL_ID);
             if (!forumChannel) {
                 throw new Error('The forum channel for reports could not be found.');
             }
 
-            await forumChannel.threads.create({
+            const thread = await forumChannel.threads.create({
                 name: `${refId} | Report: ${reportedUser}`,
                 message: {
                     flags: MessageFlags.IsComponentsV2,
                     components: [reportContainer, actionRow],
-                    files: files.length > 0 ? files : undefined }
+                },
             });
 
-            const successContainer = buildNoticeContainer({
-                title: 'Report Submitted',
-                subtitle: reportedUser,
-                lines: [
-                    'Your report has been submitted successfully.',
-                    `**Your Reference ID:** ${refId}`,
-                    'Save this ID if you need to follow up with a moderator.',
-                ]
-            });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            // The thread is the report. If indexing it fails the reporter should
+            // still be told it went through, and the backfill picks the thread up
+            // later rather than the reporter filing a duplicate.
+            try {
+                await insertPlayerReport({
+                    refId,
+                    reporterId,
+                    reporterTag: interaction.user.tag,
+                    reportedName: reportedUser,
+                    severity,
+                    ruleBroken,
+                    proofDescription: validation.description,
+                    proofUrl: validation.link,
+                    timeOfOffense,
+                    lobbyName,
+                    threadId: thread.id,
+                    threadUrl: thread.url,
+                });
+            } catch (dbError) {
+                logger.error(`Failed to index report ${refId}:`, dbError);
+            }
+
+            await interaction.editReply(noticePayload([
+                'Your report has been submitted successfully.',
+                `**Your Reference ID:** ${refId}`,
+                'Save this ID if you need to follow up with a moderator.',
+            ], { title: 'Report Submitted', subtitle: reportedUser }));
         } catch (error) {
             logger.error('Error handling report submission:', error);
-            const errorContainer = buildNoticeContainer({
-                title: 'Report Failed',
-                subtitle: 'Try Again Later',
-                lines: ['There was an error while submitting your report. Please try again later.']
-            });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply(noticePayload(
+                'There was an error while submitting your report. Please try again later.',
+                { title: 'Report Failed', subtitle: 'Try Again Later' }
+            ));
         }
-    }
+    },
 };

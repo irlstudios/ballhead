@@ -29,7 +29,7 @@ const {
 } = require('./commands/friendly_fire/friendly_fire_leaderboard');
 const { isReengagementInteraction, handleReengagementInteraction } = require('./handlers/reengagement');
 const { handleInviteButton } = require('./handlers/invites');
-const { handleReportApprove, handleReportDeny, handleReportInfo } = require('./handlers/reports');
+const { handleReportApprove, handleReportDeny, handleReportInfo, handleReportQueueButton } = require('./handlers/reports');
 const {
     buildSquadLeaderboardPayload,
     DEFAULT_VIEW: SQUAD_LEADERBOARD_DEFAULT_VIEW,
@@ -261,6 +261,11 @@ const handleButton = async (interaction, client) => {
 
         if (interaction.customId.startsWith('reward:')) {
             await handleRewardsButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('rpt:')) {
+            await handleReportQueueButton(interaction);
             return;
         }
 
