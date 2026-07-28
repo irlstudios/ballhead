@@ -1,29 +1,34 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { MessageFlags, ContainerBuilder, TextDisplayBuilder, PermissionsBitField } = require('discord.js');
+const { PermissionsBitField } = require('discord.js');
 const logger = require('../../utils/logger');
+const { noticePayload } = require('../../utils/ui');
+const { REPORTS_FORUM_CHANNEL_ID } = require('../../config/constants');
+const { fetchReportByRefId } = require('../../utils/reports_queries');
+const { STATUS_LABEL, severityLabel, formatAge } = require('../../utils/reports_logic');
 
-const REPORTS_FORUM_CHANNEL_ID = '1139975178013655183';
-
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) parts.push(`## ${title}`);
-    if (subtitle) parts.push(subtitle);
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) parts.push('');
-        parts.push(...lines.filter(Boolean));
+// Fallback for reports that predate indexing and have not been backfilled. Only
+// reaches the newest 100 archived threads, which is exactly why the index exists.
+const findThreadByRefId = async (guild, refId) => {
+    const forumChannel = guild.channels.cache.get(REPORTS_FORUM_CHANNEL_ID);
+    if (!forumChannel) {
+        throw new Error('The forum channel for reports could not be found.');
     }
-    if (parts.length === 0) return null;
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
-}
 
-function buildNoticeContainer({ title, subtitle, lines }) {
-    const container = new ContainerBuilder();
-    const block = buildTextBlock({ title, subtitle, lines });
-    if (block) container.addTextDisplayComponents(block);
-    return container;
-}
+    const active = forumChannel.threads.cache.find(t => t.name.includes(refId));
+    if (active) {
+        return active;
+    }
+
+    try {
+        const archived = await forumChannel.threads.fetchArchived({ limit: 100 });
+        return archived.threads.find(t => t.name.includes(refId)) || null;
+    } catch (fetchError) {
+        logger.error('Error fetching archived threads:', fetchError.message);
+        return null;
+    }
+};
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -39,12 +44,10 @@ module.exports = {
             await interaction.deferReply({ ephemeral: true });
 
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-                const denied = buildNoticeContainer({
-                    title: 'Permission Denied',
-                    subtitle: 'Report Lookup',
-                    lines: ['You do not have permission to look up reports.'],
-                });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [denied] });
+                await interaction.editReply(noticePayload(
+                    'You do not have permission to look up reports.',
+                    { title: 'Permission Denied', subtitle: 'Report Lookup' }
+                ));
                 return;
             }
 
@@ -52,60 +55,52 @@ module.exports = {
             const refId = rawInput.startsWith('RPT-') ? rawInput : `RPT-${rawInput}`;
 
             if (!/^RPT-[A-F0-9]{6}$/.test(refId)) {
-                const invalid = buildNoticeContainer({
-                    title: 'Invalid Reference ID',
-                    subtitle: 'Report Lookup',
-                    lines: ['Please provide a valid reference ID in the format RPT-XXXXXX (e.g., RPT-A1B2C3).'],
-                });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [invalid] });
+                await interaction.editReply(noticePayload(
+                    'Please provide a valid reference ID in the format RPT-XXXXXX (e.g., RPT-A1B2C3).',
+                    { title: 'Invalid Reference ID', subtitle: 'Report Lookup' }
+                ));
                 return;
             }
 
-            const forumChannel = interaction.guild.channels.cache.get(REPORTS_FORUM_CHANNEL_ID);
-            if (!forumChannel) {
-                throw new Error('The forum channel for reports could not be found.');
-            }
-
-            const activeThreads = forumChannel.threads.cache.filter(t => t.name.includes(refId));
-
-            let match = activeThreads.first();
-
-            if (!match) {
-                try {
-                    const archived = await forumChannel.threads.fetchArchived({ limit: 100 });
-                    match = archived.threads.find(t => t.name.includes(refId));
-                } catch (fetchError) {
-                    logger.error('Error fetching archived threads:', fetchError.message);
-                }
-            }
-
-            if (!match) {
-                const notFound = buildNoticeContainer({
-                    title: 'Report Not Found',
-                    subtitle: refId,
-                    lines: [`No report found with reference ID **${refId}**.`],
-                });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [notFound] });
+            // The index answers with status and context; the thread scan only ever
+            // answered with a link, so it is the fallback rather than the path.
+            const report = await fetchReportByRefId(refId);
+            if (report) {
+                await interaction.editReply(noticePayload([
+                    `**Reported Player:** ${report.reported_name}`,
+                    `**Status:** ${STATUS_LABEL[report.status] || report.status}`,
+                    `**Severity:** ${severityLabel(report.severity)}`,
+                    `**Filed:** ${formatAge(report.created_at)} ago`,
+                    report.actioned_by ? `**Actioned by:** <@${report.actioned_by}>` : null,
+                    report.rule_broken ? `**Rule broken:** ${report.rule_broken}` : null,
+                    report.proof_description ? `**Proof shows:** ${report.proof_description}` : null,
+                    report.proof_url ? `**Proof link:** ${report.proof_url}` : null,
+                    report.thread_url ? `**Thread:** ${report.thread_url}` : null,
+                ], { title: 'Report Found', subtitle: refId }));
                 return;
             }
 
-            const found = buildNoticeContainer({
-                title: 'Report Found',
-                subtitle: refId,
-                lines: [
-                    `**Thread:** ${match.name}`,
-                    `**Link:** ${match.url}`,
-                ],
-            });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [found] });
+            const match = await findThreadByRefId(interaction.guild, refId);
+            if (!match) {
+                await interaction.editReply(noticePayload(
+                    `No report found with reference ID **${refId}**.`,
+                    { title: 'Report Not Found', subtitle: refId }
+                ));
+                return;
+            }
+
+            await interaction.editReply(noticePayload([
+                `**Thread:** ${match.name}`,
+                `**Link:** ${match.url}`,
+                '',
+                '_This report is not indexed yet. Run `/reports backfill` to include it in the queue._',
+            ], { title: 'Report Found', subtitle: refId }));
         } catch (error) {
             logger.error('Error looking up report:', error);
-            const errorContainer = buildNoticeContainer({
-                title: 'Lookup Failed',
-                subtitle: 'Report Lookup',
-                lines: ['There was an error while looking up the report. Please try again later.'],
-            });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
+            await interaction.editReply(noticePayload(
+                'There was an error while looking up the report. Please try again later.',
+                { title: 'Lookup Failed', subtitle: 'Report Lookup' }
+            )).catch(() => {});
         }
     },
 };

@@ -24,6 +24,9 @@ const BUG_REPORT_ESCALATED_TAG_ID = '1265408485361975338';
 const GAMEPLAY_TAG_ID = '1256306810722193489';
 const SKINS_TAG_ID = '1149459536835518555';
 const BOARD_TAG_MAP = { gameplay: GAMEPLAY_TAG_ID, skins: SKINS_TAG_ID };
+// Forum channel where /report-player opens a thread per report and moderators
+// action them. Was hardcoded in the report command and lookup separately.
+const REPORTS_FORUM_CHANNEL_ID = '1139975178013655183';
 const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
 // Ops channel where /request-official cards post and staff assign/deny. Set
 // LEAGUE_OFFICIALS_CHANNEL_ID in the env to use a dedicated channel; otherwise
@@ -181,6 +184,7 @@ module.exports = {
     GAMEPLAY_TAG_ID,
     SKINS_TAG_ID,
     BOARD_TAG_MAP,
+    REPORTS_FORUM_CHANNEL_ID,
     LEAGUE_LOG_CHANNEL_ID,
     LEAGUE_OFFICIALS_CHANNEL_ID,
     SQUAD_PRACTICE_CHANNEL_ID,
