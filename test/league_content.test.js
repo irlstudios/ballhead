@@ -6,40 +6,44 @@ const assert = require('node:assert');
 const {
     normalizeHashtag,
     isValidHashtag,
-    contentSubmissionEligibility,
-    isValidContentUrl,
     buildContentSummaryLine,
+    buildHashtagNudge,
 } = require('../utils/league_content');
 
 test('normalizeHashtag strips # and lowercases', () => {
-    assert.strictEqual(normalizeHashtag('#SkyBallers'), 'skyballers');
-    assert.strictEqual(normalizeHashtag('  ##Foo_1  '), 'foo_1');
+    assert.strictEqual(normalizeHashtag('#GCSkyBallers'), 'gcskyballers');
+    assert.strictEqual(normalizeHashtag('  ##GC_Foo_1  '), 'gc_foo_1');
     assert.strictEqual(normalizeHashtag(''), '');
     assert.strictEqual(normalizeHashtag(null), '');
 });
 
-test('isValidHashtag enforces 2-30 alphanumeric/underscore', () => {
-    assert.strictEqual(isValidHashtag('#SkyBallers'), true);
-    assert.strictEqual(isValidHashtag('a'), false); // too short
-    assert.strictEqual(isValidHashtag('has space'), false);
-    assert.strictEqual(isValidHashtag('emoji😀tag'), false);
-    assert.strictEqual(isValidHashtag('x'.repeat(31)), false);
+test('isValidHashtag requires a gc prefix', () => {
+    assert.strictEqual(isValidHashtag('#GCSkyBallers'), true);
+    assert.strictEqual(isValidHashtag('gc1'), true);
+    assert.strictEqual(isValidHashtag('#skyballers'), false);
+    assert.strictEqual(isValidHashtag('gc'), false); // prefix only
+    assert.strictEqual(isValidHashtag('#gc'), false);
 });
 
-test('contentSubmissionEligibility allows active Active/Sponsored leagues', () => {
-    assert.strictEqual(contentSubmissionEligibility({ league_type: 'Active', league_status: 'Active' }).ok, true);
-    assert.strictEqual(contentSubmissionEligibility({ league_type: 'Sponsored', league_status: 'Active' }).ok, true);
+test('isValidHashtag enforces charset and 3-30 length', () => {
+    assert.strictEqual(isValidHashtag('gc has space'), false);
+    assert.strictEqual(isValidHashtag('gcemoji😀tag'), false);
+    assert.strictEqual(isValidHashtag(`gc${'x'.repeat(28)}`), true);
+    assert.strictEqual(isValidHashtag(`gc${'x'.repeat(29)}`), false);
 });
 
-test('contentSubmissionEligibility blocks base, inactive, and missing leagues', () => {
-    assert.strictEqual(contentSubmissionEligibility(null).code, 'NO_LEAGUE');
-    assert.strictEqual(contentSubmissionEligibility({ league_type: 'Base', league_status: 'Active' }).code, 'INELIGIBLE_TIER');
-    assert.strictEqual(contentSubmissionEligibility({ league_type: 'Active', league_status: 'Inactive' }).code, 'NOT_ACTIVE');
-});
+test('buildHashtagNudge only fires for leagues missing a hashtag', () => {
+    assert.deepStrictEqual(buildHashtagNudge([{ league_name: 'Sky', league_hashtag: 'gcsky' }]), []);
+    assert.deepStrictEqual(buildHashtagNudge([]), []);
 
-test('isValidContentUrl mirrors http(s) validation', () => {
-    assert.strictEqual(isValidContentUrl('https://youtu.be/x'), true);
-    assert.strictEqual(isValidContentUrl('nope'), false);
+    const nudge = buildHashtagNudge([
+        { league_name: 'Sky', league_hashtag: 'gcsky' },
+        { league_name: 'Dunk', league_hashtag: null },
+        { league_name: 'Rim', league_hashtag: '' },
+    ]);
+    assert.ok(nudge.some((l) => l.includes('Dunk, Rim')));
+    assert.ok(nudge.some((l) => l.includes('/league-settings')));
+    assert.ok(!nudge.some((l) => l.includes('Sky')));
 });
 
 test('buildContentSummaryLine formats counts', () => {

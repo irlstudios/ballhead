@@ -1413,24 +1413,8 @@ const updateLeagueContentSettings = async (leagueId, { sport = null, hashtag = n
     );
 };
 
-const insertContentSubmission = async ({ leagueId, submittedBy, url, platform, title }) => {
-    const result = await executeQuery(
-        `INSERT INTO league_content_submissions (league_id, submitted_by, url, platform, title)
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [leagueId, submittedBy, url, platform || null, title || null]
-    );
-    return result.rows[0];
-};
-
-const fetchLeagueContent = async (leagueId, limit = 10) => {
-    const result = await executeQuery(
-        `SELECT id, url, platform, title, latest_views, created_at
-         FROM league_content_submissions WHERE league_id = $1 ORDER BY created_at DESC LIMIT $2`,
-        [leagueId, limit]
-    );
-    return result.rows;
-};
-
+// Rows are written externally (content is discovered by league_hashtag, not
+// submitted in Discord); the bot only reads the totals back.
 const getLeagueContentSummary = async (leagueId) => {
     const result = await executeQuery(
         `SELECT COUNT(*)::int AS count, COALESCE(SUM(latest_views), 0)::int AS total_views
@@ -1818,8 +1802,6 @@ module.exports = {
     fetchRecentLeagueGames,
     ensureLeagueContentSchema,
     updateLeagueContentSettings,
-    insertContentSubmission,
-    fetchLeagueContent,
     getLeagueContentSummary,
     ensureLeagueEnforcementSchema,
     insertStrike,

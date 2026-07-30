@@ -3,7 +3,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
-const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, getLeagueContentSummary, fetchLeagueContent } = require('../../db');
+const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, getLeagueContentSummary } = require('../../db');
 const { buildContentSummaryLine } = require('../../utils/league_content');
 
 const SUB = 'League Content';
@@ -11,7 +11,7 @@ const SUB = 'League Content';
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('league-content')
-        .setDescription('View your league\'s submitted content and view totals'),
+        .setDescription('View your league\'s content hashtag and view totals'),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -27,16 +27,11 @@ module.exports = {
             }
 
             const summary = await getLeagueContentSummary(league.league_id);
-            const recent = await fetchLeagueContent(league.league_id, 10);
 
-            const lines = [buildContentSummaryLine(summary)];
-            if (recent.length > 0) {
-                lines.push('', '**Recent submissions:**');
-                for (const c of recent) {
-                    const label = c.title || c.platform || 'Post';
-                    lines.push(`- [${label}](${c.url}) — ${c.latest_views} views`);
-                }
-            }
+            const lines = league.league_hashtag
+                ? [`**Hashtag:** #${league.league_hashtag}`, 'Post with this hashtag and your content is counted automatically.']
+                : ['No hashtag set. Use `/league-settings` to set one starting with #gc.'];
+            lines.push(buildContentSummaryLine(summary));
 
             return interaction.editReply(noticePayload(lines, { title: league.league_name, subtitle: SUB }));
         } catch (error) {

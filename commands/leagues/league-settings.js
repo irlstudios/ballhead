@@ -3,7 +3,7 @@
 const { SlashCommandBuilder } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
-const { fetchLeaguesByOwner, updateLeagueContentSettings } = require('../../db');
+const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, updateLeagueContentSettings } = require('../../db');
 const { normalizeHashtag, isValidHashtag } = require('../../utils/league_content');
 
 const SUB = 'League Settings';
@@ -13,7 +13,7 @@ module.exports = {
         .setName('league-settings')
         .setDescription('Set your league\'s sport and content hashtag')
         .addStringOption((o) => o.setName('sport').setDescription('Primary sport / format').setRequired(false).setMaxLength(60))
-        .addStringOption((o) => o.setName('hashtag').setDescription('Content hashtag (letters, digits, underscore)').setRequired(false).setMaxLength(30)),
+        .addStringOption((o) => o.setName('hashtag').setDescription('Content hashtag, must start with #gc (e.g. #gcskyballers)').setRequired(false).setMaxLength(31)),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -29,15 +29,23 @@ module.exports = {
             let hashtag = null;
             if (rawHashtag) {
                 if (!isValidHashtag(rawHashtag)) {
-                    return interaction.editReply(noticePayload('Hashtag must be 2-30 characters: letters, digits, or underscore.', { title: 'Invalid Hashtag', subtitle: SUB }));
+                    return interaction.editReply(noticePayload(
+                        'Hashtag must start with #gc and be 3-30 characters: letters, digits, or underscore. Example: #gcskyballers',
+                        { title: 'Invalid Hashtag', subtitle: SUB }
+                    ));
                 }
                 hashtag = normalizeHashtag(rawHashtag);
             }
 
-            const leagues = await fetchLeaguesByOwner(interaction.user.id);
-            const league = leagues[0] || null;
+            const owned = await fetchLeaguesByOwner(interaction.user.id);
+            const coowned = await fetchLeaguesByCoOwner(interaction.user.id);
+            const league = [...owned, ...coowned][0] || null;
             if (!league) {
-                return interaction.editReply(noticePayload('You do not own a registered league.', { title: 'No League Found', subtitle: SUB }));
+                return interaction.editReply(noticePayload('You do not own or co-own a registered league.', { title: 'No League Found', subtitle: SUB }));
+            }
+            // Co-owners may set the content hashtag; sport stays owner-only.
+            if (sport && owned.length === 0) {
+                return interaction.editReply(noticePayload('Only the league owner can change the sport.', { title: 'Owner Only', subtitle: SUB }));
             }
 
             try {

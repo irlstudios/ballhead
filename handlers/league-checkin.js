@@ -17,6 +17,7 @@ const {
     ACTIVE_LEAGUE_ROLE_ID,
     SPONSORED_LEAGUE_ROLE_ID,
 } = require('../config/constants');
+const { buildHashtagNudge } = require('../utils/league_content');
 
 function getCurrentMonth() {
     const now = new Date();
@@ -108,7 +109,7 @@ const handleLeagueCheckinModal = async (interaction) => {
 
         return interaction.editReply(
             noticePayload(
-                results,
+                [...results, ...buildHashtagNudge(allLeagues)],
                 { title: 'Check-in Received', subtitle: month }
             )
         );
