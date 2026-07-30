@@ -2,6 +2,11 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDi
 const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
+const { handleRoomEventStart } = require('../../handlers/room_event');
+const { getSessionByChannel } = require('../../utils/host_session_manager');
+
+// Subcommands a host may not use on their own lobby while an event session runs.
+const LOCKED_DURING_EVENT = new Set(['lock', 'rename']);
 
 const BLACKLIST_USER_IDS = new Set();
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364', '1125497495678615582']);
@@ -165,10 +170,38 @@ module.exports = {
             subcommand
                 .setName('clean')
                 .setDescription('Clean up orphaned rooms stored in the database.')
+        )
+        .addSubcommandGroup(group =>
+            group
+                .setName('event')
+                .setDescription('Run a tracked EMH event session in your lobby.')
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('start')
+                        .setDescription('Open your lobby for Discord activities and start tracking the session.')
+                )
         ),
     async execute(interaction) {
+        if (interaction.options.getSubcommandGroup(false) === 'event') {
+            return handleRoomEventStart(interaction);
+        }
+
         const subcommand = interaction.options.getSubcommand();
         const MOD_ROLE_ID = MODERATOR_ROLES[0];
+
+        // A live event advertises the lobby by name and by an open invite in
+        // general chat, so the host may not rename it or shut the door behind
+        // them mid-session. Moderators keep both as an override.
+        if (LOCKED_DURING_EVENT.has(subcommand) && !interaction.member.roles.cache.has(MOD_ROLE_ID)) {
+            const channelId = interaction.member.voice.channelId;
+            if (channelId && getSessionByChannel(channelId)) {
+                return replyRoomNotice(interaction, {
+                    title: 'Event In Progress',
+                    subtitle: 'Room Locked For Event',
+                    lines: ['You cannot rename or lock the lobby while your event session is running. Leave the lobby to end the event.']
+                });
+            }
+        }
         switch (subcommand) {
         case 'view': {
             const roomChannel = interaction.member.voice.channel;

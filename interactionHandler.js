@@ -30,6 +30,7 @@ const {
 const { isReengagementInteraction, handleReengagementInteraction } = require('./handlers/reengagement');
 const { handleInviteButton } = require('./handlers/invites');
 const { handleReportApprove, handleReportDeny, handleReportInfo, handleReportQueueButton } = require('./handlers/reports');
+const { isRoomEventInteraction, handleRoomEventButton } = require('./handlers/room_event');
 const {
     buildSquadLeaderboardPayload,
     DEFAULT_VIEW: SQUAD_LEADERBOARD_DEFAULT_VIEW,
@@ -266,6 +267,11 @@ const handleButton = async (interaction, client) => {
 
         if (interaction.customId.startsWith('rpt:')) {
             await handleReportQueueButton(interaction);
+            return;
+        }
+
+        if (isRoomEventInteraction(interaction.customId)) {
+            await handleRoomEventButton(interaction);
             return;
         }
 

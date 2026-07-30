@@ -20,6 +20,8 @@ const { syncRankRoles } = require('../jobs/rank-role-sync');
 const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
 const { runPollNudge } = require('../jobs/poll-nudge');
+const { ensureHostSessionSchema } = require('../utils/host_session_queries');
+const { resumeSessions } = require('../utils/host_session_manager');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -163,6 +165,7 @@ module.exports = {
             ['game_ideas', ensureGameIdeasTables],
             ['reengagement', ensureReengagementTables],
             ['poll', ensurePollTables],
+            ['host_sessions', ensureHostSessionSchema],
         ];
         for (const [name, ensure] of migrations) {
             try {
@@ -170,6 +173,14 @@ module.exports = {
             } catch (error) {
                 logger.error(`[DB] Failed to ensure ${name} schema:`, error);
             }
+        }
+
+        // Pick host event sessions back up after a restart, or close out the ones
+        // whose host is no longer in the room so the sheet still gets its row.
+        try {
+            await resumeSessions(client);
+        } catch (error) {
+            logger.error('[Host Session] Failed to resume sessions:', error);
         }
 
         // One-time poll catalog catch-up: if poll_posts is empty (e.g. first run
