@@ -106,4 +106,6 @@ async function syncRankRoles(client) {
     }
 }
 
-module.exports = { syncRankRoles };
+const RANK_ROLE_IDS = ROLES.map(role => role.id);
+
+module.exports = { syncRankRoles, RANK_ROLE_IDS };
