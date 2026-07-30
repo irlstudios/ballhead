@@ -1181,6 +1181,18 @@ const ensureLeagueOfficialsSchema = async () => {
     // entered games (no request) are exempt so a future manual-entry path works.
     await executeQuery('CREATE UNIQUE INDEX IF NOT EXISTS idx_league_games_request ON league_games (request_id) WHERE request_id IS NOT NULL').catch(() => {});
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_games_league_status ON league_games (league_id, verification_status)').catch(() => {});
+
+    // Owner/co-owner game submissions record who submitted and which players
+    // took part; unique-players-per-week metrics read from here.
+    await executeQuery('ALTER TABLE league_games ADD COLUMN IF NOT EXISTS submitted_by TEXT').catch(() => {});
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_game_players (
+            game_id INTEGER NOT NULL,
+            discord_id TEXT NOT NULL,
+            PRIMARY KEY (game_id, discord_id)
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_game_players_discord ON league_game_players (discord_id)').catch(() => {});
 };
 
 const fetchLeagueById = async (leagueId) => {
@@ -1345,12 +1357,83 @@ const completeOfficialRequestWithReport = async (id, officialId, report) => {
     }
 };
 
+// Owner/co-owner game submission: the game row and its tagged players land in
+// one transaction so a partial insert never skews unique-player counts.
+const insertLeagueGameWithPlayers = async ({ leagueId, sport, status, submittedBy, playerIds }) => {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const game = await client.query(
+            `INSERT INTO league_games (league_id, sport, verification_status, submitted_by)
+             VALUES ($1, $2, $3, $4) RETURNING id`,
+            [leagueId, sport || null, status, submittedBy]
+        );
+        await client.query(
+            'INSERT INTO league_game_players (game_id, discord_id) SELECT $1, unnest($2::text[])',
+            [game.rows[0].id, playerIds]
+        );
+        await client.query('COMMIT');
+        return game.rows[0].id;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+// Games and unique tagged players per week, last 4 weeks, newest first.
+const getLeagueWeeklyStats = async (leagueId) => {
+    const result = await executeQuery(
+        `SELECT date_trunc('week', g.created_at) AS week_start,
+                COUNT(DISTINCT g.id)::int AS games,
+                COUNT(DISTINCT p.discord_id)::int AS players
+         FROM league_games g
+         LEFT JOIN league_game_players p ON p.game_id = g.id
+         WHERE g.league_id = $1 AND g.created_at >= date_trunc('week', NOW()) - INTERVAL '21 days'
+         GROUP BY 1 ORDER BY 1 DESC`,
+        [leagueId]
+    );
+    return result.rows;
+};
+
+// Staff overview: every active league with its hashtag and last-7-day numbers.
+const fetchLeagueOverviewStats = async () => {
+    const result = await executeQuery(
+        `SELECT l.league_id, l.league_name, l.league_hashtag, l.league_type,
+                COUNT(DISTINCT g.id)::int AS games_7d,
+                COUNT(DISTINCT p.discord_id)::int AS players_7d
+         FROM "Active Leagues" l
+         LEFT JOIN league_games g ON g.league_id = l.league_id AND g.created_at >= NOW() - INTERVAL '7 days'
+         LEFT JOIN league_game_players p ON p.game_id = g.id
+         WHERE l.league_status = 'Active'
+         GROUP BY l.league_id, l.league_name, l.league_hashtag, l.league_type
+         ORDER BY players_7d DESC, games_7d DESC, l.league_name ASC`
+    );
+    return result.rows;
+};
+
+// Staff lookup by name for /league-games: exact (case-insensitive) match wins,
+// then substring match.
+const fetchLeagueByName = async (name) => {
+    const result = await executeQuery(
+        `SELECT * FROM "Active Leagues"
+         WHERE league_name ILIKE $1 OR league_name ILIKE '%' || $1 || '%'
+         ORDER BY (league_name ILIKE $1)::int DESC, league_name ASC
+         LIMIT 1`,
+        [name]
+    );
+    return result.rows[0] || null;
+};
+
 const getLeagueGamesSummary = async (leagueId) => {
     const result = await executeQuery(
         `SELECT
             (SELECT COUNT(*)::int FROM league_games
                 WHERE league_id = $1 AND verification_status IN ('Official Verified', 'Staff Verified')) AS verified,
-            (SELECT COUNT(*)::int FROM league_game_reports WHERE league_id = $1) AS reported`,
+            (SELECT COUNT(*)::int FROM league_game_reports WHERE league_id = $1)
+            + (SELECT COUNT(*)::int FROM league_games
+                WHERE league_id = $1 AND verification_status = 'Owner Reported') AS reported`,
         [leagueId]
     );
     const row = result.rows[0] || {};
@@ -1800,6 +1883,10 @@ module.exports = {
     completeOfficialRequestWithReport,
     getLeagueGamesSummary,
     fetchRecentLeagueGames,
+    insertLeagueGameWithPlayers,
+    getLeagueWeeklyStats,
+    fetchLeagueOverviewStats,
+    fetchLeagueByName,
     ensureLeagueContentSchema,
     updateLeagueContentSettings,
     getLeagueContentSummary,
