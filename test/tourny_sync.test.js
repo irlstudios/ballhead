@@ -5,7 +5,8 @@ const assert = require('node:assert');
 
 const {
     pickActiveSeason, gamesNeedingRequests, assignmentsToRepair,
-    requestsToComplete, buildAutoDetails, parseScore,
+    requestsToComplete, requestsToCancel, requestsToClear,
+    buildAutoDetails, parseScore,
 } = require('../utils/tourny_sync');
 
 test('pickActiveSeason prefers the newest open season', () => {
@@ -41,6 +42,18 @@ test('assignmentsToRepair finds pushes tourny never saw', () => {
     assert.deepStrictEqual(assignmentsToRepair(requests, gamesById).map((r) => r.id), [1]);
 });
 
+test('assignmentsToRepair excludes a mismatched official on a game already final in tourny', () => {
+    const requests = [
+        { id: 1, status: 'Assigned', assigned_official_id: 'u1', tourny_game_id: 'g1' },
+        { id: 2, status: 'Assigned', assigned_official_id: 'u2', tourny_game_id: 'g2' },
+    ];
+    const gamesById = {
+        g1: { officialId: '', status: 'final' },
+        g2: { officialId: '', status: 'scheduled' },
+    };
+    assert.deepStrictEqual(assignmentsToRepair(requests, gamesById).map((r) => r.id), [2]);
+});
+
 test('requestsToComplete finds assigned requests whose game went final', () => {
     const requests = [
         { id: 1, status: 'Assigned', tourny_game_id: 'g1' },
@@ -48,6 +61,51 @@ test('requestsToComplete finds assigned requests whose game went final', () => {
     ];
     const gamesById = { g1: { status: 'final' }, g2: { status: 'disputed' } };
     assert.deepStrictEqual(requestsToComplete(requests, gamesById).map((r) => r.id), [1]);
+});
+
+// --- requestsToCancel ---------------------------------------------------------
+
+test('requestsToCancel finds pending requests whose game settled without an official', () => {
+    const requests = [
+        { id: 1, status: 'Pending', tourny_game_id: 'g1' },
+        { id: 2, status: 'Pending', tourny_game_id: 'g2' },
+        { id: 3, status: 'Assigned', tourny_game_id: 'g1' },
+        { id: 4, status: 'Pending', tourny_game_id: 'g3' },
+    ];
+    const gamesById = { g1: { status: 'final' }, g2: { status: 'scheduled' } };
+    assert.deepStrictEqual(requestsToCancel(requests, gamesById).map((r) => r.id), [1]);
+});
+
+test('requestsToCancel ignores requests with no matching game', () => {
+    assert.deepStrictEqual(requestsToCancel([{ id: 1, status: 'Pending', tourny_game_id: 'ghost' }], {}), []);
+    assert.deepStrictEqual(requestsToCancel([], { g1: { status: 'final' } }), []);
+    assert.deepStrictEqual(requestsToCancel(null, { g1: { status: 'final' } }), []);
+});
+
+// --- requestsToClear -----------------------------------------------------------
+
+test('requestsToClear finds a denied Pending request whose officialRequested flag never cleared', () => {
+    const requests = [{ id: 1, status: 'Denied', tourny_game_id: 'g1', assigned_official_id: null }];
+    const gamesById = { g1: { officialRequested: true, officialId: '' } };
+    assert.deepStrictEqual(requestsToClear(requests, gamesById).map((r) => r.id), [1]);
+});
+
+test('requestsToClear finds a denied Assigned request whose revoked official is still assigned in tourny', () => {
+    const requests = [{ id: 1, status: 'Denied', tourny_game_id: 'g1', assigned_official_id: 'u1' }];
+    const gamesById = { g1: { officialRequested: false, officialId: 'u1' } };
+    assert.deepStrictEqual(requestsToClear(requests, gamesById).map((r) => r.id), [1]);
+});
+
+test('requestsToClear is a no-op skip when tourny already shows the game cleared', () => {
+    const requests = [{ id: 1, status: 'Denied', tourny_game_id: 'g1', assigned_official_id: 'u1' }];
+    const gamesById = { g1: { officialRequested: false, officialId: 'u2' } };
+    assert.deepStrictEqual(requestsToClear(requests, gamesById), []);
+});
+
+test('requestsToClear ignores requests with no matching game', () => {
+    assert.deepStrictEqual(requestsToClear([{ id: 1, tourny_game_id: 'ghost', assigned_official_id: 'u1' }], {}), []);
+    assert.deepStrictEqual(requestsToClear([], { g1: { officialRequested: true } }), []);
+    assert.deepStrictEqual(requestsToClear(null, { g1: { officialRequested: true } }), []);
 });
 
 test('buildAutoDetails names the fixture', () => {

@@ -27,11 +27,16 @@ function gamesNeedingRequests(games, linkedRequests) {
 
 // Assigned here, but tourny shows a different (or no) official: the
 // event-time push failed and must be repeated. String compare tolerates
-// BIGINT/text id mismatches, as canSubmitReport does.
+// BIGINT/text id mismatches, as canSubmitReport does. Excludes final games:
+// tourny 409s an assign push against a final game, and a final game belongs
+// to requestsToComplete instead -- repairing it here would throw, abort
+// syncLeague before the completion loop runs, and livelock the league's
+// sweep forever.
 function assignmentsToRepair(requests, gamesById) {
     return (requests || []).filter((r) => r.status === 'Assigned'
         && r.assigned_official_id
         && gamesById[r.tourny_game_id]
+        && gamesById[r.tourny_game_id].status !== 'final'
         && String(gamesById[r.tourny_game_id].officialId || '') !== String(r.assigned_official_id));
 }
 
@@ -40,6 +45,38 @@ function requestsToComplete(requests, gamesById) {
     return (requests || []).filter((r) => r.status === 'Assigned'
         && gamesById[r.tourny_game_id]
         && gamesById[r.tourny_game_id].status === 'final');
+}
+
+// Still Pending here but the game already went final in tourny: it was
+// settled without an official (captains agreed, or staff ruled) before this
+// request was ever assigned. Left open it eats the league's request cap
+// forever and still shows a live Assign button -- and if staff assign it
+// anyway, the request becomes Assigned-on-a-final-game, the exact state
+// assignmentsToRepair now has to route around. Close it instead.
+function requestsToCancel(requests, gamesById) {
+    return (requests || []).filter((r) => r.status === 'Pending'
+        && gamesById[r.tourny_game_id]
+        && gamesById[r.tourny_game_id].status === 'final');
+}
+
+// Denied here, but tourny still shows the request's fingerprint: either the
+// officialRequested flag never cleared (a denied Pending request), or the
+// revoked official is still the game's assigned official in tourny (a
+// denied Assigned request). Either way the deny-time clearOfficial push
+// failed and must be repeated -- an uncleared officialRequested flag makes
+// gamesNeedingRequests spawn a duplicate request for the same game next
+// sweep, and an uncleared officialId leaves a revoked official with settle
+// authority in tourny. A game tourny already shows as cleared is a no-op:
+// filtered out, nothing to push.
+function requestsToClear(deniedRequests, gamesById) {
+    return (deniedRequests || []).filter((r) => {
+        const game = gamesById[r.tourny_game_id];
+        if (!game) {
+            return false;
+        }
+        return Boolean(game.officialRequested)
+            || (Boolean(r.assigned_official_id) && String(game.officialId || '') === String(r.assigned_official_id));
+    });
 }
 
 function buildAutoDetails(game, teamNames) {
@@ -66,6 +103,8 @@ module.exports = {
     gamesNeedingRequests,
     assignmentsToRepair,
     requestsToComplete,
+    requestsToCancel,
+    requestsToClear,
     buildAutoDetails,
     parseScore,
 };

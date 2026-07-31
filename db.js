@@ -1320,6 +1320,19 @@ const fetchRequestByTournyGame = async (tournyGuildId, tournyGameId) => {
     return result.rows[0] || null;
 };
 
+// Denied requests still linked to a tourny game, for the sync sweep's
+// stale-clear pass (a failed clearOfficial push after denial). No denied_at
+// column exists yet to bound this to a recent window, so every Denied
+// linked row is returned; add a timestamp bound here if that ever needs
+// tightening.
+const fetchRecentDeniedLinkedRequests = async () => {
+    const result = await executeQuery(
+        `SELECT * FROM league_official_requests
+         WHERE status = 'Denied' AND tourny_game_id IS NOT NULL`
+    );
+    return result.rows;
+};
+
 // Atomic assign: only a still-Pending request can be claimed. Two staff racing
 // both run this; the loser gets no row back and is told it was already handled.
 const assignOfficialRequest = async (id, officialId, assignedBy) => {
@@ -1911,6 +1924,7 @@ module.exports = {
     fetchOfficialRequestByOpsMessage,
     fetchOpenLinkedRequests,
     fetchRequestByTournyGame,
+    fetchRecentDeniedLinkedRequests,
     assignOfficialRequest,
     denyOfficialRequest,
     completeOfficialRequestWithReport,

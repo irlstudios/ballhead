@@ -290,8 +290,10 @@ async function handleOfficialsSelect(interaction) {
     }
 
     if (assigned.tourny_game_id && tourny.enabled()) {
-        // Fire-and-forget: the sweep repairs a missed push, and staff
-        // assigning in Discord must never see a tourny outage as an error.
+        // Fire-and-forget: assignmentsToRepair (utils/tourny_sync.js) repairs
+        // a missed push on the next sweep as long as the game has not gone
+        // final, and staff assigning in Discord must never see a tourny
+        // outage as an error.
         tourny.assignOfficial(assigned.tourny_guild_id, assigned.tourny_game_id, assigned.tourny_season_id, officialId)
             .catch((e) => logger.error('[TournySync] assign push (sweep will repair):', e.message));
     }
@@ -329,8 +331,11 @@ async function handleDenySubmit(interaction, requestId) {
     }
 
     if (denied.tourny_game_id && tourny.enabled()) {
-        // Fire-and-forget: the sweep repairs a missed push. Clearing also
-        // resets officialRequested in tourny so the manager can re-request.
+        // Fire-and-forget: requestsToClear (utils/tourny_sync.js) repairs a
+        // missed push on the next sweep by re-fetching this now-Denied row
+        // via fetchRecentDeniedLinkedRequests and pushing clearOfficial
+        // again. Clearing also resets officialRequested in tourny so the
+        // manager can re-request.
         tourny.clearOfficial(denied.tourny_guild_id, denied.tourny_game_id, denied.tourny_season_id)
             .catch((e) => logger.error('[TournySync] deny push (sweep will repair):', e.message));
     }
