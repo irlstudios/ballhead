@@ -14,9 +14,9 @@ test('pickActiveSeason prefers the newest open season', () => {
         { seasonId: 's2', status: 'regular', createdAt: 100 },
         { seasonId: 's3', status: 'playoffs', createdAt: 200 },
     ];
-    assert.equal(pickActiveSeason(seasons).seasonId, 's3');
-    assert.equal(pickActiveSeason([{ seasonId: 's1', status: 'complete', createdAt: 1 }]), null);
-    assert.equal(pickActiveSeason([]), null);
+    assert.strictEqual(pickActiveSeason(seasons).seasonId, 's3');
+    assert.strictEqual(pickActiveSeason([{ seasonId: 's1', status: 'complete', createdAt: 1 }]), null);
+    assert.strictEqual(pickActiveSeason([]), null);
 });
 
 test('gamesNeedingRequests wants marked, unassigned, unlinked, not-yet-final games', () => {
@@ -28,7 +28,7 @@ test('gamesNeedingRequests wants marked, unassigned, unlinked, not-yet-final gam
         { gameId: 'g5', officialRequested: true, status: 'final' },
     ];
     const linked = [{ tourny_game_id: 'g3' }];
-    assert.deepEqual(gamesNeedingRequests(games, linked).map((g) => g.gameId), ['g1']);
+    assert.deepStrictEqual(gamesNeedingRequests(games, linked).map((g) => g.gameId), ['g1']);
 });
 
 test('assignmentsToRepair finds pushes tourny never saw', () => {
@@ -38,7 +38,7 @@ test('assignmentsToRepair finds pushes tourny never saw', () => {
         { id: 3, status: 'Pending', tourny_game_id: 'g3' },
     ];
     const gamesById = { g1: { officialId: '' }, g2: { officialId: 'u2' } };
-    assert.deepEqual(assignmentsToRepair(requests, gamesById).map((r) => r.id), [1]);
+    assert.deepStrictEqual(assignmentsToRepair(requests, gamesById).map((r) => r.id), [1]);
 });
 
 test('requestsToComplete finds assigned requests whose game went final', () => {
@@ -47,20 +47,20 @@ test('requestsToComplete finds assigned requests whose game went final', () => {
         { id: 2, status: 'Assigned', tourny_game_id: 'g2' },
     ];
     const gamesById = { g1: { status: 'final' }, g2: { status: 'disputed' } };
-    assert.deepEqual(requestsToComplete(requests, gamesById).map((r) => r.id), [1]);
+    assert.deepStrictEqual(requestsToComplete(requests, gamesById).map((r) => r.id), [1]);
 });
 
 test('buildAutoDetails names the fixture', () => {
     const game = { week: 3, homeTeamId: 'tA', awayTeamId: 'tB' };
-    assert.equal(buildAutoDetails(game, { tA: 'Alpha', tB: 'Beta' }), 'Week 3: Alpha vs Beta');
-    assert.equal(buildAutoDetails(game, {}), 'Week 3: tA vs tB');
+    assert.strictEqual(buildAutoDetails(game, { tA: 'Alpha', tB: 'Beta' }), 'Week 3: Alpha vs Beta');
+    assert.strictEqual(buildAutoDetails(game, {}), 'Week 3: tA vs tB');
 });
 
 test('parseScore accepts whole numbers in range and nothing else', () => {
-    assert.equal(parseScore('42'), 42);
-    assert.equal(parseScore(' 0 '), 0);
-    assert.equal(parseScore('9999'), 9999);
+    assert.strictEqual(parseScore('42'), 42);
+    assert.strictEqual(parseScore(' 0 '), 0);
+    assert.strictEqual(parseScore('9999'), 9999);
     for (const bad of ['', '-1', '10000', 'abc', '1.5', null, undefined]) {
-        assert.equal(parseScore(bad), null);
+        assert.strictEqual(parseScore(bad), null);
     }
 });
