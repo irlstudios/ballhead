@@ -1158,6 +1158,11 @@ const ensureLeagueOfficialsSchema = async () => {
     }
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_tourny_game ON league_official_requests (tourny_game_id)').catch(() => {});
 
+    // Bounds fetchRecentDeniedLinkedRequests to a recent window: Denied is
+    // terminal, so without a timestamp every request ever denied would be
+    // fetched and re-listGames'd forever.
+    await executeQuery('ALTER TABLE league_official_requests ADD COLUMN IF NOT EXISTS denied_at TIMESTAMPTZ').catch(() => {});
+
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS league_game_reports (
             id SERIAL PRIMARY KEY,
@@ -1321,14 +1326,17 @@ const fetchRequestByTournyGame = async (tournyGuildId, tournyGameId) => {
 };
 
 // Denied requests still linked to a tourny game, for the sync sweep's
-// stale-clear pass (a failed clearOfficial push after denial). No denied_at
-// column exists yet to bound this to a recent window, so every Denied
-// linked row is returned; add a timestamp bound here if that ever needs
-// tightening.
+// stale-clear pass (a failed clearOfficial push after denial). Bounded to the
+// last 24 hours: Denied is terminal, so without this bound every request
+// ever denied would be re-fetched (and its season re-listGames'd) on every
+// sweep forever. Pre-existing rows with a null denied_at (denied before this
+// column existed) drop out immediately -- their clears either already
+// happened or are stale beyond repair either way.
 const fetchRecentDeniedLinkedRequests = async () => {
     const result = await executeQuery(
         `SELECT * FROM league_official_requests
-         WHERE status = 'Denied' AND tourny_game_id IS NOT NULL`
+         WHERE status = 'Denied' AND tourny_game_id IS NOT NULL
+           AND denied_at IS NOT NULL AND denied_at > NOW() - INTERVAL '24 hours'`
     );
     return result.rows;
 };
@@ -1350,7 +1358,7 @@ const assignOfficialRequest = async (id, officialId, assignedBy) => {
 const denyOfficialRequest = async (id, reason, deniedBy) => {
     const result = await executeQuery(
         `UPDATE league_official_requests
-         SET status = 'Denied', denial_reason = $2, denied_by = $3
+         SET status = 'Denied', denial_reason = $2, denied_by = $3, denied_at = NOW()
          WHERE id = $1 AND status IN ('Pending', 'Assigned')
          RETURNING *`,
         [id, reason || null, deniedBy]
@@ -1367,7 +1375,7 @@ const denyOfficialRequest = async (id, reason, deniedBy) => {
 const cancelPendingOfficialRequest = async (id, reason, actor) => {
     const result = await executeQuery(
         `UPDATE league_official_requests
-         SET status = 'Denied', denial_reason = $2, denied_by = $3
+         SET status = 'Denied', denial_reason = $2, denied_by = $3, denied_at = NOW()
          WHERE id = $1 AND status = 'Pending'
          RETURNING *`,
         [id, reason || null, actor]
