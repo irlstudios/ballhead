@@ -6,8 +6,25 @@ const assert = require('node:assert');
 const {
     pickActiveSeason, gamesNeedingRequests, assignmentsToRepair,
     requestsToComplete, requestsToCancel, requestsToClear,
-    gamesEligibleForRequest, buildAutoDetails, parseScore,
+    gamesEligibleForRequest, buildAutoDetails, parseScore, dashboardGameLink,
 } = require('../utils/tourny_sync');
+
+// Saves/restores TOURNY_DASHBOARD_URL around a test body, mirroring
+// test/reengagement_job.test.js's env save/restore pattern.
+function withDashboardUrl(value, fn) {
+    const prev = process.env.TOURNY_DASHBOARD_URL;
+    if (value === undefined) {
+        delete process.env.TOURNY_DASHBOARD_URL;
+    } else {
+        process.env.TOURNY_DASHBOARD_URL = value;
+    }
+    try {
+        fn();
+    } finally {
+        if (prev === undefined) delete process.env.TOURNY_DASHBOARD_URL;
+        else process.env.TOURNY_DASHBOARD_URL = prev;
+    }
+}
 
 test('pickActiveSeason prefers the newest open season', () => {
     const seasons = [
@@ -140,4 +157,35 @@ test('parseScore accepts whole numbers in range and nothing else', () => {
     for (const bad of ['', '-1', '10000', 'abc', '1.5', null, undefined]) {
         assert.strictEqual(parseScore(bad), null);
     }
+});
+
+// --- dashboardGameLink ----------------------------------------------------
+
+test('dashboardGameLink builds a dashboard link for a linked request when the env is set', () => {
+    withDashboardUrl('https://dash.example.com', () => {
+        const request = { tourny_game_id: 'g1', tourny_guild_id: 'guild-1' };
+        assert.strictEqual(dashboardGameLink(request), 'https://dash.example.com/servers/guild-1 (game g1)');
+    });
+});
+
+test('dashboardGameLink is null for an unlinked request even when the env is set', () => {
+    withDashboardUrl('https://dash.example.com', () => {
+        assert.strictEqual(dashboardGameLink({}), null);
+        assert.strictEqual(dashboardGameLink({ tourny_game_id: 'g1' }), null);
+        assert.strictEqual(dashboardGameLink({ tourny_guild_id: 'guild-1' }), null);
+    });
+});
+
+test('dashboardGameLink is null when TOURNY_DASHBOARD_URL is unset', () => {
+    withDashboardUrl(undefined, () => {
+        const request = { tourny_game_id: 'g1', tourny_guild_id: 'guild-1' };
+        assert.strictEqual(dashboardGameLink(request), null);
+    });
+});
+
+test('dashboardGameLink normalizes a trailing slash on the env URL', () => {
+    withDashboardUrl('https://dash.example.com/', () => {
+        const request = { tourny_game_id: 'g2', tourny_guild_id: 'guild-2' };
+        assert.strictEqual(dashboardGameLink(request), 'https://dash.example.com/servers/guild-2 (game g2)');
+    });
 });

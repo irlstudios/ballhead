@@ -109,10 +109,16 @@ async function syncLeague(client, league, allLinked, allDenied) {
         // helpers already catch and log .message-only internally, so a
         // Discord-side failure here cannot fail the sweep.
         await updateOpsCard(client, completed, league.league_name);
+        // null when TOURNY_DASHBOARD_URL is unset; filter(Boolean) inside
+        // buildTextBlock drops a null line, so the DM is unchanged then.
+        const viewLink = sync.dashboardGameLink(completed);
         await dmUser(client, completed.requested_by, {
             title: 'Game Verified',
             subtitle: league.league_name,
-            lines: [`Your official request #${completed.id} is complete and the game is verified.`],
+            lines: [
+                `Your official request #${completed.id} is complete and the game is verified.`,
+                viewLink && `See the result and box score: ${viewLink}`,
+            ],
         });
     }
     for (const request of sync.requestsToCancel(mine, gamesById)) {

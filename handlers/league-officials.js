@@ -20,7 +20,7 @@ const {
 } = require('discord.js');
 const logger = require('../utils/logger');
 const tourny = require('../utils/tourny_client');
-const { parseScore } = require('../utils/tourny_sync');
+const { parseScore, dashboardGameLink } = require('../utils/tourny_sync');
 const { noticePayload, buildTextBlock } = require('../utils/ui');
 const { LEAGUE_OFFICIALS_CHANNEL_ID, GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 const {
@@ -418,13 +418,19 @@ async function handleReportSubmit(interaction, requestId) {
     logger.info(`[Officials] Request ${requestId} completed by ${interaction.user.id} (league ${completed.league_id})`);
     const league = await fetchLeagueById(completed.league_id);
     const summary = await getLeagueGamesSummary(completed.league_id);
+    // null for unlinked requests or an unset TOURNY_DASHBOARD_URL; the
+    // filter(Boolean) inside buildTextBlock drops a null line, so the
+    // notice/DM are byte-for-byte unchanged in that case.
+    const dashboardLink = dashboardGameLink(completed);
+    const statsLine = dashboardLink && `Add player stats on the league dashboard: ${dashboardLink}`;
+    const viewLine = dashboardLink && `See the result and box score: ${dashboardLink}`;
     await updateOpsCard(interaction.client, completed, league?.league_name, [buildGamesSummaryLine(summary)]);
     await dmUser(interaction.client, completed.requested_by, {
         title: 'Game Verified',
         subtitle: league?.league_name,
-        lines: [`Your official request #${requestId} is complete and the game is verified.`, buildGamesSummaryLine(summary)],
+        lines: [`Your official request #${requestId} is complete and the game is verified.`, buildGamesSummaryLine(summary), viewLine],
     });
-    return editNotice(interaction, ['Report recorded. This game is now verified.', buildGamesSummaryLine(summary)], 'Report Submitted');
+    return editNotice(interaction, ['Report recorded. This game is now verified.', buildGamesSummaryLine(summary), statsLine], 'Report Submitted');
 }
 
 module.exports = {

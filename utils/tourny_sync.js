@@ -107,6 +107,22 @@ function parseScore(value) {
     return Number(trimmed);
 }
 
+// Dashboard link for a linked request's game, so completion messages can
+// point officials/requesters at the box score / stats surface tourny owns
+// (see docs/superpowers/specs/2026-07-31-modal-stat-lines-design.md). Env is
+// read per-call, not at require time like tourny_client.js, so tests can
+// set/unset TOURNY_DASHBOARD_URL without a fresh module. Returns the
+// composed "<base>/servers/<guildId> (game <gameId>)" string, or null when
+// the request isn't linked (either tourny id missing) or the env var isn't
+// set -- callers skip the stats-nudge line entirely on null.
+function dashboardGameLink(request) {
+    const base = (process.env.TOURNY_DASHBOARD_URL || '').replace(/\/$/, '');
+    if (!base || !request?.tourny_game_id || !request?.tourny_guild_id) {
+        return null;
+    }
+    return `${base}/servers/${request.tourny_guild_id} (game ${request.tourny_game_id})`;
+}
+
 module.exports = {
     pickActiveSeason,
     gamesNeedingRequests,
@@ -117,4 +133,5 @@ module.exports = {
     gamesEligibleForRequest,
     buildAutoDetails,
     parseScore,
+    dashboardGameLink,
 };
