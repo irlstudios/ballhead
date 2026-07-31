@@ -145,17 +145,40 @@ function dashboardGameLink(request) {
     return `${base}/servers/${request.tourny_guild_id} (game ${request.tourny_game_id})`;
 }
 
+// Trims a string to at most maxBytes of UTF-8, without splitting a
+// multi-byte sequence or a UTF-16 surrogate pair. Tourny validates field
+// length in Go with len() (bytes), so a naive String.slice (UTF-16 code
+// units) can pass a local check yet still 400 on a multibyte name/sport
+// (CJK, Cyrillic, emoji). Iterating by code point (for...of) keeps every
+// surrogate pair intact and only ever adds a whole code point at a time.
+function truncateUtf8(value, maxBytes) {
+    const str = String(value || '');
+    let bytes = 0;
+    let result = '';
+    for (const ch of str) {
+        const chBytes = Buffer.byteLength(ch, 'utf8');
+        if (bytes + chBytes > maxBytes) {
+            break;
+        }
+        bytes += chBytes;
+        result += ch;
+    }
+    return result;
+}
+
 // Shapes ballhead's roster rows into the wire body tourny's PUT
 // /private/guilds/{gid}/officials-roster expects. Truncated/capped
 // defensively here so a local oversize (a long staff-typed name, a roster
 // that grew past 200) can never turn into a 400 from tourny -- the endpoint
 // validates too, but this makes the push always well-formed on the way out.
+// The non-empty-name fallback is applied AFTER truncation: a name that
+// truncates down to nothing falls back to the id, not before.
 function projectRoster(rows) {
     return (rows || []).slice(0, 200).map((row) => {
         const id = String(row.discord_id);
-        const name = (row.discord_name || '').trim() || id;
-        const sport = row.sport || '';
-        return { id, name: name.slice(0, 100), sport: sport.slice(0, 60) };
+        const name = truncateUtf8((row.discord_name || '').trim(), 100) || id;
+        const sport = truncateUtf8(row.sport || '', 60);
+        return { id, name, sport };
     });
 }
 
@@ -180,6 +203,7 @@ module.exports = {
     buildAutoDetails,
     parseScore,
     dashboardGameLink,
+    truncateUtf8,
     projectRoster,
     rosterHash,
 };
