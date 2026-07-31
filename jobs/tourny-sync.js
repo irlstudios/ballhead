@@ -11,7 +11,7 @@ const {
     deleteOfficialRequest,
     completeOfficialRequestWithReport,
 } = require('../db');
-const { postOfficialRequestCard } = require('../handlers/league-officials');
+const { postOfficialRequestCard, updateOpsCard, dmUser } = require('../handlers/league-officials');
 
 // One sweep of every active league's tourny games:
 //   marked games        -> create a linked request + ops card
@@ -64,11 +64,25 @@ async function syncLeague(client, league, allLinked) {
         logger.info(`[TournySync] repaired assignment push for request ${request.id}`);
     }
     for (const request of sync.requestsToComplete(mine, gamesById)) {
-        await completeOfficialRequestWithReport(request.id, request.assigned_official_id, {
+        const completed = await completeOfficialRequestWithReport(request.id, request.assigned_official_id, {
             proofUrl: `${process.env.TOURNY_DASHBOARD_URL || ''}/servers/${guildId}`,
             notes: 'Result verified in the tourny dashboard.',
         });
+        if (!completed) {
+            // Claim already lost to a concurrent completion; nothing to notify.
+            continue;
+        }
         logger.info(`[TournySync] completed request ${request.id} (game final in tourny)`);
+        // Mirror the staff report-submit path (handlers/league-officials.js):
+        // flip the ops card to its terminal state and DM the requester. Both
+        // helpers already catch and log .message-only internally, so a
+        // Discord-side failure here cannot fail the sweep.
+        await updateOpsCard(client, completed, league.league_name);
+        await dmUser(client, completed.requested_by, {
+            title: 'Game Verified',
+            subtitle: league.league_name,
+            lines: [`Your official request #${completed.id} is complete and the game is verified.`],
+        });
     }
 }
 

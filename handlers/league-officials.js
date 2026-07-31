@@ -356,6 +356,8 @@ async function handleReportSubmit(interaction, requestId) {
 
 module.exports = {
     postOfficialRequestCard,
+    updateOpsCard,
+    dmUser,
     handleOfficialsButton,
     handleOfficialsSelect,
     handleOfficialsModal,
