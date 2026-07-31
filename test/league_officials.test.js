@@ -9,6 +9,7 @@ const {
     isValidHttpUrl,
     officialRequestEligibility,
     atOpenRequestCap,
+    canApproveOfficialRequest,
     canSubmitReport,
     officialMatchesSport,
     buildRequestCardLines,
@@ -84,6 +85,34 @@ test('caps open requests at the max', () => {
     assert.strictEqual(atOpenRequestCap(MAX_OPEN_REQUESTS_PER_LEAGUE - 1), false);
     assert.strictEqual(atOpenRequestCap(MAX_OPEN_REQUESTS_PER_LEAGUE), true);
     assert.strictEqual(atOpenRequestCap(MAX_OPEN_REQUESTS_PER_LEAGUE + 3), true);
+});
+
+// --- canApproveOfficialRequest ------------------------------------------------
+
+const gcGuildId = 'gc-guild';
+const cdRoleId = 'cd-role';
+const gcCfg = Object.freeze({ gcGuildId, cdRoleId });
+
+test('allows a Community Director acting in the Gym Class guild', () => {
+    const memberRoleIds = new Set([cdRoleId, 'other-role']);
+    assert.strictEqual(canApproveOfficialRequest({ guildId: gcGuildId, memberRoleIds }, gcCfg), true);
+});
+
+test('blocks the right guild without the Community Director role', () => {
+    const memberRoleIds = new Set(['some-other-role']);
+    assert.strictEqual(canApproveOfficialRequest({ guildId: gcGuildId, memberRoleIds }, gcCfg), false);
+});
+
+test('blocks the Community Director role held in the wrong guild', () => {
+    const memberRoleIds = new Set([cdRoleId]);
+    assert.strictEqual(canApproveOfficialRequest({ guildId: 'some-other-guild', memberRoleIds }, gcCfg), false);
+});
+
+test('blocks a missing member or roles collection', () => {
+    assert.strictEqual(canApproveOfficialRequest({ guildId: gcGuildId, memberRoleIds: undefined }, gcCfg), false);
+    assert.strictEqual(canApproveOfficialRequest({ guildId: gcGuildId, memberRoleIds: null }, gcCfg), false);
+    assert.strictEqual(canApproveOfficialRequest({ guildId: gcGuildId }, gcCfg), false);
+    assert.strictEqual(canApproveOfficialRequest({}, gcCfg), false);
 });
 
 // --- canSubmitReport ---------------------------------------------------------

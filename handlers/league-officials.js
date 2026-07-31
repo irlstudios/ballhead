@@ -17,13 +17,12 @@ const {
     TextInputStyle,
     MessageFlags,
     ContainerBuilder,
-    PermissionsBitField,
 } = require('discord.js');
 const logger = require('../utils/logger');
 const tourny = require('../utils/tourny_client');
 const { parseScore } = require('../utils/tourny_sync');
 const { noticePayload, buildTextBlock } = require('../utils/ui');
-const { LEAGUE_OFFICIALS_CHANNEL_ID } = require('../config/constants');
+const { LEAGUE_OFFICIALS_CHANNEL_ID, GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 const {
     fetchLeagueById,
     fetchAvailableOfficials,
@@ -35,6 +34,7 @@ const {
 } = require('../db');
 const {
     REQUEST_STATUS,
+    canApproveOfficialRequest,
     canSubmitReport,
     isValidHttpUrl,
     buildRequestCardLines,
@@ -42,9 +42,15 @@ const {
 } = require('../utils/league_officials');
 
 const SUBTITLE = 'League Officials';
+const CD_REQUIRED_MESSAGE = 'You need the Community Director role in the Gym Class server to do that.';
 
+// Thin adapter over the pure decision in utils/league_officials.js: only the
+// Discord shape (guildId, member.roles.cache) lives here.
 function staffCanManage(interaction) {
-    return Boolean(interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles));
+    return canApproveOfficialRequest(
+        { guildId: interaction.guildId, memberRoleIds: interaction.member?.roles?.cache },
+        { gcGuildId: GYM_CLASS_GUILD_ID, cdRoleId: GC_CD_ROLE_ID }
+    );
 }
 
 // Reply on a not-yet-deferred interaction.
@@ -151,7 +157,7 @@ async function handleOfficialsButton(interaction) {
 
 async function showAssignSelect(interaction, requestId) {
     if (!staffCanManage(interaction)) {
-        return ephemeralNotice(interaction, 'You do not have permission to assign officials.', 'Permission Denied');
+        return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
     const request = await fetchOfficialRequestById(requestId);
     if (!request) {
@@ -196,7 +202,7 @@ async function showAssignSelect(interaction, requestId) {
 
 async function showDenyModal(interaction, requestId) {
     if (!staffCanManage(interaction)) {
-        return ephemeralNotice(interaction, 'You do not have permission to deny requests.', 'Permission Denied');
+        return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
     const modal = new ModalBuilder().setCustomId(`official:denymodal:${requestId}`).setTitle('Deny Official Request');
     const reason = new TextInputBuilder()
@@ -259,7 +265,7 @@ async function handleOfficialsSelect(interaction) {
         return;
     }
     if (!staffCanManage(interaction)) {
-        return ephemeralNotice(interaction, 'You do not have permission to assign officials.', 'Permission Denied');
+        return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
     await interaction.deferReply({ ephemeral: true });
 
@@ -325,7 +331,7 @@ async function handleOfficialsModal(interaction) {
 
 async function handleDenySubmit(interaction, requestId) {
     if (!staffCanManage(interaction)) {
-        return ephemeralNotice(interaction, 'You do not have permission to deny requests.', 'Permission Denied');
+        return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
     await interaction.deferReply({ ephemeral: true });
     const reason = interaction.fields.getTextInputValue('reason');

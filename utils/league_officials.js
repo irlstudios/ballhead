@@ -105,6 +105,20 @@ function canSubmitReport(request, userId) {
     return ALLOW;
 }
 
+// Approval gate for the ops-channel Assign/Deny buttons: staff must be acting
+// inside the Gym Class guild and hold the Community Director role there. Pure
+// so the handler wrapper (staffCanManage) stays a thin adapter over
+// interaction.guildId / interaction.member.roles.cache.
+function canApproveOfficialRequest({ guildId, memberRoleIds } = {}, { gcGuildId, cdRoleId } = {}) {
+    if (guildId !== gcGuildId) {
+        return false;
+    }
+    if (!memberRoleIds || typeof memberRoleIds.has !== 'function') {
+        return false;
+    }
+    return memberRoleIds.has(cdRoleId);
+}
+
 // A roster official can be offered for a request when they are active and their
 // sport is "Any" or matches the request's sport (case-insensitive).
 function officialMatchesSport(rosterSport, requestSport) {
@@ -149,6 +163,7 @@ module.exports = {
     isValidHttpUrl,
     officialRequestEligibility,
     atOpenRequestCap,
+    canApproveOfficialRequest,
     canSubmitReport,
     officialMatchesSport,
     buildRequestCardLines,

@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const { GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 
 // Mocks db.js, utils/tourny_client.js and utils/logger.js by swapping the
 // module cache entry before handlers/league-officials is first required
@@ -63,7 +64,8 @@ test('assigning an official DMs both the official and the requester', async () =
     const interaction = {
         customId: 'official:assignselect:5',
         values: ['official-9'],
-        member: { permissions: { has: () => true } },
+        guildId: GYM_CLASS_GUILD_ID,
+        member: { roles: { cache: new Set([GC_CD_ROLE_ID]) } },
         user: { id: 'staff-1' },
         client: fakeClient,
         deferReply: async () => {},
