@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 // Pure decisions for the tourny sync loop, in the utils/league_officials.js
 // style: no HTTP, no DB, no Discord, so every rule is testable without mocks.
 // The job (jobs/tourny-sync.js) and the handler pushes act on what these say.
@@ -143,6 +145,29 @@ function dashboardGameLink(request) {
     return `${base}/servers/${request.tourny_guild_id} (game ${request.tourny_game_id})`;
 }
 
+// Shapes ballhead's roster rows into the wire body tourny's PUT
+// /private/guilds/{gid}/officials-roster expects. Truncated/capped
+// defensively here so a local oversize (a long staff-typed name, a roster
+// that grew past 200) can never turn into a 400 from tourny -- the endpoint
+// validates too, but this makes the push always well-formed on the way out.
+function projectRoster(rows) {
+    return (rows || []).slice(0, 200).map((row) => {
+        const id = String(row.discord_id);
+        const name = (row.discord_name || '').trim() || id;
+        const sport = row.sport || '';
+        return { id, name: name.slice(0, 100), sport: sport.slice(0, 60) };
+    });
+}
+
+// Stable, order-insensitive fingerprint of a projected roster: sort by id so
+// the same set in different row order hashes identically, then sha1 the JSON.
+// Not security-sensitive -- just cheap change detection for the sweep's skip
+// check -- so sha1 is fine.
+function rosterHash(officials) {
+    const sorted = [...(officials || [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    return crypto.createHash('sha1').update(JSON.stringify(sorted)).digest('hex');
+}
+
 module.exports = {
     pickActiveSeason,
     seasonsToService,
@@ -155,4 +180,6 @@ module.exports = {
     buildAutoDetails,
     parseScore,
     dashboardGameLink,
+    projectRoster,
+    rosterHash,
 };

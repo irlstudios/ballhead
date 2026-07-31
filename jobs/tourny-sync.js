@@ -13,6 +13,7 @@ const {
     deleteOfficialRequest,
     completeOfficialRequestWithReport,
     cancelPendingOfficialRequest,
+    listRosterOfficials,
 } = require('../db');
 const { postOfficialRequestCard, updateOpsCard, dmUser } = require('../handlers/league-officials');
 
@@ -20,6 +21,11 @@ const { postOfficialRequestCard, updateOpsCard, dmUser } = require('../handlers/
 // the 5-minute interval must not run a second cycle on top of the first and
 // double-create cards/DMs.
 let running = false;
+
+// Fingerprint of the officials roster last successfully pushed to every
+// serviced guild. Module-scoped, so it resets on process restart -- costing
+// one redundant push burst per restart, which the idempotent PUT absorbs.
+let lastRosterHash = null;
 
 // One sweep of every active league's tourny games:
 //   marked games          -> create a linked request + ops card
@@ -50,6 +56,7 @@ async function runTournySync(client) {
             logger.error('[TournySync] sweep aborted, cannot read own DB:', error.message);
             return;
         }
+        await syncOfficialsRoster(leagues);
         for (const league of leagues) {
             if (!league.server_id) {
                 continue;
@@ -63,6 +70,49 @@ async function runTournySync(client) {
         }
     } finally {
         running = false;
+    }
+}
+
+// Mirrors ballhead's active officials roster to every guild the sweep
+// services, so tourny's dashboard can show managers who the hub's officials
+// are (docs/superpowers/specs/2026-07-31-officials-roster-visibility-design.md).
+// Runs once per sweep, before the per-league loop, and is skipped outright
+// when the roster's content hasn't changed since the last fully-successful
+// push. lastRosterHash only advances when every push attempted this sweep
+// succeeded, so one unreachable guild costs a retry, not a stale roster
+// everywhere else.
+async function syncOfficialsRoster(leagues) {
+    let rows;
+    try {
+        rows = await listRosterOfficials();
+    } catch (error) {
+        logger.error('[TournySync] roster pass aborted, cannot read own DB:', error.message);
+        return;
+    }
+    const officials = sync.projectRoster(rows);
+    const hash = sync.rosterHash(officials);
+    if (hash === lastRosterHash) {
+        return;
+    }
+    const guildIds = [...new Set((leagues || []).filter((l) => l.server_id).map((l) => l.server_id))];
+    if (!guildIds.length) {
+        // Nothing to push to yet; leave lastRosterHash untouched so a league
+        // showing up later still gets the current roster pushed.
+        return;
+    }
+    let allOk = true;
+    for (const guildId of guildIds) {
+        try {
+            await tourny.putOfficialsRoster(guildId, officials);
+        } catch (error) {
+            // err.message only -- the raw axios error carries the API key in
+            // its request config.
+            allOk = false;
+            logger.error(`[TournySync] roster push failed for guild ${guildId}:`, error.message);
+        }
+    }
+    if (allOk) {
+        lastRosterHash = hash;
     }
 }
 

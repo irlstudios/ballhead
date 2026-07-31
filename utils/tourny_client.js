@@ -43,8 +43,12 @@ const reportAsOfficial = (guildId, gameId, { seasonId, actorId, homeScore, awayS
 // happens through assignOfficial once staff pick someone.
 const requestOfficialMark = (guildId, gameId, seasonId, requestedBy) =>
     call('post', `/private/guilds/${guildId}/games/${gameId}/request-official`, { seasonId, requestedBy });
+// Full replace of the hub officials roster tourny shows for this guild, from
+// the sweep's roster pass (utils/tourny_sync.js). officials: [{id, name, sport}].
+const putOfficialsRoster = (guildId, officials) =>
+    call('put', `/private/guilds/${guildId}/officials-roster`, { officials });
 
 module.exports = {
     enabled, listSeasons, listGames, listTeams, getGame,
-    assignOfficial, clearOfficial, reportAsOfficial, requestOfficialMark,
+    assignOfficial, clearOfficial, reportAsOfficial, requestOfficialMark, putOfficialsRoster,
 };

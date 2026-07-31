@@ -33,6 +33,8 @@ function resetState() {
     state.completeResult = null;
     state.cancelResult = null;
     state.leaguesGate = null;
+    state.rosterRows = [];
+    state.rosterPushFailFor = null; // guildId (or Set of guildIds) that should reject
     delete process.env.TOURNY_DASHBOARD_URL;
 }
 resetState();
@@ -63,6 +65,10 @@ installMock('../db', {
         calls.push(['cancelPendingOfficialRequest', id, reason, actor]);
         return state.cancelResult;
     },
+    listRosterOfficials: async () => {
+        calls.push(['listRosterOfficials']);
+        return state.rosterRows;
+    },
 });
 
 installMock('../utils/tourny_client', {
@@ -79,6 +85,12 @@ installMock('../utils/tourny_client', {
     assignOfficial: async (...args) => { calls.push(['assignOfficial', ...args]); },
     clearOfficial: async (...args) => { calls.push(['clearOfficial', ...args]); },
     reportAsOfficial: async () => {},
+    putOfficialsRoster: async (guildId, officials) => {
+        calls.push(['putOfficialsRoster', guildId, officials]);
+        if (state.rosterPushFailFor && state.rosterPushFailFor.has(guildId)) {
+            throw new Error(`push rejected for ${guildId}`);
+        }
+    },
 });
 
 installMock('../handlers/league-officials', {
@@ -96,6 +108,7 @@ installMock('../utils/logger', {
 const { runTournySync } = require('../jobs/tourny-sync');
 
 const league = Object.freeze({ league_id: 7, server_id: 'guild-1', league_name: 'Sky Ballers', owner_id: 'owner-1' });
+const league2 = Object.freeze({ league_id: 8, server_id: 'guild-2', league_name: 'Sky Ballers 2', owner_id: 'owner-2' });
 
 // --- FIX 4: overlap guard ----------------------------------------------------
 
@@ -276,4 +289,48 @@ test('a game marked officialRequested in a completed season does not spawn a new
     assert.ok(calls.some((c) => c[0] === 'listGames' && c[2] === 's0'));
     assert.ok(!calls.some((c) => c[0] === 'insertOfficialRequest'));
     assert.ok(!calls.some((c) => c[0] === 'fetchRequestByTournyGame'));
+});
+
+// --- officials roster sweep pass -----------------------------------------------
+
+test('roster pass pushes once on a content change, then skips an identical second sweep', async () => {
+    resetState();
+    state.leagues = [league];
+    state.rosterRows = [{ discord_id: '901', discord_name: 'Ref Uno', sport: 'Basketball' }];
+
+    await runTournySync({});
+    assert.strictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').length, 1);
+
+    calls.length = 0;
+    await runTournySync({}); // same rosterRows -> same hash -> pass skipped
+    assert.strictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').length, 0);
+});
+
+test('roster pass pushes the projected roster to every serviced league on a content change', async () => {
+    resetState();
+    state.leagues = [league, league2];
+    state.rosterRows = [{ discord_id: '902', discord_name: 'Ref Dos', sport: 'Basketball' }];
+
+    await runTournySync({});
+
+    const pushes = calls.filter((c) => c[0] === 'putOfficialsRoster');
+    assert.deepStrictEqual(pushes.map((c) => c[1]).sort(), ['guild-1', 'guild-2']);
+    for (const push of pushes) {
+        assert.deepStrictEqual(push[2], [{ id: '902', name: 'Ref Dos', sport: 'Basketball' }]);
+    }
+});
+
+test('roster pass leaves the hash unchanged when one serviced guild rejects the push, so the next sweep retries all', async () => {
+    resetState();
+    state.leagues = [league, league2];
+    state.rosterRows = [{ discord_id: '903', discord_name: 'Ref Tres', sport: 'Basketball' }];
+    state.rosterPushFailFor = new Set(['guild-2']);
+
+    await runTournySync({});
+    assert.strictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').length, 2);
+
+    calls.length = 0;
+    state.rosterPushFailFor = null; // guild-2 recovers, but hash never advanced last sweep
+    await runTournySync({});
+    assert.strictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').length, 2);
 });

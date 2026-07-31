@@ -7,6 +7,7 @@ const {
     pickActiveSeason, seasonsToService, gamesNeedingRequests, assignmentsToRepair,
     requestsToComplete, requestsToCancel, requestsToClear,
     gamesEligibleForRequest, buildAutoDetails, parseScore, dashboardGameLink,
+    projectRoster, rosterHash,
 } = require('../utils/tourny_sync');
 
 // Saves/restores TOURNY_DASHBOARD_URL around a test body, mirroring
@@ -216,4 +217,64 @@ test('dashboardGameLink normalizes a trailing slash on the env URL', () => {
         const request = { tourny_game_id: 'g2', tourny_guild_id: 'guild-2' };
         assert.strictEqual(dashboardGameLink(request), 'https://dash.example.com/servers/guild-2 (game g2)');
     });
+});
+
+// --- projectRoster ---------------------------------------------------------
+
+test('projectRoster maps ballhead roster rows to the wire shape', () => {
+    const rows = [{ discord_id: '111', discord_name: 'Ref Bob', sport: 'Basketball' }];
+    assert.deepStrictEqual(projectRoster(rows), [{ id: '111', name: 'Ref Bob', sport: 'Basketball' }]);
+});
+
+test('projectRoster falls back name to the id and sport to empty string', () => {
+    const rows = [
+        { discord_id: '222', discord_name: '', sport: null },
+        { discord_id: '333', discord_name: null, sport: undefined },
+        { discord_id: '444', discord_name: '   ', sport: 'Any' },
+    ];
+    assert.deepStrictEqual(projectRoster(rows), [
+        { id: '222', name: '222', sport: '' },
+        { id: '333', name: '333', sport: '' },
+        { id: '444', name: '444', sport: 'Any' },
+    ]);
+});
+
+test('projectRoster truncates name to 100 chars and sport to 60', () => {
+    const rows = [{ discord_id: '555', discord_name: 'x'.repeat(150), sport: 'y'.repeat(90) }];
+    const [projected] = projectRoster(rows);
+    assert.strictEqual(projected.name.length, 100);
+    assert.strictEqual(projected.sport.length, 60);
+});
+
+test('projectRoster caps at 200 entries', () => {
+    const rows = Array.from({ length: 250 }, (_, i) => ({ discord_id: String(i), discord_name: `n${i}`, sport: '' }));
+    assert.strictEqual(projectRoster(rows).length, 200);
+});
+
+test('projectRoster handles empty/missing input', () => {
+    assert.deepStrictEqual(projectRoster([]), []);
+    assert.deepStrictEqual(projectRoster(null), []);
+    assert.deepStrictEqual(projectRoster(undefined), []);
+});
+
+// --- rosterHash -------------------------------------------------------------
+
+test('rosterHash is stable and order-insensitive for the same set', () => {
+    const a = [{ id: '1', name: 'A', sport: 'X' }, { id: '2', name: 'B', sport: 'Y' }];
+    const b = [{ id: '2', name: 'B', sport: 'Y' }, { id: '1', name: 'A', sport: 'X' }];
+    assert.strictEqual(rosterHash(a), rosterHash(b));
+});
+
+test('rosterHash changes when roster content changes', () => {
+    const a = [{ id: '1', name: 'A', sport: 'X' }];
+    const b = [{ id: '1', name: 'A changed', sport: 'X' }];
+    const c = [];
+    assert.notStrictEqual(rosterHash(a), rosterHash(b));
+    assert.notStrictEqual(rosterHash(a), rosterHash(c));
+});
+
+test('rosterHash does not mutate its input while sorting', () => {
+    const officials = [{ id: '2', name: 'B', sport: 'Y' }, { id: '1', name: 'A', sport: 'X' }];
+    rosterHash(officials);
+    assert.strictEqual(officials[0].id, '2');
 });
