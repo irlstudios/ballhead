@@ -301,6 +301,11 @@ async function handleOfficialsSelect(interaction) {
     logger.info(`[Officials] Request ${requestId} assigned to ${officialId} by ${interaction.user.id} (league ${league.league_id})`);
     await updateOpsCard(interaction.client, assigned, league.league_name);
     await dmAssignedOfficial(interaction.client, assigned, league.league_name);
+    await dmUser(interaction.client, assigned.requested_by, {
+        title: 'Official Assigned',
+        subtitle: league.league_name,
+        lines: [`Your official request #${requestId} has been assigned to <@${officialId}>.`],
+    });
     return editNotice(interaction, `Assigned <@${officialId}> to request #${requestId}. They have been DMed a report button.`, 'Official Assigned');
 }
 
