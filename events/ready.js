@@ -324,7 +324,8 @@ module.exports = {
         }, { timezone: 'America/Chicago' });
 
         // Every 5 minutes: tourny officials sync. No-op unless TOURNY_API_URL /
-        // TOURNY_API_KEY are set.
+        // TOURNY_API_KEY are set. TOURNY_DASHBOARD_URL is optional -- proof
+        // links fall back to a fixed sentinel string when it is unset.
         cron.schedule('*/5 * * * *', async () => {
             try {
                 await runTournySync(client);

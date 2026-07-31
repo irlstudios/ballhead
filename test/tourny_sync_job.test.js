@@ -104,6 +104,23 @@ test('runTournySync ignores a re-entrant call while a sweep is already in flight
     assert.match(warnLines[0], /still running/i);
 });
 
+// --- FIX 5: dedupe recheck ----------------------------------------------------
+
+test('createLinkedRequest skips the insert when a linked request already exists for the game', async () => {
+    resetState();
+    state.leagues = [league];
+    state.games = [{ gameId: 'g1', officialRequested: true, status: 'scheduled' }];
+    state.existingRequest = { id: 55 };
+
+    await runTournySync({});
+
+    assert.deepStrictEqual(
+        calls.find((c) => c[0] === 'fetchRequestByTournyGame'),
+        ['fetchRequestByTournyGame', 'guild-1', 'g1']
+    );
+    assert.ok(!calls.some((c) => c[0] === 'insertOfficialRequest'));
+});
+
 // --- FIX 2: cancel-stale-pending sweep pass ------------------------------------
 
 test('sweep cancels a Pending request whose game settled without an official', async () => {
@@ -148,4 +165,33 @@ test('sweep is a no-op skip when tourny already shows the denied game cleared (i
     await runTournySync({});
 
     assert.ok(!calls.some((c) => c[0] === 'clearOfficial'));
+});
+
+// --- FIX 6: proofUrl fallback --------------------------------------------------
+
+test('completion falls back to a sentinel proofUrl when TOURNY_DASHBOARD_URL is unset', async () => {
+    resetState();
+    state.leagues = [league];
+    state.games = [{ gameId: 'g4', status: 'final', officialId: 'off-1' }];
+    state.linked = [{ id: 20, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'g4', tourny_season_id: 's1', assigned_official_id: 'off-1' }];
+    state.completeResult = { id: 20, requested_by: 'req-20' };
+
+    await runTournySync({});
+
+    const [, , , report] = calls.find((c) => c[0] === 'completeOfficialRequestWithReport');
+    assert.strictEqual(report.proofUrl, 'verified-in-tourny-dashboard');
+});
+
+test('completion builds a dashboard proofUrl when TOURNY_DASHBOARD_URL is set', async () => {
+    resetState();
+    process.env.TOURNY_DASHBOARD_URL = 'https://dash.example.com';
+    state.leagues = [league];
+    state.games = [{ gameId: 'g5', status: 'final', officialId: 'off-1' }];
+    state.linked = [{ id: 21, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'g5', tourny_season_id: 's1', assigned_official_id: 'off-1' }];
+    state.completeResult = { id: 21, requested_by: 'req-21' };
+
+    await runTournySync({});
+
+    const [, , , report] = calls.find((c) => c[0] === 'completeOfficialRequestWithReport');
+    assert.strictEqual(report.proofUrl, 'https://dash.example.com/servers/guild-1');
 });

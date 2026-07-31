@@ -7,6 +7,7 @@ const {
     fetchActiveLeagues,
     fetchOpenLinkedRequests,
     fetchRecentDeniedLinkedRequests,
+    fetchRequestByTournyGame,
     insertOfficialRequest,
     setOfficialRequestOpsMessage,
     deleteOfficialRequest,
@@ -77,6 +78,10 @@ async function syncLeague(client, league, allLinked, allDenied) {
     const mine = allLinked.filter((r) => r.tourny_guild_id === guildId);
     const mineDenied = allDenied.filter((r) => r.tourny_guild_id === guildId);
 
+    // Auto-created from a tourny-marked game, so it deliberately bypasses the
+    // per-league open-request cap that /request-official enforces: these are
+    // staff-visible work items tourny already knows about, not user-initiated
+    // spam a cap needs to police.
     for (const game of sync.gamesNeedingRequests(games, mine)) {
         await createLinkedRequest(client, league, season, game, guildId);
     }
@@ -89,8 +94,9 @@ async function syncLeague(client, league, allLinked, allDenied) {
         logger.info(`[TournySync] repaired deny/clear push for request ${request.id}`);
     }
     for (const request of sync.requestsToComplete(mine, gamesById)) {
+        const dashboardUrl = process.env.TOURNY_DASHBOARD_URL;
         const completed = await completeOfficialRequestWithReport(request.id, request.assigned_official_id, {
-            proofUrl: `${process.env.TOURNY_DASHBOARD_URL || ''}/servers/${guildId}`,
+            proofUrl: dashboardUrl ? `${dashboardUrl}/servers/${guildId}` : 'verified-in-tourny-dashboard',
             notes: 'Result verified in the tourny dashboard.',
         });
         if (!completed) {
@@ -127,6 +133,14 @@ async function syncLeague(client, league, allLinked, allDenied) {
 }
 
 async function createLinkedRequest(client, league, season, game, guildId) {
+    // Just-before-insert recheck: closes the same-sweep duplicate window when
+    // two Active league rows share one server_id, so both would otherwise
+    // pass gamesNeedingRequests off the same linked-request snapshot before
+    // either one's insert lands.
+    const existing = await fetchRequestByTournyGame(guildId, game.gameId);
+    if (existing) {
+        return;
+    }
     let teamNames = {};
     try {
         const teams = (await tourny.listTeams(guildId)).teams || [];
