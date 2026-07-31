@@ -21,6 +21,7 @@ const {
 } = require('discord.js');
 const logger = require('../utils/logger');
 const tourny = require('../utils/tourny_client');
+const { parseScore } = require('../utils/tourny_sync');
 const { noticePayload, buildTextBlock } = require('../utils/ui');
 const { LEAGUE_OFFICIALS_CHANNEL_ID } = require('../config/constants');
 const {
@@ -221,18 +222,32 @@ async function showReportModal(interaction, requestId) {
     const rules = new TextInputBuilder()
         .setCustomId('rules').setLabel('Rules doc URL (optional)')
         .setStyle(TextInputStyle.Short).setRequired(false).setPlaceholder('https://...');
-    const score = new TextInputBuilder()
-        .setCustomId('score').setLabel('Final score / result (optional)')
-        .setStyle(TextInputStyle.Short).setRequired(false);
     const notes = new TextInputBuilder()
         .setCustomId('notes').setLabel('Notes (optional)')
         .setStyle(TextInputStyle.Paragraph).setRequired(false);
-    modal.addComponents(
-        new ActionRowBuilder().addComponents(proof),
-        new ActionRowBuilder().addComponents(rules),
-        new ActionRowBuilder().addComponents(score),
-        new ActionRowBuilder().addComponents(notes),
-    );
+
+    // Linked requests swap the free-text score for two numeric inputs so the
+    // tourny game can be settled with a real result. 5 rows is the modal cap
+    // (proof, rules, home_score, away_score, notes), so unlinked requests
+    // keep the original free-text score field instead.
+    const rows = [new ActionRowBuilder().addComponents(proof), new ActionRowBuilder().addComponents(rules)];
+    if (request.tourny_game_id) {
+        const homeScore = new TextInputBuilder()
+            .setCustomId('home_score').setLabel('Home team score')
+            .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4);
+        const awayScore = new TextInputBuilder()
+            .setCustomId('away_score').setLabel('Away team score')
+            .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4);
+        rows.push(new ActionRowBuilder().addComponents(homeScore), new ActionRowBuilder().addComponents(awayScore));
+    } else {
+        const score = new TextInputBuilder()
+            .setCustomId('score').setLabel('Final score / result (optional)')
+            .setStyle(TextInputStyle.Short).setRequired(false);
+        rows.push(new ActionRowBuilder().addComponents(score));
+    }
+    rows.push(new ActionRowBuilder().addComponents(notes));
+
+    modal.addComponents(...rows);
     await interaction.showModal(modal);
 }
 
@@ -342,7 +357,6 @@ async function handleReportSubmit(interaction, requestId) {
 
     const proofUrl = (interaction.fields.getTextInputValue('proof') || '').trim();
     const rulesDocUrl = (interaction.fields.getTextInputValue('rules') || '').trim();
-    const score = (interaction.fields.getTextInputValue('score') || '').trim();
     const notes = (interaction.fields.getTextInputValue('notes') || '').trim();
 
     if (!isValidHttpUrl(proofUrl)) {
@@ -350,6 +364,34 @@ async function handleReportSubmit(interaction, requestId) {
     }
     if (rulesDocUrl && !isValidHttpUrl(rulesDocUrl)) {
         return editNotice(interaction, 'The rules doc link must be a valid http(s) URL.', 'Invalid Rules Link');
+    }
+
+    // The modal shape branches on tourny_game_id (see showReportModal), so
+    // field access must branch the same way -- reading a field that wasn't
+    // rendered throws in discord.js.
+    let score;
+    if (request.tourny_game_id) {
+        const homeScore = parseScore(interaction.fields.getTextInputValue('home_score'));
+        const awayScore = parseScore(interaction.fields.getTextInputValue('away_score'));
+        if (homeScore === null || awayScore === null) {
+            return editNotice(interaction, 'Scores must be whole numbers between 0 and 9999.', 'Invalid Score');
+        }
+        try {
+            await tourny.reportAsOfficial(request.tourny_guild_id, request.tourny_game_id, {
+                seasonId: request.tourny_season_id,
+                actorId: interaction.user.id,
+                homeScore,
+                awayScore,
+            });
+        } catch (error) {
+            // The tourny result is the one that feeds standings; do not
+            // complete the request without it. The official can resubmit.
+            logger.error(`[TournySync] report push for request ${requestId}:`, error.message);
+            return editNotice(interaction, 'Could not deliver the result to the league dashboard. Try again in a minute.', 'Report Not Saved');
+        }
+        score = `${homeScore}-${awayScore}`;
+    } else {
+        score = (interaction.fields.getTextInputValue('score') || '').trim();
     }
 
     const completed = await completeOfficialRequestWithReport(requestId, interaction.user.id, { proofUrl, rulesDocUrl, score, notes });
