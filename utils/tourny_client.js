@@ -28,6 +28,8 @@ const listSeasons = (guildId) => call('get', `/private/guilds/${guildId}/seasons
 const listGames = (guildId, seasonId) =>
     call('get', `/private/guilds/${guildId}/games?seasonId=${encodeURIComponent(seasonId)}`);
 const listTeams = (guildId) => call('get', `/private/guilds/${guildId}/teams`);
+const getGame = (guildId, gameId, seasonId) =>
+    call('get', `/private/guilds/${guildId}/games/${gameId}?seasonId=${encodeURIComponent(seasonId)}`);
 const assignOfficial = (guildId, gameId, seasonId, officialId) =>
     call('post', `/private/guilds/${guildId}/games/${gameId}/official`, { seasonId, officialId });
 const clearOfficial = (guildId, gameId, seasonId) =>
@@ -36,5 +38,13 @@ const reportAsOfficial = (guildId, gameId, { seasonId, actorId, homeScore, awayS
     call('post', `/private/guilds/${guildId}/games/${gameId}/report`, {
         seasonId, actorId, staff: false, homeScore, awayScore, lines: [],
     });
+// Marks a game as needing a hub official, from the /request-official game
+// picker, so the dashboard badge lights up. Assignment itself only ever
+// happens through assignOfficial once staff pick someone.
+const requestOfficialMark = (guildId, gameId, seasonId, requestedBy) =>
+    call('post', `/private/guilds/${guildId}/games/${gameId}/request-official`, { seasonId, requestedBy });
 
-module.exports = { enabled, listSeasons, listGames, listTeams, assignOfficial, clearOfficial, reportAsOfficial };
+module.exports = {
+    enabled, listSeasons, listGames, listTeams, getGame,
+    assignOfficial, clearOfficial, reportAsOfficial, requestOfficialMark,
+};

@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const {
     pickActiveSeason, gamesNeedingRequests, assignmentsToRepair,
     requestsToComplete, requestsToCancel, requestsToClear,
-    buildAutoDetails, parseScore,
+    gamesEligibleForRequest, buildAutoDetails, parseScore,
 } = require('../utils/tourny_sync');
 
 test('pickActiveSeason prefers the newest open season', () => {
@@ -106,6 +106,25 @@ test('requestsToClear ignores requests with no matching game', () => {
     assert.deepStrictEqual(requestsToClear([{ id: 1, tourny_game_id: 'ghost', assigned_official_id: 'u1' }], {}), []);
     assert.deepStrictEqual(requestsToClear([], { g1: { officialRequested: true } }), []);
     assert.deepStrictEqual(requestsToClear(null, { g1: { officialRequested: true } }), []);
+});
+
+// --- gamesEligibleForRequest ---------------------------------------------------
+
+test('gamesEligibleForRequest keeps only not-final, unassigned, unrequested games', () => {
+    const games = [
+        { gameId: 'g1', status: 'scheduled' },
+        { gameId: 'g2', status: 'final' },
+        { gameId: 'g3', status: 'scheduled', officialId: 'u1' },
+        { gameId: 'g4', status: 'scheduled', officialRequested: true },
+        { gameId: 'g5', status: 'disputed' },
+    ];
+    assert.deepStrictEqual(gamesEligibleForRequest(games).map((g) => g.gameId), ['g1', 'g5']);
+});
+
+test('gamesEligibleForRequest handles empty/missing input', () => {
+    assert.deepStrictEqual(gamesEligibleForRequest([]), []);
+    assert.deepStrictEqual(gamesEligibleForRequest(null), []);
+    assert.deepStrictEqual(gamesEligibleForRequest(undefined), []);
 });
 
 test('buildAutoDetails names the fixture', () => {

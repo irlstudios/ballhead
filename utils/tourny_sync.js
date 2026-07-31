@@ -79,6 +79,15 @@ function requestsToClear(deniedRequests, gamesById) {
     });
 }
 
+// Games offered on /request-official's game-picker autocomplete: not final,
+// no official assigned yet, and not already flagged for one -- the same
+// "does this game actually need a request" question gamesNeedingRequests asks
+// for the sweep, minus the linked-request check (nothing is linked yet; this
+// IS how a link gets created).
+function gamesEligibleForRequest(games) {
+    return (games || []).filter((g) => g.status !== 'final' && !g.officialId && !g.officialRequested);
+}
+
 function buildAutoDetails(game, teamNames) {
     const names = teamNames || {};
     const home = names[game.homeTeamId] || game.homeTeamId;
@@ -105,6 +114,7 @@ module.exports = {
     requestsToComplete,
     requestsToCancel,
     requestsToClear,
+    gamesEligibleForRequest,
     buildAutoDetails,
     parseScore,
 };
