@@ -20,6 +20,7 @@ const {
     PermissionsBitField,
 } = require('discord.js');
 const logger = require('../utils/logger');
+const tourny = require('../utils/tourny_client');
 const { noticePayload, buildTextBlock } = require('../utils/ui');
 const { LEAGUE_OFFICIALS_CHANNEL_ID } = require('../config/constants');
 const {
@@ -273,6 +274,13 @@ async function handleOfficialsSelect(interaction) {
         return editNotice(interaction, 'This request was already assigned or closed.', 'Already Handled');
     }
 
+    if (assigned.tourny_game_id && tourny.enabled()) {
+        // Fire-and-forget: the sweep repairs a missed push, and staff
+        // assigning in Discord must never see a tourny outage as an error.
+        tourny.assignOfficial(assigned.tourny_guild_id, assigned.tourny_game_id, assigned.tourny_season_id, officialId)
+            .catch((e) => logger.error('[TournySync] assign push (sweep will repair):', e.message));
+    }
+
     logger.info(`[Officials] Request ${requestId} assigned to ${officialId} by ${interaction.user.id} (league ${league.league_id})`);
     await updateOpsCard(interaction.client, assigned, league.league_name);
     await dmAssignedOfficial(interaction.client, assigned, league.league_name);
@@ -303,6 +311,13 @@ async function handleDenySubmit(interaction, requestId) {
     const denied = await denyOfficialRequest(requestId, reason, interaction.user.id);
     if (!denied) {
         return editNotice(interaction, 'This request is no longer open.', 'Already Handled');
+    }
+
+    if (denied.tourny_game_id && tourny.enabled()) {
+        // Fire-and-forget: the sweep repairs a missed push. Clearing also
+        // resets officialRequested in tourny so the manager can re-request.
+        tourny.clearOfficial(denied.tourny_guild_id, denied.tourny_game_id, denied.tourny_season_id)
+            .catch((e) => logger.error('[TournySync] deny push (sweep will repair):', e.message));
     }
 
     logger.info(`[Officials] Request ${requestId} denied by ${interaction.user.id}`);
