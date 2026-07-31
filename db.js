@@ -1151,6 +1151,13 @@ const ensureLeagueOfficialsSchema = async () => {
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_status ON league_official_requests (status)').catch(() => {});
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_ops ON league_official_requests (ops_message_id)').catch(() => {});
 
+    // Link a request to the tourny_tool game it covers. Nullable: requests
+    // made purely inside ballhead keep working with all three null.
+    for (const col of ['tourny_guild_id', 'tourny_season_id', 'tourny_game_id']) {
+        await executeQuery(`ALTER TABLE league_official_requests ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
+    }
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_tourny_game ON league_official_requests (tourny_game_id)').catch(() => {});
+
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS league_game_reports (
             id SERIAL PRIMARY KEY,
@@ -1257,11 +1264,17 @@ const countOpenOfficialRequests = async (leagueId) => {
     return result.rows[0]?.n ?? 0;
 };
 
-const insertOfficialRequest = async ({ leagueId, requestedBy, sport, matchDetails, proposedTime }) => {
+const insertOfficialRequest = async ({
+    leagueId, requestedBy, sport, matchDetails, proposedTime,
+    tournyGuildId = null, tournySeasonId = null, tournyGameId = null,
+}) => {
     const result = await executeQuery(
-        `INSERT INTO league_official_requests (league_id, requested_by, sport, match_details, proposed_time, status)
-         VALUES ($1, $2, $3, $4, $5, 'Pending') RETURNING *`,
-        [leagueId, requestedBy, sport || null, matchDetails || null, proposedTime || null]
+        `INSERT INTO league_official_requests
+            (league_id, requested_by, sport, match_details, proposed_time, status,
+             tourny_guild_id, tourny_season_id, tourny_game_id)
+         VALUES ($1, $2, $3, $4, $5, 'Pending', $6, $7, $8) RETURNING *`,
+        [leagueId, requestedBy, sport || null, matchDetails || null, proposedTime || null,
+            tournyGuildId, tournySeasonId, tournyGameId]
     );
     return result.rows[0];
 };
@@ -1286,6 +1299,24 @@ const fetchOfficialRequestById = async (id) => {
 
 const fetchOfficialRequestByOpsMessage = async (opsMessageId) => {
     const result = await executeQuery('SELECT * FROM league_official_requests WHERE ops_message_id = $1', [opsMessageId]);
+    return result.rows[0] || null;
+};
+
+// Open requests linked to a tourny_tool game, for the sync poller.
+const fetchOpenLinkedRequests = async () => {
+    const result = await executeQuery(
+        `SELECT * FROM league_official_requests
+         WHERE status IN ('Pending', 'Assigned') AND tourny_game_id IS NOT NULL`
+    );
+    return result.rows;
+};
+
+const fetchRequestByTournyGame = async (tournyGuildId, tournyGameId) => {
+    const result = await executeQuery(
+        `SELECT * FROM league_official_requests
+         WHERE tourny_guild_id = $1 AND tourny_game_id = $2 AND status IN ('Pending', 'Assigned')`,
+        [tournyGuildId, tournyGameId]
+    );
     return result.rows[0] || null;
 };
 
@@ -1878,6 +1909,8 @@ module.exports = {
     deleteOfficialRequest,
     fetchOfficialRequestById,
     fetchOfficialRequestByOpsMessage,
+    fetchOpenLinkedRequests,
+    fetchRequestByTournyGame,
     assignOfficialRequest,
     denyOfficialRequest,
     completeOfficialRequestWithReport,
