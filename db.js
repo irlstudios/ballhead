@@ -1358,6 +1358,23 @@ const denyOfficialRequest = async (id, reason, deniedBy) => {
     return result.rows[0] || null;
 };
 
+// Atomic cancel: only a still-Pending request can be claimed, unlike
+// denyOfficialRequest which also matches Assigned. The sweep's cancel pass
+// (jobs/tourny-sync.js) works off a request snapshot taken once per sweep;
+// if staff assign the request between that snapshot and this call, the
+// WHERE loses the race and returns null instead of denying a request that
+// is now correctly Assigned.
+const cancelPendingOfficialRequest = async (id, reason, actor) => {
+    const result = await executeQuery(
+        `UPDATE league_official_requests
+         SET status = 'Denied', denial_reason = $2, denied_by = $3
+         WHERE id = $1 AND status = 'Pending'
+         RETURNING *`,
+        [id, reason || null, actor]
+    );
+    return result.rows[0] || null;
+};
+
 // --- report + verified game (single atomic transaction) ---
 
 // Records the assigned official's post-game report and the verified game, and
@@ -1927,6 +1944,7 @@ module.exports = {
     fetchRecentDeniedLinkedRequests,
     assignOfficialRequest,
     denyOfficialRequest,
+    cancelPendingOfficialRequest,
     completeOfficialRequestWithReport,
     getLeagueGamesSummary,
     fetchRecentLeagueGames,

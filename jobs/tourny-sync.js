@@ -12,7 +12,7 @@ const {
     setOfficialRequestOpsMessage,
     deleteOfficialRequest,
     completeOfficialRequestWithReport,
-    denyOfficialRequest,
+    cancelPendingOfficialRequest,
 } = require('../db');
 const { postOfficialRequestCard, updateOpsCard, dmUser } = require('../handlers/league-officials');
 
@@ -117,7 +117,11 @@ async function syncLeague(client, league, allLinked, allDenied) {
     }
     for (const request of sync.requestsToCancel(mine, gamesById)) {
         const reason = 'Game was settled without an official';
-        const cancelled = await denyOfficialRequest(request.id, reason, 'tourny-sync');
+        // cancelPendingOfficialRequest (not denyOfficialRequest) only claims
+        // a still-Pending row: `mine` is a snapshot taken once per sweep, so
+        // by the time this runs staff may have assigned the request. Losing
+        // that race returns null and must not deny an Assigned request.
+        const cancelled = await cancelPendingOfficialRequest(request.id, reason, 'tourny-sync');
         if (!cancelled) {
             // Claim already lost to a concurrent assign/deny; nothing to notify.
             continue;

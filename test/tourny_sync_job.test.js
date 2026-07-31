@@ -26,7 +26,7 @@ function resetState() {
     state.games = [];
     state.existingRequest = null;
     state.completeResult = null;
-    state.denyResult = null;
+    state.cancelResult = null;
     state.leaguesGate = null;
     delete process.env.TOURNY_DASHBOARD_URL;
 }
@@ -54,9 +54,9 @@ installMock('../db', {
         calls.push(['completeOfficialRequestWithReport', id, officialId, report]);
         return state.completeResult;
     },
-    denyOfficialRequest: async (id, reason, deniedBy) => {
-        calls.push(['denyOfficialRequest', id, reason, deniedBy]);
-        return state.denyResult;
+    cancelPendingOfficialRequest: async (id, reason, actor) => {
+        calls.push(['cancelPendingOfficialRequest', id, reason, actor]);
+        return state.cancelResult;
     },
 });
 
@@ -128,16 +128,39 @@ test('sweep cancels a Pending request whose game settled without an official', a
     state.leagues = [league];
     state.games = [{ gameId: 'g1', status: 'final' }];
     state.linked = [{ id: 9, status: 'Pending', tourny_guild_id: 'guild-1', tourny_game_id: 'g1', tourny_season_id: 's1' }];
-    state.denyResult = { id: 9, requested_by: 'req-9' };
+    state.cancelResult = { id: 9, requested_by: 'req-9' };
 
     await runTournySync({});
 
     assert.deepStrictEqual(
-        calls.find((c) => c[0] === 'denyOfficialRequest'),
-        ['denyOfficialRequest', 9, 'Game was settled without an official', 'tourny-sync']
+        calls.find((c) => c[0] === 'cancelPendingOfficialRequest'),
+        ['cancelPendingOfficialRequest', 9, 'Game was settled without an official', 'tourny-sync']
     );
     assert.ok(calls.some((c) => c[0] === 'updateOpsCard' && c[1] === 9));
     assert.ok(calls.some((c) => c[0] === 'dmUser' && c[1] === 'req-9' && c[2] === 'Official Request Cancelled'));
+});
+
+test('sweep skips a request that was assigned between the snapshot and the cancel claim (RESIDUAL fix)', async () => {
+    // The `mine` list passed into syncLeague is a snapshot taken once at the
+    // start of the sweep. If staff assign this exact request mid-sweep (after
+    // the snapshot, before this loop runs), cancelPendingOfficialRequest's
+    // WHERE status = 'Pending' loses the race and returns null -- the sweep
+    // must not deny a request that is now correctly Assigned, and must not
+    // touch the ops card or DM anyone about a cancellation that didn't happen.
+    resetState();
+    state.leagues = [league];
+    state.games = [{ gameId: 'g1', status: 'final' }];
+    state.linked = [{ id: 9, status: 'Pending', tourny_guild_id: 'guild-1', tourny_game_id: 'g1', tourny_season_id: 's1' }];
+    state.cancelResult = null; // simulates the row already being Assigned when the UPDATE runs
+
+    await runTournySync({});
+
+    assert.deepStrictEqual(
+        calls.find((c) => c[0] === 'cancelPendingOfficialRequest'),
+        ['cancelPendingOfficialRequest', 9, 'Game was settled without an official', 'tourny-sync']
+    );
+    assert.ok(!calls.some((c) => c[0] === 'updateOpsCard'));
+    assert.ok(!calls.some((c) => c[0] === 'dmUser'));
 });
 
 // --- FIX 3: stale-denied clear sweep pass --------------------------------------
