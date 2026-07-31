@@ -70,19 +70,46 @@ async function syncLeague(client, league, allLinked, allDenied) {
     const guildId = league.server_id;
     const seasons = await tourny.listSeasons(guildId);
     const season = sync.pickActiveSeason(seasons.seasons);
-    if (!season) {
-        return;
-    }
-    const games = (await tourny.listGames(guildId, season.seasonId)).games || [];
-    const gamesById = Object.fromEntries(games.map((g) => [g.gameId, g]));
     const mine = allLinked.filter((r) => r.tourny_guild_id === guildId);
     const mineDenied = allDenied.filter((r) => r.tourny_guild_id === guildId);
+
+    // Service every season these requests reference, not just the active
+    // one: a league whose active season completes must not strand open or
+    // denied requests linked to the season that just closed.
+    const activeSeasonId = season ? season.seasonId : null;
+    const seasonIds = sync.seasonsToService([...mine, ...mineDenied], activeSeasonId);
+    if (!seasonIds.length) {
+        return;
+    }
+
+    // activeGames feeds only the create pass below (a completed season's
+    // unplayed games must never spawn a request); gamesById is the merged
+    // view every other pass reads.
+    let activeGames = [];
+    const gamesById = {};
+    for (const seasonId of seasonIds) {
+        let games;
+        try {
+            games = (await tourny.listGames(guildId, seasonId)).games || [];
+        } catch (error) {
+            // Per-season isolation: one unreachable/removed season must not
+            // stop the rest of this league's sweep.
+            logger.error(`[TournySync] league ${league.league_id} season ${seasonId}:`, error.message);
+            continue;
+        }
+        if (seasonId === activeSeasonId) {
+            activeGames = games;
+        }
+        for (const game of games) {
+            gamesById[game.gameId] = game;
+        }
+    }
 
     // Auto-created from a tourny-marked game, so it deliberately bypasses the
     // per-league open-request cap that /request-official enforces: these are
     // staff-visible work items tourny already knows about, not user-initiated
     // spam a cap needs to police.
-    for (const game of sync.gamesNeedingRequests(games, mine)) {
+    for (const game of sync.gamesNeedingRequests(activeGames, mine)) {
         await createLinkedRequest(client, league, season, game, guildId);
     }
     for (const request of sync.assignmentsToRepair(mine, gamesById)) {

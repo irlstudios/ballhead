@@ -4,7 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 
 const {
-    pickActiveSeason, gamesNeedingRequests, assignmentsToRepair,
+    pickActiveSeason, seasonsToService, gamesNeedingRequests, assignmentsToRepair,
     requestsToComplete, requestsToCancel, requestsToClear,
     gamesEligibleForRequest, buildAutoDetails, parseScore, dashboardGameLink,
 } = require('../utils/tourny_sync');
@@ -35,6 +35,34 @@ test('pickActiveSeason prefers the newest open season', () => {
     assert.strictEqual(pickActiveSeason(seasons).seasonId, 's3');
     assert.strictEqual(pickActiveSeason([{ seasonId: 's1', status: 'complete', createdAt: 1 }]), null);
     assert.strictEqual(pickActiveSeason([]), null);
+});
+
+// --- seasonsToService -----------------------------------------------------
+
+test('seasonsToService unions distinct request season ids with the active season', () => {
+    const requests = [
+        { tourny_season_id: 's1' },
+        { tourny_season_id: 's2' },
+        { tourny_season_id: 's1' }, // duplicate, collapses
+        { tourny_season_id: null }, // ignored
+        {}, // absent, ignored
+    ];
+    assert.deepStrictEqual([...seasonsToService(requests, 's3')].sort(), ['s1', 's2', 's3']);
+});
+
+test('seasonsToService returns only the request season ids when there is no active season', () => {
+    const requests = [{ tourny_season_id: 's2' }, { tourny_season_id: 's1' }];
+    assert.deepStrictEqual([...seasonsToService(requests, null)].sort(), ['s1', 's2']);
+});
+
+test('seasonsToService returns just the request season ids when they are the only source', () => {
+    const requests = [{ tourny_season_id: 's1' }, { tourny_season_id: 's1' }];
+    assert.deepStrictEqual([...seasonsToService(requests, 's1')].sort(), ['s1']);
+});
+
+test('seasonsToService returns an empty array for empty requests and no active season', () => {
+    assert.deepStrictEqual(seasonsToService([], null), []);
+    assert.deepStrictEqual(seasonsToService(null, null), []);
 });
 
 test('gamesNeedingRequests wants marked, unassigned, unlinked, not-yet-final games', () => {

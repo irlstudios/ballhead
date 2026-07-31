@@ -79,6 +79,26 @@ function requestsToClear(deniedRequests, gamesById) {
     });
 }
 
+// Every season a request needs serviced, plus the active season (if any).
+// pickActiveSeason names one season to create requests against, but repair/
+// complete/cancel/clear must keep working requests tied to a season that has
+// since closed -- otherwise a league whose active season completes strands
+// every open request linked to it. Requests with no season id (never linked)
+// are ignored; they carry nothing to fetch games for.
+function seasonsToService(requests, activeSeasonId) {
+    const ids = new Set();
+    for (const request of requests || []) {
+        const seasonId = request && request.tourny_season_id;
+        if (seasonId !== null && seasonId !== undefined) {
+            ids.add(seasonId);
+        }
+    }
+    if (activeSeasonId !== null && activeSeasonId !== undefined) {
+        ids.add(activeSeasonId);
+    }
+    return [...ids];
+}
+
 // Games offered on /request-official's game-picker autocomplete: not final,
 // no official assigned yet, and not already flagged for one -- the same
 // "does this game actually need a request" question gamesNeedingRequests asks
@@ -125,6 +145,7 @@ function dashboardGameLink(request) {
 
 module.exports = {
     pickActiveSeason,
+    seasonsToService,
     gamesNeedingRequests,
     assignmentsToRepair,
     requestsToComplete,

@@ -24,6 +24,11 @@ function resetState() {
     state.linked = [];
     state.denied = [];
     state.games = [];
+    // Per-season override for listGames. When unset, every season id resolves
+    // to state.games (preserves the single-season fixtures below). When set,
+    // it is the sole source: a season id with no entry returns no games.
+    state.gamesBySeason = null;
+    state.seasons = null;
     state.existingRequest = null;
     state.completeResult = null;
     state.cancelResult = null;
@@ -62,8 +67,14 @@ installMock('../db', {
 
 installMock('../utils/tourny_client', {
     enabled: () => true,
-    listSeasons: async () => ({ seasons: [{ seasonId: 's1', status: 'regular', createdAt: 1 }] }),
-    listGames: async () => ({ games: state.games }),
+    listSeasons: async () => ({ seasons: state.seasons || [{ seasonId: 's1', status: 'regular', createdAt: 1 }] }),
+    listGames: async (guildId, seasonId) => {
+        calls.push(['listGames', guildId, seasonId]);
+        if (state.gamesBySeason) {
+            return { games: state.gamesBySeason[seasonId] || [] };
+        }
+        return { games: state.games };
+    },
     listTeams: async () => ({ teams: [] }),
     assignOfficial: async (...args) => { calls.push(['assignOfficial', ...args]); },
     clearOfficial: async (...args) => { calls.push(['clearOfficial', ...args]); },
@@ -217,4 +228,52 @@ test('completion builds a dashboard proofUrl when TOURNY_DASHBOARD_URL is set', 
 
     const [, , , report] = calls.find((c) => c[0] === 'completeOfficialRequestWithReport');
     assert.strictEqual(report.proofUrl, 'https://dash.example.com/servers/guild-1');
+});
+
+// --- sweep services linked requests even without an open season ---------------
+
+test('a league with no active season still completes an open request whose game (in its own closed season) went final', async () => {
+    resetState();
+    state.leagues = [league];
+    state.seasons = [{ seasonId: 's0', status: 'complete', createdAt: 1 }]; // no open season
+    state.gamesBySeason = { s0: [{ gameId: 'g0', status: 'final', officialId: 'off-1' }] };
+    state.linked = [{ id: 30, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'g0', tourny_season_id: 's0', assigned_official_id: 'off-1' }];
+    state.completeResult = { id: 30, requested_by: 'req-30' };
+
+    await runTournySync({});
+
+    assert.ok(calls.some((c) => c[0] === 'listGames' && c[1] === 'guild-1' && c[2] === 's0'));
+    assert.deepStrictEqual(
+        calls.find((c) => c[0] === 'completeOfficialRequestWithReport'),
+        ['completeOfficialRequestWithReport', 30, 'off-1', {
+            proofUrl: 'verified-in-tourny-dashboard',
+            notes: 'Result verified in the tourny dashboard.',
+        }]
+    );
+    assert.ok(calls.some((c) => c[0] === 'updateOpsCard' && c[1] === 30));
+    assert.ok(!calls.some((c) => c[0] === 'insertOfficialRequest'));
+});
+
+test('a game marked officialRequested in a completed season does not spawn a new request', async () => {
+    resetState();
+    state.leagues = [league];
+    state.seasons = [
+        { seasonId: 's1', status: 'regular', createdAt: 2 }, // active
+        { seasonId: 's0', status: 'complete', createdAt: 1 }, // closed, still referenced by a request below
+    ];
+    state.gamesBySeason = {
+        s1: [], // active season has no games of its own
+        s0: [
+            { gameId: 'g0', officialRequested: true, status: 'scheduled' }, // must NOT spawn a request
+            { gameId: 'gKeep', officialId: 'off-2', status: 'scheduled' },
+        ],
+    };
+    // Pulls season s0 into the sweep even though it is not the active season.
+    state.linked = [{ id: 40, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'gKeep', tourny_season_id: 's0', assigned_official_id: 'off-2' }];
+
+    await runTournySync({});
+
+    assert.ok(calls.some((c) => c[0] === 'listGames' && c[2] === 's0'));
+    assert.ok(!calls.some((c) => c[0] === 'insertOfficialRequest'));
+    assert.ok(!calls.some((c) => c[0] === 'fetchRequestByTournyGame'));
 });
