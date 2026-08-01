@@ -26,6 +26,7 @@ const { LEAGUE_OFFICIALS_CHANNEL_ID, GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = requi
 const {
     fetchLeagueById,
     fetchAvailableOfficials,
+    fetchOfficialTrackRecords,
     fetchOfficialRequestById,
     assignOfficialRequest,
     denyOfficialRequest,
@@ -39,6 +40,7 @@ const {
     isValidHttpUrl,
     buildRequestCardLines,
     buildGamesSummaryLine,
+    officialOptionDescription,
 } = require('../utils/league_officials');
 
 const SUBTITLE = 'League Officials';
@@ -176,12 +178,15 @@ async function showAssignSelect(interaction, requestId) {
         );
     }
 
+    const trackRecords = await fetchOfficialTrackRecords();
+    const trackByOfficial = new Map(trackRecords.map((t) => [String(t.official_id), t]));
+
     const menu = new StringSelectMenuBuilder()
         .setCustomId(`official:assignselect:${requestId}`)
         .setPlaceholder('Select an official to assign')
         .addOptions(officials.map((o) => ({
             label: (o.discord_name || o.discord_id).toString().slice(0, 100),
-            description: `Sport: ${o.sport || 'Any'}`.slice(0, 100),
+            description: officialOptionDescription(o, trackByOfficial.get(o.discord_id.toString())),
             value: o.discord_id.toString(),
         })));
 

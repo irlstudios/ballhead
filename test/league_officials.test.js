@@ -14,6 +14,8 @@ const {
     officialMatchesSport,
     buildRequestCardLines,
     buildGamesSummaryLine,
+    shortAgo,
+    officialOptionDescription,
 } = require('../utils/league_officials');
 
 const activeLeague = Object.freeze({
@@ -175,4 +177,74 @@ test('request card lines include identity and status, plus assignment when set',
 test('games summary line reports verified and total counts', () => {
     assert.strictEqual(buildGamesSummaryLine({ verified: 3, reported: 5 }), 'Verified games: **3** | Total reported: **5**');
     assert.strictEqual(buildGamesSummaryLine(), 'Verified games: **0** | Total reported: **0**');
+});
+
+// --- shortAgo -----------------------------------------------------------------
+
+test('shortAgo buckets under a day as "today"', () => {
+    const now = Date.UTC(2026, 0, 10);
+    assert.strictEqual(shortAgo(now, now), 'today');
+    assert.strictEqual(shortAgo(now - 3 * 60 * 60 * 1000, now), 'today');
+});
+
+test('shortAgo buckets days and weeks', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const DAY = 24 * 60 * 60 * 1000;
+    assert.strictEqual(shortAgo(now - 3 * DAY, now), '3d');
+    assert.strictEqual(shortAgo(now - 6 * DAY, now), '6d');
+    assert.strictEqual(shortAgo(now - 14 * DAY, now), '2w');
+    assert.strictEqual(shortAgo(now - 29 * DAY, now), '4w');
+});
+
+test('shortAgo buckets months', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const DAY = 24 * 60 * 60 * 1000;
+    assert.strictEqual(shortAgo(now - 30 * DAY, now), '1mo');
+    assert.strictEqual(shortAgo(now - 150 * DAY, now), '5mo');
+});
+
+// --- officialOptionDescription ------------------------------------------------
+
+test('official with no track record shows as new', () => {
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'new');
+});
+
+test('official with zero games shows as new even if a record row exists', () => {
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'new');
+});
+
+test('official with one game reports sport, count, and recency', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const DAY = 24 * 60 * 60 * 1000;
+    const desc = officialOptionDescription({ sport: 'Soccer' }, { games: 1, last_active: now - 3 * DAY }, now);
+    assert.strictEqual(desc, 'Sport: Soccer · 1 games · last 3d');
+});
+
+test('official with many games reports the total', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const DAY = 24 * 60 * 60 * 1000;
+    const desc = officialOptionDescription({ sport: 'Basketball' }, { games: 42, last_active: now - DAY / 2 }, now);
+    assert.strictEqual(desc, 'Sport: Basketball · 42 games · last today');
+});
+
+test('stale last-active reads in months, recent reads in days', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const DAY = 24 * 60 * 60 * 1000;
+    const stale = officialOptionDescription({ sport: 'Soccer' }, { games: 5, last_active: now - 150 * DAY }, now);
+    assert.ok(stale.includes('last 5mo'), stale);
+    const recent = officialOptionDescription({ sport: 'Soccer' }, { games: 5, last_active: now - DAY / 2 }, now);
+    assert.ok(recent.includes('last today'), recent);
+});
+
+test('falls back to "Any" when the roster row has no sport', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const desc = officialOptionDescription({}, { games: 2, last_active: now }, now);
+    assert.ok(desc.startsWith('Sport: Any ·'), desc);
+});
+
+test('description is truncated to Discord\'s 100-char option-description cap', () => {
+    const now = Date.UTC(2026, 0, 10);
+    const longSport = 'Extremely Long Sport Name '.repeat(10);
+    const desc = officialOptionDescription({ sport: longSport }, { games: 3, last_active: now }, now);
+    assert.strictEqual(desc.length, 100);
 });

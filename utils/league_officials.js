@@ -154,6 +154,46 @@ function buildGamesSummaryLine({ verified = 0, reported = 0 } = {}) {
     return `Verified games: **${verified}** | Total reported: **${reported}**`;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Coarse relative-time label for the assignment picker ("3d", "2w", "5mo").
+// utils/reports_logic.js already has formatAge, but it buckets in hours/days
+// only and reads "under an hour" / "23h" -- fine for a report that's hours
+// old, wrong shape for an official who last worked a game months ago. This
+// stays day-granularity-and-up on purpose: games are days apart at the
+// closest, so hours/minutes buckets would never fire.
+function shortAgo(then, now = Date.now()) {
+    const nowMs = now instanceof Date ? now.getTime() : now;
+    const thenMs = then instanceof Date ? then.getTime() : new Date(then).getTime();
+    const days = Math.floor(Math.max(0, nowMs - thenMs) / DAY_MS);
+    if (days < 1) {
+        return 'today';
+    }
+    if (days < 7) {
+        return `${days}d`;
+    }
+    if (days < 30) {
+        return `${Math.floor(days / 7)}w`;
+    }
+    return `${Math.floor(days / 30)}mo`;
+}
+
+// Assignment-picker option description. rosterRow is a fetchAvailableOfficials
+// row (carries the offerable sport); trackRecord is that official's row from
+// db.fetchOfficialTrackRecords, or undefined if they have never completed a
+// game. Discord caps option descriptions at 100 chars; sliced here rather than
+// by the caller, matching the .slice(0, 100) idiom already used on the label
+// in showAssignSelect.
+function officialOptionDescription(rosterRow, trackRecord, now = Date.now()) {
+    const games = Number(trackRecord?.games) || 0;
+    if (games === 0) {
+        return 'new';
+    }
+    const sport = rosterRow?.sport || 'Any';
+    const description = `Sport: ${sport} · ${games} games · last ${shortAgo(trackRecord.last_active, now)}`;
+    return description.slice(0, 100);
+}
+
 module.exports = {
     MAX_OPEN_REQUESTS_PER_LEAGUE,
     REQUEST_STATUS,
@@ -168,4 +208,6 @@ module.exports = {
     officialMatchesSport,
     buildRequestCardLines,
     buildGamesSummaryLine,
+    shortAgo,
+    officialOptionDescription,
 };

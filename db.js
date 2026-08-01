@@ -1258,6 +1258,34 @@ const fetchAvailableOfficials = async (sport) => {
     return result.rows;
 };
 
+// Per-official track record for the assignment picker: games covered, the
+// distinct sports those completed games spanned, and the most recent one.
+// Source picks: league_game_reports is 1 row per Completed request (unique
+// index on request_id, inserted in the same transaction as the completion --
+// see completeOfficialRequestWithReport), so COUNT(*) here can't double- or
+// under-count the way scanning request status could. Sport isn't on the
+// report row, so it's read off the parent request per the design doc ("from
+// the completed requests' sport"). Last activity uses submitted_at, the
+// report's own timestamp column (written in that same transaction, so it is
+// equivalent to the request's completed_at without needing a second join).
+// Officials with zero completed games are simply absent from the result.
+const fetchOfficialTrackRecords = async () => {
+    const result = await executeQuery(
+        `SELECT
+             r.official_id,
+             COUNT(*)::int AS games,
+             COALESCE(
+                 ARRAY_AGG(DISTINCT NULLIF(TRIM(req.sport), '')) FILTER (WHERE NULLIF(TRIM(req.sport), '') IS NOT NULL),
+                 '{}'
+             ) AS sports,
+             MAX(r.submitted_at) AS last_active
+         FROM league_game_reports r
+         JOIN league_official_requests req ON req.id = r.request_id
+         GROUP BY r.official_id`
+    );
+    return result.rows;
+};
+
 // --- requests ---
 
 const countOpenOfficialRequests = async (leagueId) => {
@@ -1941,6 +1969,7 @@ module.exports = {
     removeRosterOfficial,
     listRosterOfficials,
     fetchAvailableOfficials,
+    fetchOfficialTrackRecords,
     countOpenOfficialRequests,
     insertOfficialRequest,
     setOfficialRequestOpsMessage,
