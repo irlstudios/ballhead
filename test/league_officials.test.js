@@ -240,12 +240,18 @@ test('blocks cancelling a missing request', () => {
 
 // --- officialOptionDescription ------------------------------------------------
 
-test('official with no track record shows as new (fetch succeeded, genuinely zero games)', () => {
-    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'new');
+test('official with no track record shows no tracked games, not "new" (fetch succeeded, zero pipeline games)', () => {
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'Sport: Soccer · no tracked games yet');
 });
 
-test('official with zero games shows as new even if a record row exists', () => {
-    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'new');
+test('official with zero games shows no tracked games even if a record row exists', () => {
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'Sport: Soccer · no tracked games yet');
+});
+
+test('zero-game description still falls back to "Any" and honors the 100-char cap', () => {
+    assert.strictEqual(officialOptionDescription({}, { games: 0 }), 'Sport: Any · no tracked games yet');
+    const longSport = 'Extremely Long Sport Name '.repeat(10);
+    assert.strictEqual(officialOptionDescription({ sport: longSport }, { games: 0 }).length, 100);
 });
 
 test('null trackRecord (aggregate fetch failed) degrades to the plain pre-enrichment description, not "new"', () => {

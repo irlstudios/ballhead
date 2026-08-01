@@ -208,10 +208,18 @@ function shortAgo(then, now = Date.now()) {
 // zero": null means the track-record fetch failed/is unavailable (degrade to
 // the plain pre-enrichment description, since labeling every official "new"
 // would be actively misleading); undefined or a { games: 0 } row means the
-// fetch succeeded and this official genuinely has no completed games yet
-// ("new" is honest there). Discord caps option descriptions at 100 chars;
-// sliced here rather than by the caller, matching the .slice(0, 100) idiom
-// already used on the label in showAssignSelect.
+// fetch succeeded and this official has no games in league_game_reports.
+// Zero deliberately reads "no tracked games yet", not "new": the count only
+// covers pipeline games (league_game_reports starts at the Phase 2 request
+// flow), and no legacy per-official record exists anywhere in this codebase
+// to backfill from -- ff_official_applications.officiating_duration is a
+// free-text application answer, host_sessions is the EMH hosting program
+// (not officiating), and the officials/host Google Sheets hold applications
+// and weekly hosting rosters, not per-official game counts. A veteran from
+// before the pipeline therefore legitimately sits at zero, and the copy must
+// not misrepresent them as brand new. Discord caps option descriptions at
+// 100 chars; sliced here rather than by the caller, matching the
+// .slice(0, 100) idiom already used on the label in showAssignSelect.
 function officialOptionDescription(rosterRow, trackRecord, now = Date.now()) {
     const sport = rosterRow?.sport || 'Any';
     if (trackRecord === null) {
@@ -219,7 +227,7 @@ function officialOptionDescription(rosterRow, trackRecord, now = Date.now()) {
     }
     const games = Number(trackRecord?.games) || 0;
     if (games === 0) {
-        return 'new';
+        return `Sport: ${sport} · no tracked games yet`.slice(0, 100);
     }
     const description = `Sport: ${sport} · ${games} games · last ${shortAgo(trackRecord.last_active, now)}`;
     return description.slice(0, 100);
