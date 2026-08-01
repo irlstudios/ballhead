@@ -1,7 +1,11 @@
 #!/bin/bash
 # Deploy the ballhead bot to its prod host.
 #
-#   ./deploy.sh --host user@1.2.3.4 [--key ~/key.pem] [--ref main] [--dir /home/ec2-user/ballhead_bot] [--app ballhead_bot]
+#   ./deploy.sh [--host user@1.2.3.4] [--key ~/key.pem] [--ref main] [--dir <remote checkout>] [--app <pm2 name>]
+#
+# Defaults target the prod box as it actually is: the checkout lives nested at
+# /home/ec2-user/ballhead/ballhead-bot and the pm2 process is named "ballhead".
+# A zero-arg run is a normal prod deploy.
 #
 # The host runs a git checkout of this repo, so a deploy is a fetch, a
 # production install, and a pm2 restart. Idempotent: re-running is the normal
@@ -12,11 +16,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$SCRIPT_DIR/.."
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 
-HOST=""
-KEY=""
-REMOTE_DIR="/home/ec2-user/ballhead_bot"
+HOST="ec2-user@100.26.197.20"
+KEY="$HOME/Downloads/Work/discord.pem"
+REMOTE_DIR="/home/ec2-user/ballhead/ballhead-bot"
 REF="main"
-APP="ballhead_bot"
+APP="ballhead"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,11 +33,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
-
-if [[ -z "$HOST" ]]; then
-  echo "Error: --host is required (e.g. --host ec2-user@1.2.3.4)" >&2
-  exit 1
-fi
 
 SSH_OPTS=()
 [[ -n "$KEY" ]] && SSH_OPTS=(-i "$KEY")
