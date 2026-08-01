@@ -10,6 +10,7 @@ const {
     officialRequestEligibility,
     atOpenRequestCap,
     canApproveOfficialRequest,
+    canCancelOfficialRequest,
     canSubmitReport,
     officialMatchesSport,
     buildRequestCardLines,
@@ -201,6 +202,40 @@ test('shortAgo buckets months', () => {
     const DAY = 24 * 60 * 60 * 1000;
     assert.strictEqual(shortAgo(now - 30 * DAY, now), '1mo');
     assert.strictEqual(shortAgo(now - 150 * DAY, now), '5mo');
+});
+
+// --- canCancelOfficialRequest ------------------------------------------------
+
+const cancellableRequest = Object.freeze({
+    id: 4,
+    status: REQUEST_STATUS.PENDING,
+    requested_by: 'requester-1',
+});
+
+test('lets the original requester cancel a still-pending request', () => {
+    assert.strictEqual(canCancelOfficialRequest(cancellableRequest, 'requester-1').ok, true);
+    // tolerates id type mismatch (BIGINT vs text)
+    assert.strictEqual(canCancelOfficialRequest({ ...cancellableRequest, requested_by: 123 }, '123').ok, true);
+});
+
+test('blocks anyone but the original requester from cancelling', () => {
+    const r = canCancelOfficialRequest(cancellableRequest, 'someone-else');
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, 'NOT_REQUESTER');
+});
+
+test('blocks cancelling once the request is no longer pending', () => {
+    for (const status of [REQUEST_STATUS.ASSIGNED, REQUEST_STATUS.COMPLETED, REQUEST_STATUS.DENIED]) {
+        const r = canCancelOfficialRequest({ ...cancellableRequest, status }, 'requester-1');
+        assert.strictEqual(r.ok, false);
+        assert.strictEqual(r.code, 'NOT_PENDING');
+    }
+});
+
+test('blocks cancelling a missing request', () => {
+    const r = canCancelOfficialRequest(null, 'requester-1');
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.code, 'NO_REQUEST');
 });
 
 // --- officialOptionDescription ------------------------------------------------

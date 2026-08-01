@@ -3,9 +3,9 @@
 // Interaction glue for the league officials + games loop (Phase 2). All the
 // decisions live in utils/league_officials.js (pure) and db.js (atomic SQL);
 // this module only wires Discord components to them. customId scheme (split on
-// ':'): official:assign:<id>, official:deny:<id>, official:report:<id> (buttons),
-// official:assignselect:<id> (select), official:denymodal:<id>,
-// official:reportmodal:<id> (modals).
+// ':'): official:assign:<id>, official:deny:<id>, official:report:<id>,
+// official:cancel:<id> (buttons), official:assignselect:<id> (select),
+// official:denymodal:<id>, official:reportmodal:<id> (modals).
 
 const {
     ActionRowBuilder,
@@ -30,12 +30,14 @@ const {
     fetchOfficialRequestById,
     assignOfficialRequest,
     denyOfficialRequest,
+    cancelPendingOfficialRequest,
     completeOfficialRequestWithReport,
     getLeagueGamesSummary,
 } = require('../db');
 const {
     REQUEST_STATUS,
     canApproveOfficialRequest,
+    canCancelOfficialRequest,
     canSubmitReport,
     isValidHttpUrl,
     buildRequestCardLines,
@@ -154,7 +156,49 @@ async function handleOfficialsButton(interaction) {
     if (action === 'report') {
         return showReportModal(interaction, requestId);
     }
+    if (action === 'cancel') {
+        return handleRequesterCancel(interaction, requestId);
+    }
     logger.warn('[Officials] Unknown button action:', action);
+}
+
+// Requester self-service cancel, from the Cancel Request button on the
+// /request-official ephemeral confirmation. Mirrors handleDenySubmit's
+// terminal transition exactly -- same Denied marking, same ops-card refresh,
+// same fire-and-forget clearOfficial with sweep repair -- but gated to the
+// original requester and a still-Pending request, and via the atomic
+// Pending-only claim (cancelPendingOfficialRequest) so a request staff
+// assign mid-click can never be yanked out from under its official. No
+// requester DM: unlike a CD denial the requester is the actor here, and this
+// ephemeral reply is their notification.
+async function handleRequesterCancel(interaction, requestId) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const request = await fetchOfficialRequestById(requestId);
+    const check = canCancelOfficialRequest(request, interaction.user.id);
+    if (!check.ok) {
+        return editNotice(interaction, check.message, check.title);
+    }
+
+    const cancelled = await cancelPendingOfficialRequest(requestId, 'Cancelled by requester', interaction.user.id);
+    if (!cancelled) {
+        // Lost the Pending-only claim to a concurrent assign/deny/cancel.
+        return editNotice(interaction, 'This request was already assigned or closed.', 'Already Handled');
+    }
+
+    if (cancelled.tourny_game_id && tourny.enabled()) {
+        // Fire-and-forget: requestsToClear (utils/tourny_sync.js) repairs a
+        // missed push on the next sweep off this now-Denied row, and clearing
+        // resets officialRequested in tourny so the manager can re-request --
+        // identical contract to handleDenySubmit's push.
+        tourny.clearOfficial(cancelled.tourny_guild_id, cancelled.tourny_game_id, cancelled.tourny_season_id)
+            .catch((e) => logger.error('[TournySync] cancel push (sweep will repair):', e.message));
+    }
+
+    logger.info(`[Officials] Request ${requestId} cancelled by requester ${interaction.user.id}`);
+    const league = await fetchLeagueById(cancelled.league_id);
+    await updateOpsCard(interaction.client, cancelled, league?.league_name);
+    return editNotice(interaction, `Your official request #${requestId} has been cancelled.`, 'Request Cancelled');
 }
 
 async function showAssignSelect(interaction, requestId) {

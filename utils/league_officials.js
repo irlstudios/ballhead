@@ -119,6 +119,30 @@ function canApproveOfficialRequest({ guildId, memberRoleIds } = {}, { gcGuildId,
     return memberRoleIds.has(cdRoleId);
 }
 
+// Self-service cancel guard for the requester-facing Cancel Request button on
+// the /request-official confirmation. Permission first (only the original
+// requester), then state (only while still Pending -- once staff assign or
+// close it, withdrawal goes through a CD). The DB claim
+// (cancelPendingOfficialRequest) re-enforces the Pending gate atomically; this
+// pure check exists to give the requester a precise refusal message. A
+// stringified compare tolerates BIGINT/text id mismatches, as in canSubmitReport.
+function canCancelOfficialRequest(request, userId) {
+    if (!request) {
+        return deny('NO_REQUEST', 'Request Not Found', 'This official request no longer exists.');
+    }
+    if (String(request.requested_by) !== String(userId)) {
+        return deny('NOT_REQUESTER', 'Not Your Request', 'Only the person who made this request can cancel it.');
+    }
+    if (request.status !== REQUEST_STATUS.PENDING) {
+        return deny(
+            'NOT_PENDING',
+            'No Longer Pending',
+            'This request has already been assigned or closed. Ask a Community Director if it still needs to be withdrawn.'
+        );
+    }
+    return ALLOW;
+}
+
 // A roster official can be offered for a request when they are active and their
 // sport is "Any" or matches the request's sport (case-insensitive).
 function officialMatchesSport(rosterSport, requestSport) {
@@ -211,6 +235,7 @@ module.exports = {
     officialRequestEligibility,
     atOpenRequestCap,
     canApproveOfficialRequest,
+    canCancelOfficialRequest,
     canSubmitReport,
     officialMatchesSport,
     buildRequestCardLines,

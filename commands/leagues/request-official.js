@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const tourny = require('../../utils/tourny_client');
@@ -219,13 +219,21 @@ module.exports = {
             }
 
             logger.info(`[Officials] Request ${request.id} created by ${userId} for league ${league.league_id}`);
-            return interaction.editReply(noticePayload(
+            // Self-service undo: the button routes to handleRequesterCancel
+            // (handlers/league-officials.js), which only lets the original
+            // requester withdraw the request while it is still Pending.
+            const confirmation = noticePayload(
                 [
                     `Your request (**#${request.id}**) has been posted for staff to assign an official.`,
                     'You will be DMed when it is assigned and again when the game is verified.',
+                    'Made a mistake? Cancel below while the request is still pending.',
                 ],
                 { title: 'Official Requested', subtitle: SUB }
-            ));
+            );
+            const cancelRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`official:cancel:${request.id}`).setLabel('Cancel Request').setStyle(ButtonStyle.Danger),
+            );
+            return interaction.editReply({ ...confirmation, components: [...confirmation.components, cancelRow] });
         } catch (error) {
             logger.error('[Officials] request-official failed:', error);
             return interaction.editReply(noticePayload('An error occurred while creating your request.', { title: 'Request Failed', subtitle: SUB }));
