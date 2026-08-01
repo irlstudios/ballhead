@@ -179,17 +179,24 @@ function shortAgo(then, now = Date.now()) {
 }
 
 // Assignment-picker option description. rosterRow is a fetchAvailableOfficials
-// row (carries the offerable sport); trackRecord is that official's row from
-// db.fetchOfficialTrackRecords, or undefined if they have never completed a
-// game. Discord caps option descriptions at 100 chars; sliced here rather than
-// by the caller, matching the .slice(0, 100) idiom already used on the label
-// in showAssignSelect.
+// row (carries the offerable sport). trackRecord is tri-state, matching how
+// showAssignSelect distinguishes "we don't know" from "we checked and it's
+// zero": null means the track-record fetch failed/is unavailable (degrade to
+// the plain pre-enrichment description, since labeling every official "new"
+// would be actively misleading); undefined or a { games: 0 } row means the
+// fetch succeeded and this official genuinely has no completed games yet
+// ("new" is honest there). Discord caps option descriptions at 100 chars;
+// sliced here rather than by the caller, matching the .slice(0, 100) idiom
+// already used on the label in showAssignSelect.
 function officialOptionDescription(rosterRow, trackRecord, now = Date.now()) {
+    const sport = rosterRow?.sport || 'Any';
+    if (trackRecord === null) {
+        return `Sport: ${sport}`.slice(0, 100);
+    }
     const games = Number(trackRecord?.games) || 0;
     if (games === 0) {
         return 'new';
     }
-    const sport = rosterRow?.sport || 'Any';
     const description = `Sport: ${sport} · ${games} games · last ${shortAgo(trackRecord.last_active, now)}`;
     return description.slice(0, 100);
 }

@@ -205,12 +205,22 @@ test('shortAgo buckets months', () => {
 
 // --- officialOptionDescription ------------------------------------------------
 
-test('official with no track record shows as new', () => {
+test('official with no track record shows as new (fetch succeeded, genuinely zero games)', () => {
     assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'new');
 });
 
 test('official with zero games shows as new even if a record row exists', () => {
     assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'new');
+});
+
+test('null trackRecord (aggregate fetch failed) degrades to the plain pre-enrichment description, not "new"', () => {
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, null), 'Sport: Soccer');
+});
+
+test('null trackRecord still falls back to "Any" and truncates like the normal path', () => {
+    assert.strictEqual(officialOptionDescription({}, null), 'Sport: Any');
+    const longSport = 'Extremely Long Sport Name '.repeat(10);
+    assert.strictEqual(officialOptionDescription({ sport: longSport }, null).length, 100);
 });
 
 test('official with one game reports sport, count, and recency', () => {

@@ -178,15 +178,21 @@ async function showAssignSelect(interaction, requestId) {
         );
     }
 
-    const trackRecords = await fetchOfficialTrackRecords();
-    const trackByOfficial = new Map(trackRecords.map((t) => [String(t.official_id), t]));
+    // Track records are enrichment, not a dependency: the assign flow is core
+    // to CDs and predates these tables, so a failure here must degrade to the
+    // plain "Sport: X" description instead of taking down the whole picker.
+    const trackRecords = await fetchOfficialTrackRecords().catch((err) => {
+        logger.error('[Officials] track records unavailable:', err.message);
+        return null;
+    });
+    const trackByOfficial = trackRecords && new Map(trackRecords.map((t) => [String(t.official_id), t]));
 
     const menu = new StringSelectMenuBuilder()
         .setCustomId(`official:assignselect:${requestId}`)
         .setPlaceholder('Select an official to assign')
         .addOptions(officials.map((o) => ({
             label: (o.discord_name || o.discord_id).toString().slice(0, 100),
-            description: officialOptionDescription(o, trackByOfficial.get(o.discord_id.toString())),
+            description: officialOptionDescription(o, trackByOfficial ? trackByOfficial.get(o.discord_id.toString()) : null),
             value: o.discord_id.toString(),
         })));
 
