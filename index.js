@@ -24,7 +24,12 @@ const client = new Client({
         GatewayIntentBits.GuildScheduledEvents,
         GatewayIntentBits.GuildBans
     ],
-    partials: [Partials.Message, Partials.Reaction, Partials.Channel]
+    partials: [Partials.Message, Partials.Reaction, Partials.Channel],
+    // Free-text fields (request details, names) reach message content raw, so
+    // never resolve @everyone/@here/role pings process-wide. Single-user
+    // mentions still work; per-message allowedMentions can override if a
+    // sender ever needs an intentional role ping.
+    allowedMentions: { parse: ['users'] }
 });
 
 client.commands = new Collection();
