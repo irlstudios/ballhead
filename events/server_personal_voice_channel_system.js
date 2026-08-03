@@ -99,6 +99,9 @@ module.exports = {
 
             const guild = newState.guild;
             const creatorCanStartActivities = newState.member.roles.cache.some(role => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id));
+            // A bot may only grant overwrite permissions it holds itself; granting
+            // UseExternalApps without it makes channel creation 50013.
+            const botCanGrantExternalApps = guild.members.me.permissions.has(PermissionFlagsBits.UseExternalApps);
             const newChannel = await guild.channels.create({
                 name: `${newState.member.displayName}'s Room`,
                 type: ChannelType.GuildVoice,
@@ -119,7 +122,8 @@ module.exports = {
                             // UseExternalApps: launching an activity whose app is not
                             // installed to the server requires it; without it Discord
                             // rejects the launch even though Use Activities is allowed.
-                            ...(creatorCanStartActivities ? [PermissionFlagsBits.UseEmbeddedActivities, PermissionFlagsBits.UseExternalApps] : [])
+                            ...(creatorCanStartActivities ? [PermissionFlagsBits.UseEmbeddedActivities] : []),
+                            ...(creatorCanStartActivities && botCanGrantExternalApps ? [PermissionFlagsBits.UseExternalApps] : [])
                         ],
                         deny: [
                             PermissionFlagsBits.Stream,

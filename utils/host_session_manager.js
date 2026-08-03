@@ -7,7 +7,7 @@
 // The database is the source of truth; the maps below are only an index so the
 // voice and presence listeners can ignore unrelated events without a query.
 
-const { ActivityType } = require('discord.js');
+const { ActivityType, PermissionFlagsBits } = require('discord.js');
 const logger = require('./logger');
 const store = require('./host_session_queries');
 const { appendSessionRow } = require('./host_session_sheet');
@@ -60,18 +60,23 @@ const countParticipants = (channel, hostId) => (channel?.members
 // Opening the room: everyone may launch activities, and the host loses the
 // ManageChannels overwrite the personal-room system granted them so they cannot
 // rename or lock the room out from under an event that is being advertised.
+// A bot may only change overwrite bits for permissions it holds itself, so
+// every UseExternalApps write is conditional on the bot having been granted it.
+const botHasExternalApps = (guild) => guild.members.me.permissions.has(PermissionFlagsBits.UseExternalApps);
+
 const openRoomForActivities = async (channel, hostId) => {
     // UseExternalApps rides along with UseEmbeddedActivities: launching an
     // activity whose app is not installed to the server requires it, and
     // Discord rejects the launch without it even when Use Activities is allowed.
+    const externalApps = botHasExternalApps(channel.guild) ? { UseExternalApps: true } : {};
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: true,
-        UseExternalApps: true,
+        ...externalApps,
         Connect: true,
     });
     await channel.permissionOverwrites.edit(hostId, {
         UseEmbeddedActivities: true,
-        UseExternalApps: true,
+        ...externalApps,
         ManageChannels: false,
     });
 };
@@ -80,15 +85,16 @@ const restoreRoom = async (channel, session) => {
     if (!channel) return;
     // UseExternalApps: null removes the overwrite rather than pinning a deny,
     // so staff roles with the guild-level permission keep it in idle rooms.
+    const canExternal = botHasExternalApps(channel.guild);
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: false,
-        UseExternalApps: null,
+        ...(canExternal ? { UseExternalApps: null } : {}),
     }).catch(() => {});
     const hostMember = await channel.guild.members.fetch(session.hostId).catch(() => null);
     const hostKeepsActivities = Boolean(hostMember?.roles.cache.some((role) => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id)));
     await channel.permissionOverwrites.edit(session.hostId, {
         UseEmbeddedActivities: hostKeepsActivities,
-        UseExternalApps: hostKeepsActivities ? true : null,
+        ...(canExternal ? { UseExternalApps: hostKeepsActivities ? true : null } : {}),
         ManageChannels: true,
     }).catch(() => {});
     if (session.originalName && channel.name !== session.originalName) {
