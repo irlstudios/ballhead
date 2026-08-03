@@ -40,6 +40,12 @@ const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
 const LEAGUE_OFFICIALS_CHANNEL_ID = process.env.LEAGUE_OFFICIALS_CHANNEL_ID || LEAGUE_LOG_CHANNEL_ID;
 const SQUAD_PRACTICE_CHANNEL_ID = '1233854185276051516';
 const GYM_CLASS_GENERAL_CHANNEL_ID = '752216589792706624';
+// Channel that hosts the "Weekly Discussion: <topic>" threads created by
+// /weekly-thread. The role-grant listener keys off this same channel.
+const WEEKLY_DISCUSSION_CHANNEL_ID = '1112183354725515274';
+// Roles granted to anyone who posts in a weekly discussion thread
+// (feedback participants + feedback XP).
+const WEEKLY_FEEDBACK_ROLE_IDS = ['1186458354797789264', '1355230432324616314'];
 
 // Role IDs
 // Event hosts. Holders may run /room event start to convert their personal room
@@ -211,6 +217,8 @@ module.exports = {
     LEAGUE_OFFICIALS_CHANNEL_ID,
     SQUAD_PRACTICE_CHANNEL_ID,
     GYM_CLASS_GENERAL_CHANNEL_ID,
+    WEEKLY_DISCUSSION_CHANNEL_ID,
+    WEEKLY_FEEDBACK_ROLE_IDS,
     HOST_ROLE_ID,
     OFFICIAL_PROSPECT_ROLE_ID,
     OFFICIAL_ACTIVE_ROLE_ID,
