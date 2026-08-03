@@ -1,7 +1,7 @@
 const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { pool } = require('../db');
 const logger = require('../utils/logger');
-const { MODERATOR_ROLES } = require('../config/constants');
+const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_USER_IDS } = require('../config/constants');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -14,7 +14,6 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     throw new Error('Action failed after retries');
 };
 const BLACKLIST_USER_IDS = new Set();
-const ACTIVITY_ALLOWED_USER_IDS = new Set(['1122915314812846213']);
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364', '1125497495678615582']);
 const BLACKLIST_DENY_PERMISSIONS = [
     PermissionFlagsBits.Connect,
@@ -116,11 +115,11 @@ module.exports = {
                             PermissionFlagsBits.ManageChannels,
                             PermissionFlagsBits.MoveMembers,
                             PermissionFlagsBits.Speak,
-                            ...(ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
+                            ...(VC_ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
                         ],
                         deny: [
                             PermissionFlagsBits.Stream,
-                            ...(ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
+                            ...(VC_ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
                         ]
                     },
                     {
@@ -153,6 +152,13 @@ module.exports = {
                         id: '847977550731149364',
                         deny: BLACKLIST_DENY_PERMISSIONS
                     },
+                    // Activity-only grant: no Connect, so it never bypasses a locked room.
+                    ...[...VC_ACTIVITY_ALLOWED_USER_IDS]
+                        .filter(id => id !== newState.member.id)
+                        .map(id => ({
+                            id,
+                            allow: [PermissionFlagsBits.UseEmbeddedActivities]
+                        })),
                 ]
             });
             client.vcCreated.add(newChannel.id);

@@ -106,6 +106,9 @@ const BOOSTER_ROLE_ID = '1251901885837873232';
 // Role IDs - Moderation
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 
+// Users allowed to start Discord activities in their own personal voice room.
+const VC_ACTIVITY_ALLOWED_USER_IDS = new Set(['1122915314812846213']);
+
 // Dyno moderation -> program member alerting
 // Dyno bot user id; its moderation log embeds are the only messages we react to.
 // This is the instance that posts moderation cases ("Case N | Action | user");
@@ -241,6 +244,7 @@ module.exports = {
     SQUAD_OWNER_ROLES,
     BOOSTER_ROLE_ID,
     MODERATOR_ROLES,
+    VC_ACTIVITY_ALLOWED_USER_IDS,
     DYNO_BOT_ID,
     DYNO_MODERATION_ACTIONS,
     PROGRAM_LEADS,
