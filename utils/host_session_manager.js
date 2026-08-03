@@ -15,7 +15,7 @@ const { eventChannelName, summariseSession, nudgeMessage } = require('./host_ses
 const {
     GYM_CLASS_GENERAL_CHANNEL_ID,
     HOST_SESSION_NUDGE_MINUTES,
-    VC_ACTIVITY_ALLOWED_USER_IDS,
+    VC_ACTIVITY_ALLOWED_ROLE_IDS,
 } = require('../config/constants');
 
 // Custom status (4), Spotify (2) and go-live (1) are not the host starting
@@ -76,8 +76,10 @@ const restoreRoom = async (channel, session) => {
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: false,
     }).catch(() => {});
+    const hostMember = await channel.guild.members.fetch(session.hostId).catch(() => null);
+    const hostKeepsActivities = Boolean(hostMember?.roles.cache.some((role) => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id)));
     await channel.permissionOverwrites.edit(session.hostId, {
-        UseEmbeddedActivities: VC_ACTIVITY_ALLOWED_USER_IDS.has(session.hostId) ? true : false,
+        UseEmbeddedActivities: hostKeepsActivities,
         ManageChannels: true,
     }).catch(() => {});
     if (session.originalName && channel.name !== session.originalName) {

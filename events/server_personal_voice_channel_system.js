@@ -1,7 +1,7 @@
 const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { pool } = require('../db');
 const logger = require('../utils/logger');
-const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_USER_IDS } = require('../config/constants');
+const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_ROLE_IDS } = require('../config/constants');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -98,6 +98,7 @@ module.exports = {
             }, COOLDOWN_MS);
 
             const guild = newState.guild;
+            const creatorCanStartActivities = newState.member.roles.cache.some(role => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id));
             const newChannel = await guild.channels.create({
                 name: `${newState.member.displayName}'s Room`,
                 type: ChannelType.GuildVoice,
@@ -115,11 +116,11 @@ module.exports = {
                             PermissionFlagsBits.ManageChannels,
                             PermissionFlagsBits.MoveMembers,
                             PermissionFlagsBits.Speak,
-                            ...(VC_ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
+                            ...(creatorCanStartActivities ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
                         ],
                         deny: [
                             PermissionFlagsBits.Stream,
-                            ...(VC_ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
+                            ...(creatorCanStartActivities ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
                         ]
                     },
                     {
