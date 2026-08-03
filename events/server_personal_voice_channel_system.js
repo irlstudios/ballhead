@@ -152,13 +152,6 @@ module.exports = {
                         id: '847977550731149364',
                         deny: BLACKLIST_DENY_PERMISSIONS
                     },
-                    // Activity-only grant: no Connect, so it never bypasses a locked room.
-                    ...[...VC_ACTIVITY_ALLOWED_USER_IDS]
-                        .filter(id => id !== newState.member.id)
-                        .map(id => ({
-                            id,
-                            allow: [PermissionFlagsBits.UseEmbeddedActivities]
-                        })),
                 ]
             });
             client.vcCreated.add(newChannel.id);
