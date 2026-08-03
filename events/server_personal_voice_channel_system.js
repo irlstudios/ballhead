@@ -116,7 +116,10 @@ module.exports = {
                             PermissionFlagsBits.ManageChannels,
                             PermissionFlagsBits.MoveMembers,
                             PermissionFlagsBits.Speak,
-                            ...(creatorCanStartActivities ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
+                            // UseExternalApps: launching an activity whose app is not
+                            // installed to the server requires it; without it Discord
+                            // rejects the launch even though Use Activities is allowed.
+                            ...(creatorCanStartActivities ? [PermissionFlagsBits.UseEmbeddedActivities, PermissionFlagsBits.UseExternalApps] : [])
                         ],
                         deny: [
                             PermissionFlagsBits.Stream,

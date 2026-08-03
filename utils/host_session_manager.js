@@ -61,25 +61,34 @@ const countParticipants = (channel, hostId) => (channel?.members
 // ManageChannels overwrite the personal-room system granted them so they cannot
 // rename or lock the room out from under an event that is being advertised.
 const openRoomForActivities = async (channel, hostId) => {
+    // UseExternalApps rides along with UseEmbeddedActivities: launching an
+    // activity whose app is not installed to the server requires it, and
+    // Discord rejects the launch without it even when Use Activities is allowed.
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: true,
+        UseExternalApps: true,
         Connect: true,
     });
     await channel.permissionOverwrites.edit(hostId, {
         UseEmbeddedActivities: true,
+        UseExternalApps: true,
         ManageChannels: false,
     });
 };
 
 const restoreRoom = async (channel, session) => {
     if (!channel) return;
+    // UseExternalApps: null removes the overwrite rather than pinning a deny,
+    // so staff roles with the guild-level permission keep it in idle rooms.
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: false,
+        UseExternalApps: null,
     }).catch(() => {});
     const hostMember = await channel.guild.members.fetch(session.hostId).catch(() => null);
     const hostKeepsActivities = Boolean(hostMember?.roles.cache.some((role) => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id)));
     await channel.permissionOverwrites.edit(session.hostId, {
         UseEmbeddedActivities: hostKeepsActivities,
+        UseExternalApps: hostKeepsActivities ? true : null,
         ManageChannels: true,
     }).catch(() => {});
     if (session.originalName && channel.name !== session.originalName) {
