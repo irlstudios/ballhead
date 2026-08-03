@@ -14,6 +14,7 @@ const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     throw new Error('Action failed after retries');
 };
 const BLACKLIST_USER_IDS = new Set();
+const ACTIVITY_ALLOWED_USER_IDS = new Set(['1122915314812846213']);
 const BLACKLIST_ROLE_IDS = new Set(['847977550731149364', '1125497495678615582']);
 const BLACKLIST_DENY_PERMISSIONS = [
     PermissionFlagsBits.Connect,
@@ -110,8 +111,17 @@ module.exports = {
                     },
                     {
                         id: newState.member.id,
-                        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.Speak],
-                        deny: [PermissionFlagsBits.Stream, PermissionFlagsBits.UseEmbeddedActivities]
+                        allow: [
+                            PermissionFlagsBits.Connect,
+                            PermissionFlagsBits.ManageChannels,
+                            PermissionFlagsBits.MoveMembers,
+                            PermissionFlagsBits.Speak,
+                            ...(ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [PermissionFlagsBits.UseEmbeddedActivities] : [])
+                        ],
+                        deny: [
+                            PermissionFlagsBits.Stream,
+                            ...(ACTIVITY_ALLOWED_USER_IDS.has(newState.member.id) ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
+                        ]
                     },
                     {
                         id: client.user.id,
