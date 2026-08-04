@@ -23,6 +23,7 @@ const { runPollNudge } = require('../jobs/poll-nudge');
 const { runTournySync } = require('../jobs/tourny-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { resumeSessions } = require('../utils/host_session_manager');
+const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -167,6 +168,7 @@ module.exports = {
             ['reengagement', ensureReengagementTables],
             ['poll', ensurePollTables],
             ['host_sessions', ensureHostSessionSchema],
+            ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
         ];
         for (const [name, ensure] of migrations) {
             try {
