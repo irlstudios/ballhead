@@ -112,6 +112,17 @@ const BOOSTER_ROLE_ID = '1251901885837873232';
 // Role IDs - Moderation
 const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 
+// Role IDs - Mod ping subscriptions (/mod-pings). Rolling set of pingable mod
+// roles; mods subscribe to DMs for the ones they do not hold.
+const MOD_PING_ROLES = [
+    { name: 'Community Manager', id: '1174797693516787762' },
+    { name: 'Staff Community Developer', id: '1473445552921248061' },
+    { name: 'Sr Community Developer', id: '909227142808756264' },
+    { name: 'Community Developer', id: '805833778064130104' },
+    { name: 'Community Helper', id: '939634611909185646' },
+    { name: 'Community Helper Mod', id: '1150196818475491419' },
+];
+
 // Members with these roles may start Discord activities in personal voice
 // rooms they create.
 const VC_ACTIVITY_ALLOWED_ROLE_IDS = new Set(['1122915314812846213']);
@@ -253,6 +264,7 @@ module.exports = {
     SQUAD_OWNER_ROLES,
     BOOSTER_ROLE_ID,
     MODERATOR_ROLES,
+    MOD_PING_ROLES,
     VC_ACTIVITY_ALLOWED_ROLE_IDS,
     DYNO_BOT_ID,
     DYNO_MODERATION_ACTIONS,
