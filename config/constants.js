@@ -96,6 +96,7 @@ const SPREADSHEET_COMP_WINS = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
 const SPREADSHEET_LFO = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 const SPREADSHEET_COMMUNITY_METRICS = '1cukQXP1_HKt-bwos3sd4-YR51EskJ6Fl_vgZR4hF0IQ';
 const SPREADSHEET_HOST_SESSIONS = '1BEypzniqiUb-fB7dfmV9AyODisSL3ZNIgPOCMBa6CQk';
+const SPREADSHEET_LEAGUES = '1dlWAdJzfO5V46SFW2YgaZQIZSuudZAnGOTffz9ZUVxM';
 const HOST_SESSION_SHEET_TAB = 'Session Stats';
 // How often a live session advertises itself in general chat. Overridable so the
 // cadence can be tuned without a deploy.
@@ -257,6 +258,7 @@ module.exports = {
     SPREADSHEET_LFO,
     SPREADSHEET_COMMUNITY_METRICS,
     SPREADSHEET_HOST_SESSIONS,
+    SPREADSHEET_LEAGUES,
     HOST_SESSION_SHEET_TAB,
     HOST_SESSION_NUDGE_MINUTES,
     SQUAD_LEADER_ROLE_ID,

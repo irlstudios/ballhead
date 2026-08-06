@@ -21,6 +21,7 @@ const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
 const { runPollNudge } = require('../jobs/poll-nudge');
 const { runTournySync } = require('../jobs/tourny-sync');
+const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
@@ -336,6 +337,15 @@ module.exports = {
             }
         });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min)');
+        // Daily: mirror the Active Leagues table into the leagues spreadsheet - 7:00 AM Chicago
+        cron.schedule('0 7 * * *', async () => {
+            try {
+                await runLeaguesSheetSync();
+            } catch (error) {
+                logger.error('[Cron] Leagues Sheet Sync failed:', error.message);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT)');
     },
 };
