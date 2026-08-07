@@ -4,7 +4,7 @@ const { MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
 const { getSheetsClient } = require('../utils/sheets_cache');
-const { SPREADSHEET_KO_HOST, SPREADSHEET_RANKED_SESSIONS, KO_HOST_APPLICATIONS_CHANNEL_ID } = require('../config/constants');
+const { SPREADSHEET_RANKED_SESSIONS } = require('../config/constants');
 
 const handleBugReport = async (interaction, customId) => {
     const commandName = customId;
@@ -82,87 +82,6 @@ const handleSnackModal = async (interaction) => {
     }
 };
 
-const handleKoHostApplication = async (interaction) => {
-    try {
-        const reason = interaction.fields.getTextInputValue('koHostReason');
-        const availability = interaction.fields.getTextInputValue('koHostAvailability');
-        const boxingAwareness = interaction.fields.getTextInputValue('koHostBoxingAwareness');
-        const guidelineAgreement = interaction.fields.getTextInputValue('koHostGuidelineAgreement');
-
-        const normalizeYesNo = (input) => input?.trim().toLowerCase();
-        const boxingNormalized = normalizeYesNo(boxingAwareness);
-        const guidelineNormalized = normalizeYesNo(guidelineAgreement);
-
-        const invalidFields = [];
-        if (boxingNormalized !== 'yes' && boxingNormalized !== 'no') invalidFields.push('Boxing operations/rules');
-        if (guidelineNormalized !== 'yes' && guidelineNormalized !== 'no') invalidFields.push('Guideline agreement');
-
-        if (invalidFields.length) {
-            await interaction.reply({
-                ...noticePayload(`Please answer "Yes" or "No" for: ${invalidFields.join(', ')}.`, { title: 'Validation Required', subtitle: 'KO-Host Application' }),
-                ephemeral: true,
-            });
-            return;
-        }
-
-        const applicationsChannel = await interaction.client.channels.fetch(KO_HOST_APPLICATIONS_CHANNEL_ID).catch(() => null);
-        if (!applicationsChannel) {
-            await interaction.reply({
-                ...noticePayload('Could not find the KO-Host applications channel. Please alert a staff member.', { title: 'Submission Failed', subtitle: 'KO-Host Application' }),
-                ephemeral: true,
-            });
-            return;
-        }
-
-        const koHostContainer = new ContainerBuilder();
-        const block = buildTextBlock({
-            title: 'New KO-Host Application',
-            subtitle: interaction.user.tag,
-            lines: [
-                `**Applicant:** <@${interaction.user.id}> (${interaction.user.tag})`,
-                `**Why do you want to become a KO-Host?** ${reason || 'Not provided'}`,
-                `**Availability:** ${availability || 'Not provided'}`,
-                `**Boxing Knowledge:** ${boxingNormalized === 'yes' ? 'Yes' : 'No'}`,
-                `**Guideline Agreement:** ${guidelineNormalized === 'yes' ? 'Yes' : 'No'}`,
-            ],
-        });
-        if (block) koHostContainer.addTextDisplayComponents(block);
-
-        const applicationMessage = await applicationsChannel.send({ flags: MessageFlags.IsComponentsV2, components: [koHostContainer] });
-
-        try {
-            const sheets = await getSheetsClient();
-            await sheets.spreadsheets.values.append({
-                spreadsheetId: SPREADSHEET_KO_HOST,
-                range: 'Applications!A:E',
-                valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [[
-                        interaction.user.tag, interaction.user.id,
-                        guidelineNormalized === 'yes' ? 'Yes' : 'No',
-                        applicationMessage?.url || 'Not available', 'Pending',
-                    ]],
-                },
-            });
-        } catch (sheetError) {
-            logger.error('Failed to write KO-Host application to sheet:', sheetError);
-        }
-
-        await interaction.reply({
-            ...noticePayload('Thank you! Your KO-Host application has been submitted.', { title: 'Application Submitted', subtitle: 'KO-Host Application' }),
-            ephemeral: true,
-        });
-    } catch (error) {
-        logger.error('Error handling KO-Host application modal:', error);
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                ...noticePayload('There was an error submitting your application. Please try again later.', { title: 'Submission Failed', subtitle: 'KO-Host Application' }),
-                ephemeral: true,
-            }).catch(e => logger.error('Reply failed:', e));
-        }
-    }
-};
-
 const SKILL_LABELS = Object.freeze({
     'midrange_one_dribble_jump_shot_freethrow': 'Midrange One Dribble Jump Shot (Freethrow)',
     'midrange_catch_and_shoot_jumpshot_freethrow': 'Midrange Catch and Shoot Jumpshot (Freethrow)',
@@ -225,7 +144,7 @@ const handleRankedSessionModal = async (interaction) => {
                         'How to copy on mobile:',
                         '1) Press and hold the next message.',
                         '2) Tap Copy Text.',
-                        '3) Paste it into `/ranked-session-best`.',
+                        '3) Paste it into `/ranked-session best`.',
                         '.. your session id is:',
                     ],
                 });
@@ -240,7 +159,7 @@ const handleRankedSessionModal = async (interaction) => {
             const replyLines = [
                 'Ranked session logged successfully!',
                 `**Session ID:** ${sessionId}`,
-                'Use `/ranked-session-best` to log the best participant.',
+                'Use `/ranked-session best` to log the best participant.',
             ];
             if (!dmDelivered) {
                 replyLines.push('I could not DM you, so please copy the session ID from this message.');
@@ -304,7 +223,6 @@ const handleGenerateTemplateModal = async (interaction) => {
 module.exports = {
     handleBugReport,
     handleSnackModal,
-    handleKoHostApplication,
     handleRankedSessionModal,
     handleGenerateTemplateModal,
 };

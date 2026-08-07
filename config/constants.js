@@ -12,7 +12,6 @@ const BOT_ADMIN_USER_ID = '781397829808553994';
 const BOT_BUGS_CHANNEL_ID = '1233853458092658749';
 const USER_BUG_REPORTS_CHANNEL_ID = '1233853364035522690';
 const LOGGING_CHANNEL_ID = '1233853415952748645';
-const KO_HOST_APPLICATIONS_CHANNEL_ID = '1446163192785932409';
 const OFFICIALS_APPLICATIONS_CHANNEL_ID = '1284290923819175976';
 const FF_OFFICIAL_APPLICATIONS_CHANNEL_ID = '1510056368520823006';
 
@@ -29,11 +28,11 @@ const BUG_REPORT_ESCALATED_TAG_ID = '1265408485361975338';
 const GAMEPLAY_TAG_ID = '1256306810722193489';
 const SKINS_TAG_ID = '1149459536835518555';
 const BOARD_TAG_MAP = { gameplay: GAMEPLAY_TAG_ID, skins: SKINS_TAG_ID };
-// Forum channel where /report-player opens a thread per report and moderators
+// Forum channel where /report player opens a thread per report and moderators
 // action them. Was hardcoded in the report command and lookup separately.
 const REPORTS_FORUM_CHANNEL_ID = '1139975178013655183';
 const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
-// Ops channel where /request-official cards post and staff assign/deny. Set
+// Ops channel where /league request-official cards post and staff assign/deny. Set
 // LEAGUE_OFFICIALS_CHANNEL_ID in the env to use a dedicated channel; otherwise
 // requests fall back to the shared league log channel.
 const LEAGUE_OFFICIALS_CHANNEL_ID = process.env.LEAGUE_OFFICIALS_CHANNEL_ID || LEAGUE_LOG_CHANNEL_ID;
@@ -89,7 +88,6 @@ const HIGHER_LEVEL_ROLES = [
 const SPREADSHEET_SQUADS = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const SPREADSHEET_OFFICIALS = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
 const SPREADSHEET_CONTENT_CREATORS = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
-const SPREADSHEET_KO_HOST = '1JZ6tadLFzW68OiMXQeHndyJcwU7hp_Qgh_ar0hq4-sk';
 const SPREADSHEET_RANKED_SESSIONS = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
 const SPREADSHEET_COMP_WINS = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
 const SPREADSHEET_LFO = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
@@ -214,7 +212,6 @@ module.exports = {
     BOT_BUGS_CHANNEL_ID,
     USER_BUG_REPORTS_CHANNEL_ID,
     LOGGING_CHANNEL_ID,
-    KO_HOST_APPLICATIONS_CHANNEL_ID,
     OFFICIALS_APPLICATIONS_CHANNEL_ID,
     FF_OFFICIAL_APPLICATIONS_CHANNEL_ID,
     GAME_IDEAS_FORUM_CHANNEL_ID,
@@ -251,7 +248,6 @@ module.exports = {
     SPREADSHEET_SQUADS,
     SPREADSHEET_OFFICIALS,
     SPREADSHEET_CONTENT_CREATORS,
-    SPREADSHEET_KO_HOST,
     SPREADSHEET_RANKED_SESSIONS,
     SPREADSHEET_COMP_WINS,
     SPREADSHEET_LFO,
