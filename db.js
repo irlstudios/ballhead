@@ -908,6 +908,64 @@ const markLeagueDisbanded = async (leagueId, ownerId) => {
     return result.rowCount > 0;
 };
 
+// Every league regardless of status, with its metrics, for the sheet mirror:
+// strike counts, distinct check-in months, and game totals.
+const fetchLeaguesForSheetSync = async () => {
+    const result = await executeQuery(
+        `SELECT l.*,
+                COALESCE(s.active_strikes, 0)::int AS active_strikes,
+                COALESCE(s.total_strikes, 0)::int AS total_strikes,
+                COALESCE(c.months, '{}') AS checkin_months,
+                COALESCE(g.games_total, 0)::int AS games_total,
+                COALESCE(g.games_30d, 0)::int AS games_30d
+         FROM "Active Leagues" l
+         LEFT JOIN (SELECT league_id, COUNT(*) FILTER (WHERE active)::int AS active_strikes,
+                           COUNT(*)::int AS total_strikes
+                    FROM league_strikes GROUP BY 1) s USING (league_id)
+         LEFT JOIN (SELECT league_id, ARRAY_AGG(DISTINCT checkin_month) AS months
+                    FROM league_checkins GROUP BY 1) c USING (league_id)
+         LEFT JOIN (SELECT league_id, COUNT(*)::int AS games_total,
+                           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days')::int AS games_30d
+                    FROM league_games GROUP BY 1) g USING (league_id)`
+    );
+    return result.rows;
+};
+
+// Everything the daily tier sync needs in one round trip: each live Base or
+// Active league with its active strike count and distinct check-in months.
+const fetchLeaguesForTierSync = async () => {
+    const result = await executeQuery(
+        `SELECT l.*, COALESCE(s.n, 0)::int AS active_strikes,
+                COALESCE(c.months, '{}') AS checkin_months
+         FROM "Active Leagues" l
+         LEFT JOIN (SELECT league_id, COUNT(*)::int AS n FROM league_strikes WHERE active GROUP BY 1) s USING (league_id)
+         LEFT JOIN (SELECT league_id, ARRAY_AGG(DISTINCT checkin_month) AS months FROM league_checkins GROUP BY 1) c USING (league_id)
+         WHERE l.league_status = 'Active' AND l.league_type IN ('Base', 'Active')`
+    );
+    return result.rows;
+};
+
+// Conditional tier claim: no-ops (returns false) if the league changed tier
+// or status since it was evaluated, so a stale snapshot can never overwrite
+// a staff move to Sponsored or a disband, and a transition is applied once.
+const setLeagueType = async (leagueId, leagueType, expectedType) => {
+    const result = await executeQuery(
+        `UPDATE "Active Leagues" SET league_type = $1
+         WHERE league_id = $2 AND league_type = $3 AND league_status = 'Active'
+         RETURNING league_id`,
+        [leagueType, leagueId, expectedType]
+    );
+    return result.rows.length > 0;
+};
+
+const fetchCheckinMonths = async (leagueId) => {
+    const result = await executeQuery(
+        'SELECT DISTINCT checkin_month FROM league_checkins WHERE league_id = $1',
+        [leagueId]
+    );
+    return result.rows.map(row => row.checkin_month);
+};
+
 const fetchCheckinForMonth = async (leagueId, checkinMonth) => {
     const result = await executeQuery(
         'SELECT * FROM league_checkins WHERE league_id = $1 AND checkin_month = $2',
@@ -1508,7 +1566,7 @@ const fetchLeagueOverviewStats = async () => {
     return result.rows;
 };
 
-// Staff lookup by name for /league-games: exact (case-insensitive) match wins,
+// Staff lookup by name for /league games: exact (case-insensitive) match wins,
 // then substring match.
 const fetchLeagueByName = async (name) => {
     const result = await executeQuery(
@@ -1641,7 +1699,7 @@ const ensureLeagueEnforcementSchema = async () => {
     `);
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_appeals_strike ON league_appeals (strike_id)').catch(() => {});
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_appeals_ops ON league_appeals (ops_message_id)').catch(() => {});
-    // Backstop for the check-then-insert in /league-appeal: at most one pending
+    // Backstop for the check-then-insert in /league appeal: at most one pending
     // appeal per strike, even under concurrent submissions.
     await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_league_appeals_pending
         ON league_appeals (strike_id) WHERE status = 'Pending'`).catch(() => {});
@@ -1976,6 +2034,10 @@ module.exports = {
     updateLeagueCheckinDate,
     updateLeagueStatus,
     markLeagueDisbanded,
+    fetchLeaguesForTierSync,
+    fetchLeaguesForSheetSync,
+    setLeagueType,
+    fetchCheckinMonths,
     fetchCheckinForMonth,
     updateLeagueInvite,
     fetchLeaguesByCoOwner,

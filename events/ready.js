@@ -14,6 +14,7 @@ const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
 const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema } = require('../db');
 const { runLeagueHealthCheck } = require('../jobs/league-health-check');
+const { runLeagueTierSync } = require('../jobs/league-tier-sync');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
 const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
 const { syncRankRoles } = require('../jobs/rank-role-sync');
@@ -252,6 +253,16 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
+        // Daily: League Tier Sync - 12:30 PM Chicago (after the Sunday health
+        // check refreshes member counts, promotions/demotions use fresh data)
+        cron.schedule('30 12 * * *', async () => {
+            try {
+                await runLeagueTierSync(client);
+            } catch (error) {
+                logger.error('[Cron] League Tier Sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
         // Monthly: Check-in Reminder - 1st of month 12:00 PM Chicago
         cron.schedule('0 12 1 * *', async () => {
             try {
@@ -346,6 +357,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT)');
+        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
     },
 };
