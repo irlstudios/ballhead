@@ -19,7 +19,7 @@ const state = {
 };
 
 installMock('../db.js', {
-    fetchAllLeaguesForCheckin: async () => state.leagues,
+    fetchLeaguesForSheetSync: async () => state.leagues,
 });
 
 installMock('../utils/logger.js', {
@@ -54,6 +54,8 @@ const {
     runLeaguesSheetSync,
     toCell,
     groupByStatus,
+    withMetrics,
+    buildMetricsRows,
     SHEET_COLUMNS,
 } = require('../jobs/leagues-sheet-sync');
 
@@ -114,12 +116,18 @@ test('runLeaguesSheetSync creates missing tabs, grows small ones, and rewrites e
     const requests = batches[0][1].requestBody.requests;
     assert.deepStrictEqual(
         requests.map((r) => r.addSheet?.properties?.title).filter(Boolean),
-        ['Disbanded_Leagues']
+        ['Disbanded_Leagues', 'Metrics']
     );
+    // The mocked existing tab has 30 columns; the wider schema must grow it.
+    const grow = requests.find((r) => r.updateSheetProperties);
+    assert.ok(grow, 'expected column growth for the existing narrow tab');
+    assert.ok(grow.updateSheetProperties.properties.gridProperties.columnCount >= SHEET_COLUMNS.length);
 
     const updates = state.calls.filter(([name]) => name === 'update');
-    assert.strictEqual(updates.length, 2);
-    for (const [, req] of updates) {
+    assert.strictEqual(updates.length, 3);
+    const statusUpdates = updates.filter(([, req]) => !req.range.includes('Metrics'));
+    assert.strictEqual(statusUpdates.length, 2);
+    for (const [, req] of statusUpdates) {
         const values = req.requestBody.values;
         assert.deepStrictEqual(values[0], SHEET_COLUMNS);
         assert.strictEqual(values.length, 2);
@@ -127,9 +135,12 @@ test('runLeaguesSheetSync creates missing tabs, grows small ones, and rewrites e
         // owner_id lands in column B with the text-guard apostrophe.
         assert.strictEqual(values[1][1], '\'1123467724555812996');
     }
+    const metricsUpdate = updates.find(([, req]) => req.range.includes('Metrics'));
+    assert.ok(metricsUpdate, 'Metrics tab must be written');
+    assert.deepStrictEqual(metricsUpdate[1].requestBody.values[0], ['Metric', 'Value']);
 
     const clears = state.calls.filter(([name]) => name === 'clear');
-    assert.strictEqual(clears.length, 2);
+    assert.strictEqual(clears.length, 3);
 });
 
 test('runLeaguesSheetSync grows a tab whose grid is smaller than the row count', async () => {
@@ -146,4 +157,53 @@ test('runLeaguesSheetSync grows a tab whose grid is smaller than the row count',
     const grow = batches[0][1].requestBody.requests.find((r) => r.updateSheetProperties);
     assert.ok(grow, 'expected an updateSheetProperties request to grow the grid');
     assert.ok(grow.updateSheetProperties.properties.gridProperties.rowCount >= 251);
+});
+
+
+test('withMetrics derives standing and check-in counts per league', () => {
+    const now = new Date('2026-08-01T00:00:00Z');
+    const qualifying = withMetrics(league({
+        league_type: 'Base',
+        member_count: 120,
+        approval_date: '2026-06-01',
+        last_checkin_date: '2026-07-20',
+        last_health_check: '2026-07-28',
+        checkin_months: ['2026-06', '2026-07'],
+        active_strikes: 0,
+        health_status: 'Healthy',
+    }), now);
+    assert.strictEqual(qualifying.checkin_months_count, 2);
+    assert.strictEqual(qualifying.meets_active_requirements, true);
+    assert.strictEqual(qualifying.failed_requirements, '');
+
+    const failing = withMetrics(league({
+        league_type: 'Base',
+        member_count: 5,
+        approval_date: '2026-06-01',
+        last_checkin_date: '2026-07-20',
+        last_health_check: '2026-07-28',
+        checkin_months: ['2026-07'],
+        active_strikes: 0,
+        health_status: 'Healthy',
+    }), now);
+    assert.strictEqual(failing.meets_active_requirements, false);
+    assert.ok(failing.failed_requirements.length > 0);
+
+    const disbanded = withMetrics(league({ league_status: 'Disbanded', checkin_months: [] }), now);
+    assert.strictEqual(disbanded.meets_active_requirements, '');
+});
+
+test('buildMetricsRows summarizes the program', () => {
+    const now = new Date('2026-08-01T00:00:00Z');
+    const rows = buildMetricsRows([
+        withMetrics(league({ league_id: 1, league_status: 'Active', league_type: 'Base', active_strikes: 1, games_total: 3, games_30d: 2, checkin_months: [] }), now),
+        withMetrics(league({ league_id: 2, league_status: 'Disbanded', checkin_months: [] }), now),
+    ], now);
+    const asMap = new Map(rows.slice(1).map(([k, v]) => [k, v]));
+    assert.strictEqual(asMap.get('Total leagues'), 2);
+    assert.strictEqual(asMap.get('Status: Active'), 1);
+    assert.strictEqual(asMap.get('Status: Disbanded'), 1);
+    assert.strictEqual(asMap.get('Active strikes (all leagues)'), 1);
+    assert.strictEqual(asMap.get('Games recorded (all time)'), 3);
+    assert.strictEqual(asMap.get('Games recorded (last 30 days)'), 2);
 });
