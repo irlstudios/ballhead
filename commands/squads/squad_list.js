@@ -5,7 +5,7 @@ const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('squads')
+        .setName('squad-list')
         .setDescription('Lists all registered squads and their owners.'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -103,7 +103,7 @@ module.exports = {
             });
 
         } catch (error) {
-            logger.error('Error executing /squads command:', error);
+            logger.error('Error executing /squad list command:', error);
 
             const errorContainer = new ContainerBuilder();
             errorContainer.addTextDisplayComponents(

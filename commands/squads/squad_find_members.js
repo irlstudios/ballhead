@@ -6,7 +6,7 @@ const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('find-squad-members')
+        .setName('squad-find-members')
         .setDescription('Create a post to find members for your squad'),
     async execute(interaction) {
         const squadLeaderRoleId = '1218468103382499400';

@@ -123,7 +123,7 @@ async function performDisband(interaction, league) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('disband-league')
+        .setName('league-disband')
         .setDescription('Disband a league you own. This cannot be undone.'),
 
     async execute(interaction) {

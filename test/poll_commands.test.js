@@ -7,7 +7,7 @@ const myideas = require('../commands/poll/myideas');
 
 test('myideas exposes add and view subcommands', () => {
     const json = myideas.data.toJSON();
-    assert.strictEqual(json.name, 'myideas');
+    assert.strictEqual(json.name, 'my-ideas');
     const subs = json.options.map((o) => o.name);
     assert.ok(subs.includes('add'));
     assert.ok(subs.includes('view'));
@@ -30,7 +30,7 @@ const leaderboard = require('../commands/poll/leaderboard');
 
 test('leaderboard has a 3-choice board option', () => {
     const json = leaderboard.data.toJSON();
-    assert.strictEqual(json.name, 'leaderboard');
+    assert.strictEqual(json.name, 'idea-leaderboard');
     const board = json.options.find((o) => o.name === 'board');
     assert.strictEqual(board.choices.length, 3);
 });

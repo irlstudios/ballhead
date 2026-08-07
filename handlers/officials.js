@@ -354,7 +354,7 @@ A: To move up, you need to send in 6 games or 1 hour's worth of recording while 
 A: To move up, you need to complete 8 hours worth of game sessions and you must have been hosting for 1 or more months *(consecutively)* while maintaining an average quality rating of 3+.
 
 **Q: How do I check my quality rating, and if I meet requirements?**
-A: To see said information can you can run the /officials-status command.
+A: To see said information can you can run the /officials status command.
 
 **Q: What's the purpose of this program?**
 A: This program encourages more engagement with the game by increasing hosting opportunities.

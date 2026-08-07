@@ -5,7 +5,7 @@ const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('change-squad-name')
+        .setName('squad-rename')
         .setDescription('Change the name of your squad if you are the squad leader.')
         .addStringOption(option =>
             option.setName('new-name')

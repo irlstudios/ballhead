@@ -8,7 +8,7 @@ const { GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 // module cache entry before handlers/league-officials is first required
 // (mirrors test/squad_member_removal.test.js). Covers FIX 8: the assign flow
 // must DM both the assigned official and the requester, not just the
-// official -- /request-official promises "You will be DMed when it is
+// official -- /league request-official promises "You will be DMed when it is
 // assigned".
 
 function installMock(relativePath, mockExports) {
@@ -81,7 +81,7 @@ test('assigning an official DMs both the official and the requester', async () =
     assert.ok(payloadText(officialDm.payload).includes('assigned to officiate'));
 
     const requesterDm = dms.find((d) => d.id === 'requester-1');
-    assert.ok(requesterDm, 'the requester must be DMed (pre-existing /request-official promise)');
+    assert.ok(requesterDm, 'the requester must be DMed (pre-existing /league request-official promise)');
     assert.ok(payloadText(requesterDm.payload).includes('has been assigned to'));
     assert.ok(payloadText(requesterDm.payload).includes('official-9'));
     assert.ok(payloadText(requesterDm.payload).includes('request #5'));

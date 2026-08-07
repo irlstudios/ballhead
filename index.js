@@ -46,8 +46,11 @@ const getCommandFiles = (dir) => {
     });
 };
 
+const { groupCommandsByDomain } = require('./utils/command_domains');
+
 try {
     const commandFiles = getCommandFiles(path.join(__dirname, 'commands'));
+    const loadedCommands = [];
     for (const file of commandFiles) {
         try {
             const command = require(file);
@@ -55,11 +58,24 @@ try {
                 logger.error(`Error loading ${file}: 'data' or 'name' property is missing or invalid.`);
                 continue;
             }
-            logger.info(`Registering Command: ${command.data.name}`);
-            client.commands.set(command.data.name, command);
+            loadedCommands.push(command);
         } catch (error) {
             logger.error(`Error loading ${file}: ${error}`);
         }
+    }
+    // Domain-prefixed commands register as "/domain subcommand"; the rest
+    // keep their flat names. If folding fails, fall back to flat names --
+    // an empty command set here would make ready.js unregister everything.
+    let groupedCommands;
+    try {
+        groupedCommands = groupCommandsByDomain(loadedCommands);
+    } catch (error) {
+        logger.error('Command domain folding failed; registering flat commands instead:', error);
+        groupedCommands = new Map(loadedCommands.map((command) => [command.data.name, command]));
+    }
+    for (const [name, command] of groupedCommands) {
+        logger.info(`Registering Command: ${name}`);
+        client.commands.set(name, command);
     }
 } catch (error) {
     logger.error('Error reading command files:', error);

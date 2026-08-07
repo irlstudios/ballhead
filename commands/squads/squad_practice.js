@@ -211,7 +211,7 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            logger.error(`Error during /squad-practice for ${userTag} (${userId}):`, error);
+            logger.error(`Error during /squad practice for ${userTag} (${userId}):`, error);
 
             if (thread) {
                 try {

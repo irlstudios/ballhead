@@ -10,7 +10,7 @@ const SL_ID = 1;
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('leave-squad')
+        .setName('squad-leave')
         .setDescription('Leave your current squad'),
 
     async execute(interaction) {
@@ -49,7 +49,7 @@ module.exports = {
                 const infoContainer = buildNoticeContainer({
                     title: 'Leaders Must Disband',
                     subtitle: 'Leave Squad',
-                    lines: ['Squad leaders cannot leave their squad using this command.', 'Please use `/disband-squad`.']
+                    lines: ['Squad leaders cannot leave their squad using this command.', 'Please use `/squad disband`.']
                 });
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
@@ -202,7 +202,7 @@ module.exports = {
             });
 
         } catch (error) {
-            logger.error(`Error during /leave-squad for ${userTag} (${userId}):`, error);
+            logger.error(`Error during /squad leave for ${userTag} (${userId}):`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);

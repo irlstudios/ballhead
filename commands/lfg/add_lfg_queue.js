@@ -24,7 +24,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('add_lfg_queue')
+        .setName('lfg-queue-add')
         .setDescription('Add a new LFG queue definition')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
         .addStringOption(o => o.setName('key').setDescription('Unique key, e.g., comp_1v1').setRequired(true))

@@ -9,7 +9,7 @@ const { buildTextBlock, noticePayload } = require('./utils/ui');
 const { GYM_CLASS_GUILD_ID, BOT_BUGS_CHANNEL_ID } = require('./config/constants');
 
 // Handler modules
-const { handleBugReport, handleSnackModal, handleKoHostApplication, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
+const { handleBugReport, handleSnackModal, handleRankedSessionModal, handleGenerateTemplateModal } = require('./handlers/modals');
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
 const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprove, handleFfOfficialApplicationReject } = require('./handlers/ff_officials');
 const { handleBugSquasherApplicationSubmission, handleBugSquasherApplicationApprove, handleBugSquasherApplicationReject } = require('./handlers/bug_squasher');
@@ -95,16 +95,26 @@ const handleCommand = async (interaction, client) => {
     const command = client.commands.get(interaction.commandName);
     if (!command) return;
 
+    // Domain dispatchers (/squad invite) route to a per-subcommand module;
+    // cooldowns must key on that module, not the shared domain command,
+    // or every subcommand would share one timer and lose its own duration.
+    const target = (typeof command.resolveSubcommand === 'function' && command.resolveSubcommand(interaction)) || command;
+    const commandLabel = [
+        interaction.commandName,
+        interaction.options?.getSubcommandGroup?.(false),
+        interaction.options?.getSubcommand?.(false),
+    ].filter(Boolean).join(' ');
+
     const { cooldowns } = client;
 
-    if (!cooldowns.has(command.data.name)) {
-        cooldowns.set(command.data.name, new Collection());
+    if (!cooldowns.has(target.data.name)) {
+        cooldowns.set(target.data.name, new Collection());
     }
 
     const now = Date.now();
-    const timestamps = cooldowns.get(command.data.name);
+    const timestamps = cooldowns.get(target.data.name);
     const defaultCooldownDuration = 5;
-    const cooldownAmount = (command.cooldown ?? defaultCooldownDuration) * 1000;
+    const cooldownAmount = (target.cooldown ?? defaultCooldownDuration) * 1000;
 
     if (timestamps.has(interaction.user.id)) {
         const expirationTime = timestamps.get(interaction.user.id) + cooldownAmount;
@@ -113,7 +123,7 @@ const handleCommand = async (interaction, client) => {
             const timeLeft = Math.ceil((expirationTime - now) / 1000);
             return await interaction.reply({
                 ...noticePayload(
-                    `You are on cooldown for the \`${command.data.name}\` command. Please wait ${timeLeft} second(s) before using it again.`,
+                    `You are on cooldown for the \`/${commandLabel}\` command. Please wait ${timeLeft} second(s) before using it again.`,
                     { title: 'Cooldown Active', subtitle: 'Command Cooldown' }
                 ),
                 ephemeral: true,
@@ -225,7 +235,6 @@ const handleModalSubmit = async (interaction) => {
         'league-checkin-modal': () => handleLeagueCheckinModal(interaction),
         'update-league-invite-modal': () => handleUpdateLeagueInviteModal(interaction),
         'denyLeagueModal': () => handleDenyLeagueModal(interaction),
-        'koHostApplicationModal': () => handleKoHostApplication(interaction),
         'rankedSessionModal': () => handleRankedSessionModal(interaction),
         'snack_modal': () => handleSnackModal(interaction),
     };
@@ -425,7 +434,7 @@ const handleSquadsPagination = async (interaction, direction) => {
     const paginationData = interaction.client.squadsPagination?.get(interaction.message.interaction?.id);
     if (!paginationData) {
         await interaction.followUp({
-            ...noticePayload('This pagination session has expired. Please run `/squads` again.', { title: 'Session Expired', subtitle: 'Squads List' }),
+            ...noticePayload('This pagination session has expired. Please run `/squad list` again.', { title: 'Session Expired', subtitle: 'Squads List' }),
             ephemeral: true,
         }).catch(() => {});
         return;

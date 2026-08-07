@@ -53,7 +53,7 @@ async function fetchTeamNames(guildId) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('request-official')
+        .setName('league-request-official')
         .setDescription('Request a community official for a league game (Active/Sponsored)')
         .addStringOption((o) => o.setName('sport').setDescription('Sport / format for the match').setRequired(true).setMaxLength(60))
         .addStringOption((o) => o.setName('details').setDescription('Opponent, event, or match context').setRequired(true).setMaxLength(300))

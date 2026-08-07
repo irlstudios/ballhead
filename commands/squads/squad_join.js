@@ -16,7 +16,7 @@ const AD_EVENT_SQUAD = 4;
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('join-random-squad')
+        .setName('squad-join-random')
         .setDescription('Attempt to join a random squad that is currently open.'),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -87,7 +87,7 @@ module.exports = {
                     const infoContainer = buildNoticeContainer({
                         title: 'Opted Out',
                         subtitle: 'Random Squad Join',
-                        lines: ['You have opted out of squad invitations/joining.', 'Use `/squad-opt-in` first.']
+                        lines: ['You have opted out of squad invitations/joining.', 'Use `/squad opt-in` first.']
                     });
                     await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
                     return;
@@ -266,7 +266,7 @@ module.exports = {
 
 
         } catch (error) {
-            logger.error(`Error processing /join-random-squad for ${userTag}:`, error);
+            logger.error(`Error processing /squad join-random for ${userTag}:`, error);
 
             try {
                 const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);

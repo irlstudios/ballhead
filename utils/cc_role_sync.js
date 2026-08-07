@@ -1,7 +1,7 @@
 'use strict';
 
 // Discord roles granted to content creators, synced from the CC Master
-// sheet's Creators tab by /cc-sync-roles.
+// sheet's Creators tab by /cc sync-roles.
 const CC_ROLE_IDS = {
     CONTENT_CREATORS: '879910773831372811',
     CONTENT_CREATORS_REELS: '1130621784677421096',

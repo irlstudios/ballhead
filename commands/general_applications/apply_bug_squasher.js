@@ -7,7 +7,7 @@ const SUBTITLE = 'Community Bug Squasher Application';
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('apply-for-bug-squasher')
+        .setName('apply-bug-squasher')
         .setDescription('Submit an application to become a Community Bug Squasher'),
     async execute(interaction) {
         const member = await interaction.guild.members.fetch(interaction.user.id);

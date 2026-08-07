@@ -13,7 +13,7 @@ const BOARD_CHOICES = [
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('leaderboard')
+        .setName('idea-leaderboard')
         .setDescription('Live community top ideas and bugs')
         .addStringOption((o) => o.setName('board').setDescription('Which board').setRequired(true).addChoices(...BOARD_CHOICES)),
 
@@ -27,7 +27,7 @@ module.exports = {
                 const voters = Number(r.voters);
                 return `**${i + 1}.** [${r.title || 'Untitled'}](${r.url}) - **${r.points}** pts (${voters} voter${voters === 1 ? '' : 's'})`;
             })
-            : ['_No votes yet. Be the first with_ `/myideas add`.'];
+            : ['_No votes yet. Be the first with_ `/my-ideas add`.'];
 
         const container = new ContainerBuilder().addTextDisplayComponents(
             new TextDisplayBuilder().setContent(

@@ -115,7 +115,7 @@ module.exports = {
                 failures > 0 ? `_${failures} role change(s) failed; see the bot logs._` : null,
             ], { title: 'Sync Complete', subtitle: SUB }));
         } catch (error) {
-            logger.error('Error running /cc-sync-roles:', error);
+            logger.error('Error running /cc sync-roles:', error);
             await interaction.editReply(noticePayload(
                 'There was an error while syncing creator roles. Please try again later.',
                 { title: 'Sync Failed', subtitle: SUB }

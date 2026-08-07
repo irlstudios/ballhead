@@ -146,7 +146,7 @@ module.exports = {
             });
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
-            logger.error('Error in /apply-sponsored-league command:', error);
+            logger.error('Error in /apply sponsored-league command:', error);
             const errorContainer = buildNoticeContainer({
                 title: 'Application Failed',
                 subtitle: 'Sponsored League Application',

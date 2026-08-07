@@ -35,7 +35,7 @@ function parseDuration(input) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('set_cooldown')
+        .setName('set-cooldown')
         .setDescription('Set the channel slowmode (cooldown) for a limited time in this channel')
         .addIntegerOption(opt =>
             opt.setName('cooldown')
@@ -92,7 +92,7 @@ module.exports = {
         }
 
         try {
-            await channel.setRateLimitPerUser(cooldownSeconds, `Set by ${interaction.user.tag} via /set_cooldown for ${lengthInput}`);
+            await channel.setRateLimitPerUser(cooldownSeconds, `Set by ${interaction.user.tag} via /set-cooldown for ${lengthInput}`);
 
             // Clear any existing scheduled reset for this channel
             const previous = scheduledResets.get(channel.id);

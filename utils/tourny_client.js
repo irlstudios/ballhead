@@ -38,7 +38,7 @@ const reportAsOfficial = (guildId, gameId, { seasonId, actorId, homeScore, awayS
     call('post', `/private/guilds/${guildId}/games/${gameId}/report`, {
         seasonId, actorId, staff: false, homeScore, awayScore, lines: [],
     });
-// Marks a game as needing a hub official, from the /request-official game
+// Marks a game as needing a hub official, from the /league request-official game
 // picker, so the dashboard badge lights up. Assignment itself only ever
 // happens through assignOfficial once staff pick someone.
 const requestOfficialMark = (guildId, gameId, seasonId, requestedBy) =>

@@ -80,7 +80,7 @@ module.exports = {
                 await dmOwner(interaction.client, owner.id, [
                     `Your league **${league.league_name}** received a strike.`,
                     `**Reason:** ${reason}`,
-                    `You now have **${active}** active strike(s). You may appeal with \`/league-appeal\`.`,
+                    `You now have **${active}** active strike(s). You may appeal with \`/league appeal\`.`,
                 ]);
                 return interaction.editReply(noticePayload(
                     [`Strike **#${strike.id}** issued against **${league.league_name}**.`, `Active strikes: **${active}**.`],

@@ -6,7 +6,7 @@ const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('remove-participant')
+        .setName('squad-remove-participant')
         .setDescription('Remove a participant from a LFG Post')
         .addUserOption(option =>
             option.setName('user')

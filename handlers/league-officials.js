@@ -163,7 +163,7 @@ async function handleOfficialsButton(interaction) {
 }
 
 // Requester self-service cancel, from the Cancel Request button on the
-// /request-official ephemeral confirmation. Mirrors handleDenySubmit's
+// /league request-official ephemeral confirmation. Mirrors handleDenySubmit's
 // terminal transition exactly -- same Denied marking, same ops-card refresh,
 // same fire-and-forget clearOfficial with sweep repair -- but gated to the
 // original requester and a still-Pending request, and via the atomic
@@ -217,7 +217,7 @@ async function showAssignSelect(interaction, requestId) {
     if (officials.length === 0) {
         return ephemeralNotice(
             interaction,
-            `No active roster officials available for sport "${request.sport || 'Any'}". Add some with \`/official-roster add\`.`,
+            `No active roster officials available for sport "${request.sport || 'Any'}". Add some with \`/league official-roster add\`.`,
             'No Officials Available'
         );
     }

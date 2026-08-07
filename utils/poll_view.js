@@ -15,7 +15,7 @@ const buildUserListReply = async (userId, board) => {
 
     const lines = rows.length
         ? rows.map((r, i) => `**${i + 1}.** ${r.title ? `[${r.title}](${r.url})` : '_(removed post)_'}`)
-        : ['_Your list is empty. Add posts with_ `/myideas add`.'];
+        : ['_Your list is empty. Add posts with_ `/my-ideas add`.'];
 
     const container = new ContainerBuilder().addTextDisplayComponents(
         new TextDisplayBuilder().setContent(

@@ -10,7 +10,7 @@ const SUB = 'Submit Game';
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('submit-game')
+        .setName('league-submit-game')
         .setDescription('Record a completed league game by tagging the players')
         .addStringOption((o) => o
             .setName('players')

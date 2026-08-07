@@ -24,7 +24,7 @@ const UNDELIVERABLE_DM_CODES = new Set([50007, 50278]);
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('invite-to-squad')
+        .setName('squad-invite')
         .setDescription('Invite a member to join your squad (Squad Leaders only).')
         .addUserOption(option =>
             option.setName('member')
@@ -365,7 +365,7 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            logger.error(`Error during /invite-to-squad for ${commandUserTag}:`, error);
+            logger.error(`Error during /squad invite for ${commandUserTag}:`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);

@@ -15,7 +15,7 @@ const {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('add-co-owner')
+        .setName('league-add-co-owner')
         .setDescription('Add a co-owner to your league (max 2)')
         .addUserOption(option =>
             option.setName('user')
@@ -61,7 +61,7 @@ module.exports = {
 
             if (league.co_owner_1 && league.co_owner_2) {
                 return interaction.editReply(
-                    noticePayload('Your league already has 2 co-owners. Remove one first with `/remove-co-owner`.', {
+                    noticePayload('Your league already has 2 co-owners. Remove one first with `/league remove-co-owner`.', {
                         title: 'Slots Full',
                         subtitle: 'Co-Owner',
                     })

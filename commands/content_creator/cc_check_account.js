@@ -345,7 +345,7 @@ function formatPlatformEmbed(platform, platformData) {
             name: `${config.emoji} ${config.name}`,
             value: accountLine +
                    '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
-                   'Keep posting great content and check out `/quality-score` to see your tracked posts.',
+                   'Keep posting great content and check out `/cc quality-score` to see your tracked posts.',
             inline: false
         };
     }
@@ -586,7 +586,7 @@ module.exports = {
                 } else {
                     const container = new ContainerBuilder()
                         .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                            `## No Applications Found\n${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n${isCheckingOther ? 'They need to use' : 'Use'} \`/instagram-cc-apply\` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use \`/cc_status\` for updates.`
+                            `## No Applications Found\n${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n${isCheckingOther ? 'They need to use' : 'Use'} \`/cc apply-instagram\` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use \`/cc check-progress\` for updates.`
                         ));
                     await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 }

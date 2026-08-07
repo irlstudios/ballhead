@@ -24,7 +24,7 @@ function currentMonth() {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('request-reward')
+        .setName('league-request-reward')
         .setDescription('Request a reward or cosmetic for your Sponsored league')
         .addStringOption((o) => o.setName('reward').setDescription('What you are requesting').setRequired(true).setMaxLength(120))
         .addStringOption((o) => o.setName('details').setDescription('Context / justification').setRequired(false).setMaxLength(400)),

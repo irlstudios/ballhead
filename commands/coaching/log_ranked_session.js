@@ -31,7 +31,7 @@ const RANKED_COACH_ROLES = [
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('log-ranked-session')
+        .setName('ranked-session-log')
         .setDescription('Log a ranked coaching session'),
     async execute(interaction) {
         const hasRole = interaction.member?.roles?.cache?.some(role => RANKED_COACH_ROLES.includes(role.id));

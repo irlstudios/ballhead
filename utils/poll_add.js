@@ -54,7 +54,7 @@ const addPostToBoard = async (interaction, threadId, board, { broadcast = true }
     const res = appendToList(current, threadId);
     if (!res.ok) {
         return notice(interaction, res.reason === 'full'
-            ? 'That list is already full (5). Remove one with `/myideas view` first.'
+            ? 'That list is already full (5). Remove one with `/my-ideas view` first.'
             : 'That post is already in your list.');
     }
 

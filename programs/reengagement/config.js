@@ -28,7 +28,7 @@ const config = Object.freeze({
     THROTTLE_MS: Number(process.env.REENGAGE_THROTTLE_MS || 2000),
     // Simulated lapse season used only for force-injected test targets.
     FORCE_SIMULATED_LAST_SEASON: Number(process.env.REENGAGE_FORCE_LAST_SEASON || 41),
-    // Accent colour shared with /ff-stats.
+    // Accent colour shared with /ff stats.
     FF_ACCENT_COLOR: 0xff6b00,
 });
 

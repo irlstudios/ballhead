@@ -24,7 +24,7 @@ function payloadText(payload) {
     return JSON.stringify(payload);
 }
 
-test('/remove-from-squad removes a stored member who is no longer in the guild', async () => {
+test('/squad remove-member removes a stored member who is no longer in the guild', async () => {
     const clearedRanges = [];
     const updates = [];
     const replies = [];

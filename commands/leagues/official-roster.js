@@ -9,7 +9,7 @@ const SUB = 'Officials Roster';
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('official-roster')
+        .setName('league-official-roster')
         .setDescription('Manage the league officials roster (staff)')
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
         .addSubcommand((s) => s
@@ -65,7 +65,7 @@ module.exports = {
             // list
             const officials = await listRosterOfficials();
             if (officials.length === 0) {
-                return interaction.editReply(noticePayload('The officials roster is empty. Add one with `/official-roster add`.', { title: 'Roster Empty', subtitle: SUB }));
+                return interaction.editReply(noticePayload('The officials roster is empty. Add one with `/league official-roster add`.', { title: 'Roster Empty', subtitle: SUB }));
             }
             const lines = officials.map((o) => `- <@${o.discord_id}> — ${o.sport || 'Any'}`);
             return interaction.editReply(noticePayload(lines, { title: `Officials Roster (${officials.length})`, subtitle: SUB }));

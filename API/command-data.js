@@ -3,7 +3,13 @@ const logger = require('../utils/logger');
 const mixpanel = Mixpanel.init(process.env.MIXPANEL_PROJECT_TOKEN);
 
 async function logCommandUsage(interaction) {
-    const commandName = interaction.commandName;
+    // Domain commands (/squad invite) need the subcommand in analytics, or
+    // every squad action would collapse into one "squad" event.
+    const commandName = [
+        interaction.commandName,
+        interaction.options?.getSubcommandGroup?.(false),
+        interaction.options?.getSubcommand?.(false),
+    ].filter(Boolean).join(' ');
     const distinctId = interaction.user.id;
     const channelId = interaction.channelId;
     const serverId = interaction.guildId;

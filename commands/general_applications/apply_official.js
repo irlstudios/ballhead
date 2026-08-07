@@ -24,7 +24,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('apply-for-official')
+        .setName('apply-official')
         .setDescription('Submit an application to become an official'),
     async execute(interaction) {
         const levelRoles = [LEVEL_5_ROLE_ID, ...HIGHER_LEVEL_ROLES];

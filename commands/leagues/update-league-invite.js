@@ -7,7 +7,7 @@ const { fetchLeaguesByOwner, fetchLeaguesByCoOwner } = require('../../db');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('update-league-invite')
+        .setName('league-update-invite')
         .setDescription('Update the invite link for your league'),
 
     async execute(interaction) {

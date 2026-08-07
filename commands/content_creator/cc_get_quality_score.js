@@ -329,7 +329,7 @@ function processData(postsData, pIds, platformFilter = null, seasonStartUnix = n
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('quality-score')
+        .setName('cc-quality-score')
         .setDescription('View your tracked posts for this CC season')
         .addUserOption(option =>
             option.setName('user')

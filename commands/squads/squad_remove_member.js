@@ -19,7 +19,7 @@ const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('remove-from-squad')
+        .setName('squad-remove-member')
         .setDescription('Remove a member from your squad (Squad Leaders only).')
         .addStringOption(option =>
             option.setName('member')
@@ -83,7 +83,7 @@ module.exports = {
             const container = new ContainerBuilder();
             container.addTextDisplayComponents(
                 new TextDisplayBuilder().setContent('## Invalid Target'),
-                new TextDisplayBuilder().setContent('You cannot remove yourself from your own squad.\nUse `/leave-squad` or `/disband-squad`.')
+                new TextDisplayBuilder().setContent('You cannot remove yourself from your own squad.\nUse `/squad leave` or `/squad disband`.')
             );
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
             return;
@@ -270,7 +270,7 @@ module.exports = {
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
 
         } catch (error) {
-            logger.error(`Error during /remove-from-squad for ${commandUserTag} removing ${targetUserTag}:`, error);
+            logger.error(`Error during /squad remove-member for ${commandUserTag} removing ${targetUserTag}:`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);

@@ -337,7 +337,7 @@ function formatPlatformEmbed(platform, platformData) {
         return {
             name: `${config.emoji} ${config.name}`,
             value: '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
-                   'Keep posting great content and check out `/quality-score` to see your tracked posts.',
+                   'Keep posting great content and check out `/cc quality-score` to see your tracked posts.',
             inline: false
         };
     }
@@ -571,8 +571,8 @@ module.exports = {
                     noAppsContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Applications'));
                     noAppsContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent([
                         `Hey <@${userId}>! You haven't applied for any CC programs yet.`,
-                        'Use `/instagram-cc-apply` to get started.',
-                        'TikTok and YouTube applications happen in the GC mobile app. Use `/cc_status` for updates.'
+                        'Use `/cc apply-instagram` to get started.',
+                        'TikTok and YouTube applications happen in the GC mobile app. Use `/cc check-progress` for updates.'
                     ].join('\n')));
                     await message.reply({ flags: MessageFlags.IsComponentsV2, components: [noAppsContainer] });
                 }
@@ -592,7 +592,7 @@ module.exports = {
 
             container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
                 '**Tips**',
-                'Use `/cc-check-progress` anytime to check your progress.',
+                'Use `/cc check-progress` anytime to check your progress.',
                 'Make sure your posts use the required hashtags and meet quality standards.'
             ].join('\n')));
             container.addTextDisplayComponents(new TextDisplayBuilder().setContent('-# Data updates every Monday'));
@@ -606,7 +606,7 @@ module.exports = {
             logger.error('Error in CC progress question listener:', error);
             const errorContainer = new ContainerBuilder();
             errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Content Creator Check Failed'));
-            errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Sorry, I encountered an error while checking your CC progress. Please try using `/cc-check-progress` instead.'));
+            errorContainer.addTextDisplayComponents(new TextDisplayBuilder().setContent('Sorry, I encountered an error while checking your CC progress. Please try using `/cc check-progress` instead.'));
             await message.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] })
                 .catch(err => logger.error('Failed to send error message:', err));
         }

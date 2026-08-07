@@ -16,7 +16,7 @@ const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('force-disband')
+        .setName('squad-force-disband')
         .setDescription('Force disband a squad by its name (Mods only).')
         .addStringOption(option =>
             option.setName('squad-name')

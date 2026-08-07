@@ -52,7 +52,7 @@ async function sendCheckinReminder(client) {
             const owner = await client.users.fetch(league.owner_id.toString());
             await owner.send(
                 "It's time for your monthly league check-in. " +
-                'Use `/league-checkin` in the Gym Class server to confirm your league is still active. ' +
+                'Use `/league checkin` in the Gym Class server to confirm your league is still active. ' +
                 'Deadline: end of the month.'
             ).catch(() => {});
             sent += 1;
@@ -84,7 +84,7 @@ async function sendCheckinWarning(client) {
             await owner.send(
                 "You haven't submitted your monthly check-in yet. " +
                 'You have 7 days remaining before your league is marked inactive. ' +
-                'Use `/league-checkin` in the Gym Class server to confirm.'
+                'Use `/league checkin` in the Gym Class server to confirm.'
             ).catch(() => {});
             warned += 1;
         } catch (error) {
@@ -147,7 +147,7 @@ async function processCheckinDeadline(client) {
             const owner = await client.users.fetch(league.owner_id.toString());
             await owner.send(
                 `Your league **${league.league_name}** has been marked inactive due to a missed check-in. ` +
-                'Use `/league-checkin` at any time to reactivate.'
+                'Use `/league checkin` at any time to reactivate.'
             ).catch(() => {});
         } catch (error) {
             logger.error(`[Checkin Cycle] Failed to DM owner ${league.owner_id}:`, error.message);
@@ -159,7 +159,7 @@ async function processCheckinDeadline(client) {
                 const coOwner = await client.users.fetch(coOwnerId);
                 await coOwner.send(
                     `The league **${league.league_name}** has been marked inactive due to a missed check-in. ` +
-                    'Use `/league-checkin` at any time to help reactivate it.'
+                    'Use `/league checkin` at any time to help reactivate it.'
                 ).catch(() => {});
             } catch (error) {
                 logger.error(`[Checkin Cycle] Failed to DM co-owner ${coOwnerId}:`, error.message);

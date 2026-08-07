@@ -42,7 +42,7 @@ test('buildHashtagNudge only fires for leagues missing a hashtag', () => {
         { league_name: 'Rim', league_hashtag: '' },
     ]);
     assert.ok(nudge.some((l) => l.includes('Dunk, Rim')));
-    assert.ok(nudge.some((l) => l.includes('/league-settings')));
+    assert.ok(nudge.some((l) => l.includes('/league settings')));
     assert.ok(!nudge.some((l) => l.includes('Sky')));
 });
 

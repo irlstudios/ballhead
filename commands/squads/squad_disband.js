@@ -15,7 +15,7 @@ const logger = require('../../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('disband-squad')
+        .setName('squad-disband')
         .setDescription('Disband your squad if you are the squad leader.')
         .addStringOption(opt =>
             opt.setName('squad')

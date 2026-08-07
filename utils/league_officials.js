@@ -51,7 +51,7 @@ function isValidHttpUrl(value) {
     return url.protocol === 'http:' || url.protocol === 'https:';
 }
 
-// Gate for /request-official. `league` is the caller's owned/co-owned league (or
+// Gate for /league request-official. `league` is the caller's owned/co-owned league (or
 // null). `hasCurrentCheckin` reflects whether this month's check-in is on file
 // (the confirmed policy: a check-in is required before requesting).
 function officialRequestEligibility(league, { hasCurrentCheckin = false } = {}) {
@@ -72,14 +72,14 @@ function officialRequestEligibility(league, { hasCurrentCheckin = false } = {}) 
         return deny(
             'NOT_ACTIVE',
             'League Not Active',
-            'Your league must be Active to request officials. Submit a `/league-checkin` to reactivate it.'
+            'Your league must be Active to request officials. Submit a `/league checkin` to reactivate it.'
         );
     }
     if (!hasCurrentCheckin) {
         return deny(
             'NO_CHECKIN',
             'Check-in Required',
-            'Submit this month\'s `/league-checkin` before requesting an official.'
+            'Submit this month\'s `/league checkin` before requesting an official.'
         );
     }
     return ALLOW;
@@ -120,7 +120,7 @@ function canApproveOfficialRequest({ guildId, memberRoleIds } = {}, { gcGuildId,
 }
 
 // Self-service cancel guard for the requester-facing Cancel Request button on
-// the /request-official confirmation. Permission first (only the original
+// the /league request-official confirmation. Permission first (only the original
 // requester), then state (only while still Pending -- once staff assign or
 // close it, withdrawal goes through a CD). The DB claim
 // (cancelPendingOfficialRequest) re-enforces the Pending gate atomically; this
@@ -173,7 +173,7 @@ function buildRequestCardLines(request, { leagueName } = {}) {
     return lines;
 }
 
-// One-line games summary for /league-games and the monthly check-in.
+// One-line games summary for /league games and the monthly check-in.
 function buildGamesSummaryLine({ verified = 0, reported = 0 } = {}) {
     return `Verified games: **${verified}** | Total reported: **${reported}**`;
 }

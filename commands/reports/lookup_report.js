@@ -32,7 +32,7 @@ const findThreadByRefId = async (guild, refId) => {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('lookup-report')
+        .setName('report-lookup')
         .setDescription('Look up a player report by its reference ID.')
         .addStringOption(option =>
             option.setName('ref-id')

@@ -33,7 +33,7 @@ async function dmUser(client, userId, payload) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('force-disband-league')
+        .setName('league-force-disband')
         .setDescription('Force disband a league by name (Mods only).')
         .addStringOption(option =>
             option.setName('league-name')

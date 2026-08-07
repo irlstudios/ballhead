@@ -30,7 +30,7 @@ module.exports = {
 
             const lines = league.league_hashtag
                 ? [`**Hashtag:** #${league.league_hashtag}`, 'Post with this hashtag and your content is counted automatically.']
-                : ['No hashtag set. Use `/league-settings` to set one starting with #gc.'];
+                : ['No hashtag set. Use `/league settings` to set one starting with #gc.'];
             lines.push(buildContentSummaryLine(summary));
 
             return interaction.editReply(noticePayload(lines, { title: league.league_name, subtitle: SUB }));

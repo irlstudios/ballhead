@@ -64,7 +64,7 @@ async function updateGoogleSheet(sheets, officials, spreadsheetId) {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('list_officials')
+        .setName('officials-list')
         .setDescription('List and log officials with specific roles into Google Sheets'),
 
     async execute(interaction) {

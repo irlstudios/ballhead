@@ -92,7 +92,7 @@ module.exports = {
                             values: [newRowData] } }).catch(err => { throw new Error(`Sheet append failed: ${err.message}`); });
                     return {
                         success: true,
-                        message: 'You have been added to the database and opted out of squad invites. You can always revert this change with `/squad-opt-in`.'
+                        message: 'You have been added to the database and opted out of squad invites. You can always revert this change with `/squad opt-in`.'
                     };
                 }
             } catch (error) {
@@ -113,7 +113,7 @@ module.exports = {
             if (block) infoContainer.addTextDisplayComponents(block);
             await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
         } catch (error) {
-            logger.error(`Error in /squad-opt-out for ${userId}:`, error);
+            logger.error(`Error in /squad opt-out for ${userId}:`, error);
             try {
                 const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const loggingChannel = await loggingGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);

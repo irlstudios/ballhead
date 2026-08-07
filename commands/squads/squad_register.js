@@ -29,7 +29,7 @@ const formatDate = () => {
 module.exports = {
     cooldown: 604800,
     data: new SlashCommandBuilder()
-        .setName('register')
+        .setName('squad-register')
         .setDescription('Register a new Squad.')
         .addStringOption(option =>
             option.setName('squadname')
@@ -260,7 +260,7 @@ module.exports = {
             });
 
         } catch (error) {
-            logger.error(`Error processing /register command for ${userTag} (${userId}):`, error);
+            logger.error(`Error processing /squad register command for ${userTag} (${userId}):`, error);
             try {
                 const errorGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);

@@ -1,7 +1,7 @@
 'use strict';
 
 // Pure logic for owner-submitted league games and the weekly stats surfaces
-// (/submit-game, /league-games, /league-overview). No Discord or DB work so
+// (/league submit-game, /league games, /league overview). No Discord or DB work so
 // every rule is unit-testable, mirroring utils/league_officials.js.
 
 // A game complete needs at least two tagged players to mean anything; the cap

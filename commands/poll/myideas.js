@@ -22,7 +22,7 @@ const addToList = async (interaction, board) => {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('myideas')
+        .setName('my-ideas')
         .setDescription('Manage your personal top-5 idea and bug lists')
         .addSubcommand((s) => s
             .setName('add')

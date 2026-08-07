@@ -5,7 +5,7 @@ const { FF_OFFICIAL_ELIGIBLE_ROLE_IDS, FF_OFFICIAL_ROLE_ID } = require('../../co
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('apply-for-ff-official')
+        .setName('apply-ff-official')
         .setDescription('Submit an application to become an FF Official'),
     async execute(interaction) {
         const member = await interaction.guild.members.fetch(interaction.user.id);

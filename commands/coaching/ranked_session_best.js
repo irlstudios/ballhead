@@ -48,7 +48,7 @@ module.exports = {
         .addStringOption(option =>
             option
                 .setName('session_id')
-                .setDescription('Ranked session ID (from log-ranked-session)')
+                .setDescription('Ranked session ID (from /ranked-session log)')
                 .setRequired(true)
         )
         .addStringOption(option =>

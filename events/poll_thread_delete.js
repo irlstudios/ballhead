@@ -6,7 +6,7 @@ const { GAME_IDEAS_FORUM_CHANNEL_ID, BUG_REPORTS_FORUM_CHANNEL_ID } = require('.
 
 // Deleted forum post -> drop it from the catalog so it leaves leaderboards.
 // Stale votes remain in poll_votes but no longer join, and a user can clear them
-// from /myideas view (they render as "(removed post)").
+// from /my-ideas view (they render as "(removed post)").
 module.exports = {
     name: 'threadDelete',
     once: false,

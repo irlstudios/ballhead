@@ -171,7 +171,7 @@ async function fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameIn
 module.exports = {
     cooldown: 5,
     data: new SlashCommandBuilder()
-        .setName('roster')
+        .setName('squad-roster')
         .setDescription('Gets the roster for a specific squad')
         .addStringOption(option =>
             option.setName('squad')

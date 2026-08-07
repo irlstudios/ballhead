@@ -156,7 +156,7 @@ async function syncLeague(client, league, allLinked, allDenied) {
     }
 
     // Auto-created from a tourny-marked game, so it deliberately bypasses the
-    // per-league open-request cap that /request-official enforces: these are
+    // per-league open-request cap that /league request-official enforces: these are
     // staff-visible work items tourny already knows about, not user-initiated
     // spam a cap needs to police.
     for (const game of sync.gamesNeedingRequests(activeGames, mine)) {

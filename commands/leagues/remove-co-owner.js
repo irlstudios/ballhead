@@ -11,7 +11,7 @@ const {
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('remove-co-owner')
+        .setName('league-remove-co-owner')
         .setDescription('Remove a co-owner from your league')
         .addUserOption(option =>
             option.setName('user')

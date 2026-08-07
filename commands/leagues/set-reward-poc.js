@@ -9,7 +9,7 @@ const SUB = 'Reward POC';
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('set-reward-poc')
+        .setName('league-set-reward-poc')
         .setDescription('Name which owner/co-owner handles reward requests (Sponsored)')
         .addUserOption((o) => o.setName('user').setDescription('Owner or co-owner to designate').setRequired(true)),
 

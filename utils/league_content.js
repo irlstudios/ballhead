@@ -26,7 +26,7 @@ function buildHashtagNudge(leagues = []) {
     if (missing.length === 0) return [];
     return [
         `**No content hashtag set:** ${missing.map((l) => l.league_name).join(', ')}`,
-        'Set one with `/league-settings` using the hashtag option. It must start with #gc, for example #gcskyballers.',
+        'Set one with `/league settings` using the hashtag option. It must start with #gc, for example #gcskyballers.',
         'Once it is set we track every post using that hashtag and credit your league for it.',
     ];
 }

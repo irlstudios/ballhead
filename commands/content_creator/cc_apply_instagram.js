@@ -163,7 +163,7 @@ async function logPendingApplication({sheets, platformLabel, username, interacti
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('instagram-cc-apply')
+        .setName('cc-apply-instagram')
         .setDescription('Apply for the Instagram Content Creator role')
         .addStringOption(option =>
             option.setName('handle')
@@ -259,7 +259,7 @@ module.exports = {
                     title: 'Application Already Submitted',
                     lines: [
                         'We already have your Instagram application on file.',
-                        'No need to reapply. Keep posting quality content and use `/check-reels-account` plus `/quality-score` to track your progress.'
+                        'No need to reapply. Keep posting quality content and use `/cc check-progress` plus `/cc quality-score` to track your progress.'
                     ]
                 });
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
@@ -553,8 +553,8 @@ module.exports = {
                             `✅ We verified your Instagram: ${instagramUrl}`,
                             '',
                             'Stay on top of your progress:',
-                            '• `/check-reels-account` shows your current requirement status',
-                            '• `/quality-score` lists the posts we are tracking this season',
+                            '• `/cc check-progress` shows your current requirement status',
+                            '• `/cc quality-score` lists the posts we are tracking this season',
                             '',
                             'Thanks for applying! Keep posting so we can keep your data fresh.'
                         ].join('\n')

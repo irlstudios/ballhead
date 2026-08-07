@@ -27,7 +27,7 @@ const MODERATOR_ROLES = ['805833778064130104', '909227142808756264'];
 
 module.exports = {
     data: new SlashCommandBuilder()
-        .setName('force-squad-name')
+        .setName('squad-force-name')
         .setDescription('Forcefully change the name of a squad (Mods only).')
         .addStringOption(option =>
             option.setName('squad')

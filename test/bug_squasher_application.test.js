@@ -34,6 +34,6 @@ test('field ids match what the handler reads', () => {
 
 test('command name fits Discord 32-char limit and matches the modal', () => {
     const json = applyCommand.data.toJSON();
-    assert.strictEqual(json.name, 'apply-for-bug-squasher');
+    assert.strictEqual(json.name, 'apply-bug-squasher');
     assert.ok(json.name.length <= 32);
 });
