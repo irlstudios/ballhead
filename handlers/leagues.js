@@ -4,6 +4,7 @@ const { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, Messag
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
+const { buildLeagueGuidePayload } = require('../utils/league_guide');
 const {
     findLeagueApplication,
     updateLeagueApplicationApproval,
@@ -149,9 +150,23 @@ const handleApplyBaseLeagueModal = async (interaction) => {
             });
         }
 
+        // Onboarding: new owners should not have to guess how the program
+        // works. DM first so the confirmation can say whether it arrived.
+        const guideDelivered = await user.send(buildLeagueGuidePayload())
+            .then(() => true)
+            .catch((error) => {
+                logger.info(`Could not DM the league guide to ${user.id}: ${error.message}`);
+                return false;
+            });
+
         await interaction.editReply(
             noticePayload(
-                'Your Base League has been registered successfully!',
+                [
+                    'Your Base League has been registered successfully!',
+                    guideDelivered
+                        ? 'The League Owner Guide has been sent to your DMs — bring it back anytime with **/league guide**.'
+                        : 'We could not DM you the League Owner Guide (your DMs may be closed) — read it anytime with **/league guide**.',
+                ],
                 { title: 'Base League Registered', subtitle: leagueName }
             )
         );
@@ -284,7 +299,12 @@ const handleApproveLeague = async (interaction) => {
                 ],
             });
             if (block) dmContainer.addTextDisplayComponents(block);
-            await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
+            // Independent sends: a failed approval notice must not also cost
+            // the owner their guide, and vice versa.
+            await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] })
+                .catch((error) => logger.error('Error sending approval DM to the applicant:', error));
+            await member.send(buildLeagueGuidePayload())
+                .catch((error) => logger.error('Error sending league guide DM to the applicant:', error));
         } catch (error) {
             logger.error('Error sending DM to the applicant:', error);
         }
