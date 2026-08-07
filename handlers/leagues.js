@@ -10,6 +10,7 @@ const {
     updateLeagueApplicationDenial,
     findActiveLeague,
     findActiveLeagueByOwnerAndName,
+    findLeagueCreationBlock,
     insertActiveLeague,
     updateActiveLeague,
 } = require('../db');
@@ -42,6 +43,22 @@ const handleApplyBaseLeagueModal = async (interaction) => {
     }
 
     try {
+        // Users whose league was force-disbanded with the block flag may not
+        // register a new league.
+        const creationBlock = await findLeagueCreationBlock(interaction.user.id);
+        if (creationBlock) {
+            return await interaction.editReply(
+                noticePayload(
+                    [
+                        'You are not permitted to register a new league.',
+                        '',
+                        '-# If you believe this is an error, please open a ticket so our team can review it.',
+                    ],
+                    { title: 'Registration Blocked', subtitle: 'Base League' }
+                )
+            );
+        }
+
         const inviteCodeMatch = discordInvite.match(/discord(?:app)?\.com\/invite\/([^/\s]+)/i) || discordInvite.match(/discord\.gg\/([^/\s]+)/i);
         if (!inviteCodeMatch) {
             return await interaction.editReply(

@@ -1645,6 +1645,46 @@ const ensureLeagueEnforcementSchema = async () => {
     // appeal per strike, even under concurrent submissions.
     await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_league_appeals_pending
         ON league_appeals (strike_id) WHERE status = 'Pending'`).catch(() => {});
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS league_creation_blocks (
+            user_id TEXT PRIMARY KEY,
+            reason TEXT NOT NULL,
+            blocked_by TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+// Exact match only (case-insensitive): this feeds a destructive mod action,
+// so a fuzzy lookup must never silently resolve to a different league.
+const findActiveLeagueByName = async (name) => {
+    const result = await executeQuery(
+        `SELECT * FROM "Active Leagues"
+         WHERE league_status <> 'Disbanded'
+           AND LOWER(league_name) = LOWER($1)
+         LIMIT 1`,
+        [name]
+    );
+    return result.rows[0] || null;
+};
+
+const insertLeagueCreationBlock = async (userId, reason, blockedBy) => {
+    await executeQuery(
+        `INSERT INTO league_creation_blocks (user_id, reason, blocked_by)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE
+         SET reason = EXCLUDED.reason, blocked_by = EXCLUDED.blocked_by, created_at = NOW()`,
+        [userId, reason, blockedBy]
+    );
+};
+
+const findLeagueCreationBlock = async (userId) => {
+    const result = await executeQuery(
+        'SELECT * FROM league_creation_blocks WHERE user_id = $1',
+        [userId]
+    );
+    return result.rows[0] || null;
 };
 
 const deleteAppeal = async (appealId) => {
@@ -1991,6 +2031,9 @@ module.exports = {
     updateLeagueContentSettings,
     getLeagueContentSummary,
     ensureLeagueEnforcementSchema,
+    findActiveLeagueByName,
+    insertLeagueCreationBlock,
+    findLeagueCreationBlock,
     insertStrike,
     countActiveStrikes,
     fetchActiveStrikes,
