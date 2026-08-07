@@ -4,9 +4,8 @@
 const GYM_CLASS_GUILD_ID = '752216589792706621';
 
 // The single account trusted with destructive or one-off maintenance actions.
-// Already hardcoded in commands/utility/manage-role.js and
-// events/server_personal_voice_channel_system.js; named here so new callers stop
-// copying the literal around.
+// Also hardcoded in events/server_personal_voice_channel_system.js; named here
+// so new callers stop copying the literal around.
 const BOT_ADMIN_USER_ID = '781397829808553994';
 
 // Channel IDs
