@@ -205,4 +205,21 @@ const stopMonitoring = async (channelId) => {
     logger.info(`[Voice Mod] Monitoring stopped for channel ${channelId}.`);
 };
 
-module.exports = { batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring };
+// One-shot transcription of a finished clip WAV for the evidence post.
+// Returns null when unconfigured or on failure: the clip must post either way.
+const transcribeClip = async (wavBuffer) => {
+    if (!process.env.DEEPGRAM_API_KEY) return null;
+    try {
+        const client = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
+        const result = await client.listen.v1.media.transcribeFile(wavBuffer, {
+            model: 'nova-3', smart_format: true,
+        });
+        const transcript = result.results?.channels?.[0]?.alternatives?.[0]?.transcript;
+        return transcript ? transcript.trim() : null;
+    } catch (error) {
+        logger.error('[Voice Mod] Clip transcription failed:', error);
+        return null;
+    }
+};
+
+module.exports = { batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring, transcribeClip };

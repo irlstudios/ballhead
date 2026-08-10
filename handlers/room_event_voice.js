@@ -12,7 +12,7 @@ const { buildTextBlock } = require('../utils/ui');
 const { getSessionByChannel } = require('../utils/host_session_manager');
 const { clipFromCapture } = require('../utils/voice_moderation/clipper');
 const { insertIncident } = require('../utils/voice_moderation/incidents');
-const { startMonitoring, stopMonitoring, isMonitoring } = require('../utils/voice_moderation/transcriber');
+const { startMonitoring, stopMonitoring, isMonitoring, transcribeClip } = require('../utils/voice_moderation/transcriber');
 const {
     MODERATOR_ROLES, VOICE_EVIDENCE_CHANNEL_ID,
     VOICE_CLIP_DEFAULT_SECONDS, VOICE_CLIP_MIN_SECONDS, VOICE_CLIP_MAX_SECONDS,
@@ -87,6 +87,7 @@ const handleRoomEventClip = async (interaction) => {
     }
 
     const fileName = clipFileName(session.id, clip.windowEndMs);
+    const transcript = await transcribeClip(clip.wav);
     const evidence = {
         title: 'Voice Incident Captured',
         subtitle: `EMH session ${session.id}`,
@@ -95,6 +96,7 @@ const handleRoomEventClip = async (interaction) => {
             `Window: <t:${Math.floor(clip.windowStartMs / 1000)}:T> to <t:${Math.floor(clip.windowEndMs / 1000)}:T> (${durationSeconds}s).`,
             `Speakers in window: ${clip.participantIds.map((id) => `<@${id}>`).join(', ')}.`,
             note ? `Note: ${note}` : null,
+            transcript ? `Transcript: ${transcript.length > 800 ? `${transcript.slice(0, 800)}...` : transcript}` : null,
         ],
     };
 
