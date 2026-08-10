@@ -3,6 +3,7 @@ const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
 const { handleRoomEventStart, handleRoomEventStatus } = require('../../handlers/room_event');
+const { handleRoomEventClip, handleRoomEventMonitor } = require('../../handlers/room_event_voice');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
 
 // Subcommands a host may not use on their own lobby while an event session runs.
@@ -185,12 +186,31 @@ module.exports = {
                         .setName('status')
                         .setDescription('Check whether your session is tracking and see its live stats.')
                 )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('clip')
+                        .setDescription('Capture the recent audio of a live event as moderation evidence.')
+                        .addIntegerOption(option => option.setName('duration').setDescription('Seconds to capture (15-120, default 60)').setMinValue(15).setMaxValue(120))
+                        .addStringOption(option => option.setName('note').setDescription('What happened').setMaxLength(500))
+                        .addChannelOption(option => option.setName('channel').setDescription('Session channel (moderators only)'))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('monitor')
+                        .setDescription('Start or stop live transcription of an event (moderators only).')
+                        .addStringOption(option => option.setName('action').setDescription('start or stop').setRequired(true)
+                            .addChoices({ name: 'start', value: 'start' }, { name: 'stop', value: 'stop' }))
+                        .addChannelOption(option => option.setName('channel').setDescription('Session channel (defaults to your voice channel)'))
+                )
         ),
     async execute(interaction) {
         if (interaction.options.getSubcommandGroup(false) === 'event') {
-            return interaction.options.getSubcommand() === 'status'
-                ? handleRoomEventStatus(interaction)
-                : handleRoomEventStart(interaction);
+            switch (interaction.options.getSubcommand()) {
+            case 'status': return handleRoomEventStatus(interaction);
+            case 'clip': return handleRoomEventClip(interaction);
+            case 'monitor': return handleRoomEventMonitor(interaction);
+            default: return handleRoomEventStart(interaction);
+            }
         }
 
         const subcommand = interaction.options.getSubcommand();
