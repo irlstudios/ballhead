@@ -15,6 +15,8 @@ const buildClip = ({ store, decodeForUser, durationSeconds, now }) => {
     if (packetsByUser.size === 0) return null;
 
     // Mix user-by-user so each user's decoder keeps its own opus stream state.
+    // ponytail: synchronous mix blocks the event loop a few hundred ms on a
+    // worst-case clip; move to a worker thread if clipping ever gets frequent.
     let mixed = null;
     for (const [userId, entries] of packetsByUser) {
         const single = new Map([[userId, entries]]);

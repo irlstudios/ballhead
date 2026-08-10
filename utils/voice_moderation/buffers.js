@@ -8,6 +8,9 @@
 // Contained mutation: the store is module-internal state owned by one capture
 // session, the same pattern as host_session_manager's Maps.
 
+// ponytail: shift()-based eviction and per-user-only expiry; a departed
+// speaker's audio lingers until session end (bounded ~750KB per 5 talked
+// minutes). Move to a head-index ring plus periodic sweep if memory matters.
 const createStore = ({ windowMs }) => ({ windowMs, users: new Map() });
 
 const recordPacket = (store, userId, packet, atMs) => {

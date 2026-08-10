@@ -190,7 +190,7 @@ module.exports = {
                     subcommand
                         .setName('clip')
                         .setDescription('Capture the recent audio of a live event as moderation evidence.')
-                        .addIntegerOption(option => option.setName('duration').setDescription('Seconds to capture (15-120, default 60)').setMinValue(15).setMaxValue(120))
+                        .addIntegerOption(option => option.setName('duration').setDescription('Seconds to capture (15-100, default 60)').setMinValue(15).setMaxValue(100))
                         .addStringOption(option => option.setName('note').setDescription('What happened').setMaxLength(500))
                         .addChannelOption(option => option.setName('channel').setDescription('Session channel (moderators only)'))
                 )

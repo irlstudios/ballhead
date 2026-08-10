@@ -195,7 +195,9 @@ const VOICE_EVIDENCE_CHANNEL_ID = '828618109794385970';
 const VOICE_BUFFER_MINUTES = 5;
 const VOICE_CLIP_DEFAULT_SECONDS = 60;
 const VOICE_CLIP_MIN_SECONDS = 15;
-const VOICE_CLIP_MAX_SECONDS = 120;
+// Mono 48kHz 16-bit WAV is 96,000 bytes/second; 100s stays under Discord's
+// 10MiB default upload limit without relying on the guild's boost tier.
+const VOICE_CLIP_MAX_SECONDS = 100;
 const VOICE_MONITOR_MAX_SPEAKERS = 8;
 const VOICE_TRANSCRIPT_FLUSH_SECONDS = 10;
 

@@ -17,8 +17,14 @@ const { createStore, recordPacket } = require('./buffers');
 const { VOICE_BUFFER_MINUTES } = require('../../config/constants');
 
 // channelId -> { connection, store, session, subscriptions: Set<userId>,
-//                decoders: Map<userId, OpusEncoder>, tap: fn|null }
+//                decoders: Map<userId, OpusEncoder>, tap: fn|null, guildId }
 const captures = new Map();
+
+// One bot user holds one voice state per guild, so a second concurrent EMH
+// session in the same guild cannot be captured: joining it would silently rip
+// the connection out of the first room and cross-wire the receivers.
+// guildId -> channelId of the session currently holding the capture slot.
+const captureSlotByGuild = new Map();
 
 const getCaptureState = (channelId) => captures.get(channelId) || null;
 
@@ -78,6 +84,8 @@ const subscribeToUser = (state, userId) => {
     });
 };
 
+// Consent is a hard gate, not a courtesy: if the room cannot be told it is
+// being buffered, nothing may be buffered. Returns whether the notice landed.
 const postConsentNotice = async (channel) => {
     const container = new ContainerBuilder().setAccentColor(0xF59E0B);
     const block = buildTextBlock({
@@ -89,62 +97,87 @@ const postConsentNotice = async (channel) => {
         ],
     });
     if (block) container.addTextDisplayComponents(block);
-    await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] }).catch((error) => {
+    try {
+        await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] });
+        return true;
+    } catch (error) {
         logger.error(`[Voice Mod] Could not post consent notice in ${channel.id}:`, error);
-    });
+        return false;
+    }
 };
 
 const joinSession = async ({ channel, session }) => {
     if (captures.has(channel.id)) return;
-    const connection = joinVoiceChannel({
-        channelId: channel.id,
-        guildId: channel.guild.id,
-        adapterCreator: channel.guild.voiceAdapterCreator,
-        selfMute: true,
-        selfDeaf: false,
-    });
-    const state = {
-        connection,
-        store: createStore({ windowMs: VOICE_BUFFER_MINUTES * 60 * 1000 }),
-        session,
-        subscriptions: new Set(),
-        decoders: new Map(),
-        tap: null,
-    };
-    captures.set(channel.id, state);
+    const guildId = channel.guild.id;
+    const holder = captureSlotByGuild.get(guildId);
+    if (holder) {
+        logger.warn(`[Voice Mod] Session ${session.id} in ${channel.id} is not captured: the guild's capture slot is held by channel ${holder}.`);
+        return;
+    }
+    captureSlotByGuild.set(guildId, channel.id);
+    try {
+        const connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId,
+            adapterCreator: channel.guild.voiceAdapterCreator,
+            selfMute: true,
+            selfDeaf: false,
+        });
+        const state = {
+            connection,
+            store: createStore({ windowMs: VOICE_BUFFER_MINUTES * 60 * 1000 }),
+            session,
+            subscriptions: new Set(),
+            decoders: new Map(),
+            tap: null,
+            guildId,
+        };
+        captures.set(channel.id, state);
 
-    connection.on(VoiceConnectionStatus.Disconnected, async () => {
-        // A deleted channel (session over) destroys the connection; a network
-        // blip re-signals within five seconds. Only the blip is worth waiting on.
-        try {
-            await Promise.race([
-                entersState(connection, VoiceConnectionStatus.Signalling, 5000),
-                entersState(connection, VoiceConnectionStatus.Connecting, 5000),
-            ]);
-        } catch {
+        connection.on(VoiceConnectionStatus.Disconnected, async () => {
+            // A deleted channel (session over) destroys the connection; a network
+            // blip re-signals within five seconds. Only the blip is worth waiting on.
+            try {
+                await Promise.race([
+                    entersState(connection, VoiceConnectionStatus.Signalling, 5000),
+                    entersState(connection, VoiceConnectionStatus.Connecting, 5000),
+                ]);
+            } catch {
+                leaveSession(channel.id);
+            }
+        });
+        connection.on('error', (error) => {
+            logger.error(`[Voice Mod] Connection error in ${channel.id}:`, error);
+        });
+
+        await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+        if (!(await postConsentNotice(channel))) {
             leaveSession(channel.id);
+            return;
         }
-    });
-    connection.on('error', (error) => {
-        logger.error(`[Voice Mod] Connection error in ${channel.id}:`, error);
-    });
-    connection.receiver.speaking.on('start', (userId) => {
-        try {
-            subscribeToUser(state, userId);
-        } catch (error) {
-            logger.error(`[Voice Mod] Failed to subscribe to ${userId} in ${channel.id}:`, error);
-        }
-    });
-
-    await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-    logger.info(`[Voice Mod] Capturing session ${session.id} in channel ${channel.id}.`);
-    await postConsentNotice(channel);
+        // Reception starts only after the room has been told about it.
+        connection.receiver.speaking.on('start', (userId) => {
+            try {
+                subscribeToUser(state, userId);
+            } catch (error) {
+                logger.error(`[Voice Mod] Failed to subscribe to ${userId} in ${channel.id}:`, error);
+            }
+        });
+        logger.info(`[Voice Mod] Capturing session ${session.id} in channel ${channel.id}.`);
+    } catch (error) {
+        leaveSession(channel.id);
+        captureSlotByGuild.delete(guildId);
+        throw error;
+    }
 };
 
 const leaveSession = (channelId) => {
     const state = captures.get(channelId);
     if (!state) return;
     captures.delete(channelId);
+    if (captureSlotByGuild.get(state.guildId) === channelId) {
+        captureSlotByGuild.delete(state.guildId);
+    }
     try {
         state.connection.destroy();
     } catch {

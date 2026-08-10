@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { AttachmentBuilder, ContainerBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock } = require('../utils/ui');
 const { getSessionByChannel } = require('../utils/host_session_manager');
@@ -104,10 +104,15 @@ const handleRoomEventClip = async (interaction) => {
         const container = new ContainerBuilder().setAccentColor(0xDC2626);
         const block = buildTextBlock(evidence);
         if (block) container.addTextDisplayComponents(block);
+        // Components V2 hides raw attachments; the File component is what
+        // renders the WAV in the message.
+        container.addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
         const sent = await evidenceChannel.send({
             flags: MessageFlags.IsComponentsV2,
             components: [container],
             files: [new AttachmentBuilder(clip.wav, { name: fileName })],
+            // The note is host-supplied free text; it must never ping through the bot.
+            allowedMentions: { parse: [] },
         });
         messageUrl = sent.url;
     } catch (error) {
