@@ -8,6 +8,10 @@
 // being recorded outranks a TTS announcement.
 
 const { spawn } = require('child_process');
+const { randomUUID } = require('crypto');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { Readable } = require('stream');
 const {
     joinVoiceChannel, entersState, VoiceConnectionStatus,
@@ -21,28 +25,36 @@ const speakingGuilds = new Set();
 
 const isConfigured = () => Boolean(process.env.PIPER_BIN && process.env.PIPER_MODEL);
 
-// Runs piper with the text on stdin; WAV arrives on stdout (piper's default
-// when no output file is given).
-const synthesize = (text) => new Promise((resolve, reject) => {
-    const args = [
-        '-m', process.env.PIPER_MODEL,
-        ...(process.env.PIPER_DATA_DIR ? ['--data-dir', process.env.PIPER_DATA_DIR] : []),
-    ];
-    const child = spawn(process.env.PIPER_BIN, args, { stdio: ['pipe', 'pipe', 'pipe'] });
-    const chunks = [];
-    const errors = [];
-    child.stdout.on('data', (chunk) => chunks.push(chunk));
-    child.stderr.on('data', (chunk) => errors.push(chunk));
-    child.on('error', reject);
-    child.on('close', (code) => {
-        if (code !== 0) {
-            reject(new Error(`piper exited ${code}: ${Buffer.concat(errors).toString().slice(-300)}`));
-        } else {
-            resolve(Buffer.concat(chunks));
-        }
-    });
-    child.stdin.end(text);
-});
+// Runs piper with the text on stdin. Piper's stdout mode is unreliable
+// across builds (some emit nothing without -f), so it writes a temp WAV
+// which is read back and removed.
+const synthesize = async (text) => {
+    const outPath = path.join(os.tmpdir(), `ballhead-tts-${randomUUID()}.wav`);
+    try {
+        await new Promise((resolve, reject) => {
+            const args = [
+                '-m', process.env.PIPER_MODEL,
+                ...(process.env.PIPER_DATA_DIR ? ['--data-dir', process.env.PIPER_DATA_DIR] : []),
+                '-f', outPath,
+            ];
+            const child = spawn(process.env.PIPER_BIN, args, { stdio: ['pipe', 'ignore', 'pipe'] });
+            const errors = [];
+            child.stderr.on('data', (chunk) => errors.push(chunk));
+            child.on('error', reject);
+            child.on('close', (code) => {
+                if (code !== 0) {
+                    reject(new Error(`piper exited ${code}: ${Buffer.concat(errors).toString().slice(-300)}`));
+                } else {
+                    resolve();
+                }
+            });
+            child.stdin.end(text);
+        });
+        return fs.readFileSync(outPath);
+    } finally {
+        fs.rmSync(outPath, { force: true });
+    }
+};
 
 const monoToStereo48k = (wav) => {
     const parsed = wavToMonoPcm(wav);
