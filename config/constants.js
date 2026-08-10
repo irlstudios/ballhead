@@ -189,6 +189,16 @@ const INGAME_BAN_BOT_ID = '853391399109132288';
 // Channel where the ban bot posts its ban announcements (the source we watch).
 const INGAME_BAN_CHANNEL_ID = '862387103656706049';
 
+// Voice moderation for EMH sessions. Evidence lands in this channel; until a
+// dedicated evidence channel exists it reuses the program-moderation channel.
+const VOICE_EVIDENCE_CHANNEL_ID = '828618109794385970';
+const VOICE_BUFFER_MINUTES = 5;
+const VOICE_CLIP_DEFAULT_SECONDS = 60;
+const VOICE_CLIP_MIN_SECONDS = 15;
+const VOICE_CLIP_MAX_SECONDS = 120;
+const VOICE_MONITOR_MAX_SPEAKERS = 8;
+const VOICE_TRANSCRIPT_FLUSH_SECONDS = 10;
+
 // Pagination
 const ITEMS_PER_PAGE = 10;
 
@@ -275,6 +285,13 @@ module.exports = {
     PROGRAM_MODERATION_ALERT_CHANNEL_ID,
     INGAME_BAN_BOT_ID,
     INGAME_BAN_CHANNEL_ID,
+    VOICE_EVIDENCE_CHANNEL_ID,
+    VOICE_BUFFER_MINUTES,
+    VOICE_CLIP_DEFAULT_SECONDS,
+    VOICE_CLIP_MIN_SECONDS,
+    VOICE_CLIP_MAX_SECONDS,
+    VOICE_MONITOR_MAX_SPEAKERS,
+    VOICE_TRANSCRIPT_FLUSH_SECONDS,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,

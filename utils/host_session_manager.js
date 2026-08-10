@@ -13,6 +13,7 @@ const store = require('./host_session_queries');
 const { appendSessionRow } = require('./host_session_sheet');
 const { eventChannelName, summariseSession, nudgeMessage } = require('./host_session_stats');
 const dms = require('./host_session_dms');
+const voiceModeration = require('./voice_moderation');
 const {
     GYM_CLASS_GENERAL_CHANNEL_ID,
     HOST_SESSION_NUDGE_MINUTES,
@@ -233,6 +234,7 @@ const finishSession = async (client, session, { channel = null } = {}) => {
     const endedAt = new Date();
     finishing.add(session.id);
     forgetSession(session);
+    void voiceModeration.onSessionClose(session.channelId);
     await store.closeAllMemberIntervals({ sessionId: session.id, at: endedAt });
     const ended = await store.endSession(session.id, endedAt);
     if (!ended) return null;
@@ -285,6 +287,7 @@ const startSession = async ({ channel, hostMember }) => {
         throw error;
     }
     logger.info(`[Host Session] Session ${session.id} opened by ${hostMember.displayName} in ${channel.id}.`);
+    void voiceModeration.onSessionOpen({ channel, session });
     const wentLive = await tryGoLiveFromPresence(channel.client, session, hostMember.presence);
     if (!wentLive) scheduleActivityWarning(channel.client, session);
     return session;
@@ -358,6 +361,7 @@ const resumeSessions = async (client) => {
             }
 
             indexSession(session);
+            void voiceModeration.onSessionOpen({ channel, session });
             if (session.activityStartedAt) {
                 // Voice membership survives a bot restart, so anyone still in the
                 // room keeps their original joined_at and loses no time. Only the
