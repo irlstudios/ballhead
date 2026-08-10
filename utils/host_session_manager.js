@@ -12,9 +12,11 @@ const logger = require('./logger');
 const store = require('./host_session_queries');
 const { appendSessionRow } = require('./host_session_sheet');
 const { eventChannelName, summariseSession, nudgeMessage } = require('./host_session_stats');
+const dms = require('./host_session_dms');
 const {
     GYM_CLASS_GENERAL_CHANNEL_ID,
     HOST_SESSION_NUDGE_MINUTES,
+    HOST_SESSION_ACTIVITY_WARNING_MINUTES,
     VC_ACTIVITY_ALLOWED_ROLE_IDS,
 } = require('../config/constants');
 
@@ -25,6 +27,7 @@ const ACTIVITY_TYPES = new Set([ActivityType.Playing, ActivityType.Watching, Act
 const sessionsByChannel = new Map();
 const pendingByHost = new Map();
 const nudgeTimers = new Map();
+const activityWarnTimers = new Map();
 // Sessions that have begun finishing. A host whose activity appears in the same
 // tick they leave would otherwise let an in-flight goLive re-index the session and
 // leave a nudge timer posting about a room that no longer exists.
@@ -43,14 +46,48 @@ const indexSession = (session) => {
     }
 };
 
+const clearActivityWarning = (sessionId) => {
+    const timer = activityWarnTimers.get(sessionId);
+    if (timer) {
+        clearTimeout(timer);
+        activityWarnTimers.delete(sessionId);
+    }
+};
+
 const forgetSession = (session) => {
     sessionsByChannel.delete(session.channelId);
     pendingByHost.delete(session.hostId);
+    clearActivityWarning(session.id);
     const timer = nudgeTimers.get(session.id);
     if (timer) {
         clearInterval(timer);
         nudgeTimers.delete(session.id);
     }
+};
+
+// One-shot warning for a session that opened but never saw an activity: the host
+// believes they are being tracked and nothing is recording, so they must hear
+// about it while there is still time to fix it. The callback re-checks state so
+// a session that went live or ended in the meantime stays silent.
+const scheduleActivityWarning = (client, session) => {
+    if (activityWarnTimers.has(session.id)) return;
+    // Anchored to when the session opened, so a bot restart does not reset the
+    // clock, with a floor so a resume never fires the warning instantly.
+    // ponytail: a restart after the warning already fired repeats it once;
+    // persist a warned-at column if the duplicate ever bothers anyone.
+    const warnMs = Math.max(1, HOST_SESSION_ACTIVITY_WARNING_MINUTES) * 60 * 1000;
+    const elapsedMs = Date.now() - new Date(session.startedAt).getTime();
+    const delayMs = Math.max(60 * 1000, warnMs - elapsedMs);
+    const timer = setTimeout(() => {
+        activityWarnTimers.delete(session.id);
+        const current = sessionsByChannel.get(session.channelId);
+        if (!current || current.id !== session.id || current.activityStartedAt) return;
+        void dms.sendHostDm(client, session.hostId, dms.noActivityNotice({
+            minutes: Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000),
+        }));
+    }, delayMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    activityWarnTimers.set(session.id, timer);
 };
 
 const countParticipants = (channel, hostId) => (channel?.members
@@ -172,6 +209,11 @@ const goLive = async (client, session, activityName) => {
 
     if (finishing.has(live.id)) return;
     logger.info(`[Host Session] Session ${live.id} is live: ${live.hostName} playing ${activityName}.`);
+    clearActivityWarning(live.id);
+    // Fire-and-forget: awaiting the DM here would open a gap between the
+    // finishing check above and postNudge, letting a host who leaves mid-DM
+    // resurrect the session through postNudge's re-index.
+    void dms.sendHostDm(client, live.hostId, dms.trackingStartedNotice({ activityName }));
     await postNudge(client, sessionsByChannel.get(live.channelId) || live);
     startNudgeLoop(client, live);
 };
@@ -202,14 +244,17 @@ const finishSession = async (client, session, { channel = null } = {}) => {
     }
 
     // A session that never saw an activity produced no measurements, so there is
-    // nothing worth a row; the room is still handed back above.
+    // nothing worth a row; the room is still handed back above. The host is told
+    // so they can fix their setup instead of discovering missing stats days later.
     if (!ended.activityStartedAt) {
         logger.info(`[Host Session] Session ${ended.id} ended before an activity started; nothing logged.`);
+        await dms.sendHostDm(client, ended.hostId, dms.endedWithoutTrackingNotice());
         return ended;
     }
 
     const summary = await publishSession(ended);
     logger.info(`[Host Session] Session ${ended.id} ended: ${summary.uniqueJoiners} unique joiner(s), avg ${summary.avgMinutes} min.`);
+    await dms.sendHostDm(client, ended.hostId, dms.wrapUpNotice({ session: ended, summary }));
     return ended;
 };
 
@@ -240,7 +285,8 @@ const startSession = async ({ channel, hostMember }) => {
         throw error;
     }
     logger.info(`[Host Session] Session ${session.id} opened by ${hostMember.displayName} in ${channel.id}.`);
-    await tryGoLiveFromPresence(channel.client, session, hostMember.presence);
+    const wentLive = await tryGoLiveFromPresence(channel.client, session, hostMember.presence);
+    if (!wentLive) scheduleActivityWarning(channel.client, session);
     return session;
 };
 
@@ -330,7 +376,8 @@ const resumeSessions = async (client) => {
                 startNudgeLoop(client, session);
             } else {
                 // The activity may have started while the bot was down.
-                await tryGoLiveFromPresence(client, session, channel.members.get(session.hostId)?.presence);
+                const wentLive = await tryGoLiveFromPresence(client, session, channel.members.get(session.hostId)?.presence);
+                if (!wentLive) scheduleActivityWarning(client, session);
             }
             logger.info(`[Host Session] Resumed session ${session.id} in channel ${session.channelId}.`);
         } catch (error) {

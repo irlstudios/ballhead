@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDi
 const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
-const { handleRoomEventStart } = require('../../handlers/room_event');
+const { handleRoomEventStart, handleRoomEventStatus } = require('../../handlers/room_event');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
 
 // Subcommands a host may not use on their own lobby while an event session runs.
@@ -180,10 +180,17 @@ module.exports = {
                         .setName('start')
                         .setDescription('Open your lobby for Discord activities and start tracking the session.')
                 )
+                .addSubcommand(subcommand =>
+                    subcommand
+                        .setName('status')
+                        .setDescription('Check whether your session is tracking and see its live stats.')
+                )
         ),
     async execute(interaction) {
         if (interaction.options.getSubcommandGroup(false) === 'event') {
-            return handleRoomEventStart(interaction);
+            return interaction.options.getSubcommand() === 'status'
+                ? handleRoomEventStatus(interaction)
+                : handleRoomEventStart(interaction);
         }
 
         const subcommand = interaction.options.getSubcommand();

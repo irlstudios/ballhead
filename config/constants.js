@@ -99,6 +99,10 @@ const HOST_SESSION_SHEET_TAB = 'Session Stats';
 // cadence can be tuned without a deploy.
 const HOST_SESSION_NUDGE_MINUTES = Number(process.env.HOST_SESSION_NUDGE_MINUTES || '15');
 
+// How long a session may sit without a detected activity before the host is
+// DMed a warning that nothing is being recorded.
+const HOST_SESSION_ACTIVITY_WARNING_MINUTES = Number(process.env.HOST_SESSION_ACTIVITY_WARNING_MINUTES || '5');
+
 // Role IDs - Squads
 const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
 const COMPETITIVE_SQUAD_OWNER_ROLE_ID = '1288918946258489354';
@@ -256,6 +260,7 @@ module.exports = {
     SPREADSHEET_LEAGUES,
     HOST_SESSION_SHEET_TAB,
     HOST_SESSION_NUDGE_MINUTES,
+    HOST_SESSION_ACTIVITY_WARNING_MINUTES,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
     SQUAD_OWNER_ROLES,

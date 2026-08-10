@@ -12,6 +12,8 @@ const { HOST_ROLE_ID, HOST_SESSION_NUDGE_MINUTES } = require('../config/constant
 const { buildTextBlock } = require('../utils/ui');
 const { eventChannelName } = require('../utils/host_session_stats');
 const manager = require('../utils/host_session_manager');
+const store = require('../utils/host_session_queries');
+const { statusNotice } = require('../utils/host_session_dms');
 const logger = require('../utils/logger');
 
 const CONFIRM_PREFIX = 'roomevt:';
@@ -90,9 +92,10 @@ const handleRoomEventStart = async (interaction) => {
             `This will rename **${channel.name}** to **${eventChannelName(interaction.member.displayName)}** and let everyone launch Discord activities in it.`,
             '',
             'While the event runs:',
-            '- Tracking starts as soon as you launch an activity, not before.',
+            '- Tracking starts as soon as you launch an activity, not before. I will DM you the moment it does.',
             `- The bot posts an invite to the lobby in general chat every ${HOST_SESSION_NUDGE_MINUTES} minutes.`,
             '- You will not be able to lock or rename the lobby.',
+            '- `/room event status` shows your live stats at any time.',
             '',
             '**Tracking stops the moment you leave the lobby**, and the session stats are written to the sheet then. Leaving ends the event.',
         ],
@@ -172,7 +175,8 @@ const handleRoomEventButton = async (interaction) => {
             subtitle: 'Start Event',
             lines: [
                 'The lobby is open for Discord activities. Launch one and tracking begins automatically.',
-                'Stats are saved to the sheet when you leave the lobby.',
+                'I will DM you when tracking starts. No DM within a few minutes means the activity is not being detected; run `/room event status` to check.',
+                'Stats are saved and DMed to you when you leave the lobby.',
             ],
         });
     } catch (error) {
@@ -185,9 +189,29 @@ const handleRoomEventButton = async (interaction) => {
     }
 };
 
+// Answerable from anywhere, not just the lobby: a host asking whether tracking
+// works should not have to leave the room (which would end the session) to ask.
+const handleRoomEventStatus = async (interaction) => {
+    const session = await store.getActiveSessionByHost(interaction.user.id);
+    if (!session) {
+        return ephemeral(interaction, {
+            title: 'No Active Session',
+            subtitle: 'Session Status',
+            lines: ['You have no event session running. Start one with `/room event start`.'],
+        });
+    }
+    const channel = await interaction.client.channels.fetch(session.channelId).catch(() => null);
+    const currentParticipants = channel?.members
+        ? channel.members.filter((member) => !member.user.bot && member.id !== session.hostId).size
+        : null;
+    const members = await store.listSessionMembers(session.id);
+    return ephemeral(interaction, statusNotice({ session, members, currentParticipants }));
+};
+
 module.exports = {
     CONFIRM_PREFIX,
     isRoomEventInteraction,
     handleRoomEventStart,
+    handleRoomEventStatus,
     handleRoomEventButton,
 };
