@@ -132,7 +132,10 @@ module.exports = {
                     },
                     {
                         id: client.user.id,
-                        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]
+                        // SendMessages: rooms deny it for everyone, but the voice
+                        // moderation consent notice must be postable or capture
+                        // refuses to start (it fails closed without the notice).
+                        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.SendMessages]
                     },
                     {
                         id: MOD_ROLE_ID,
