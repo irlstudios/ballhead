@@ -205,21 +205,48 @@ const stopMonitoring = async (channelId) => {
     logger.info(`[Voice Mod] Monitoring stopped for channel ${channelId}.`);
 };
 
-// One-shot transcription of a finished clip WAV for the evidence post.
-// Returns null when unconfigured or on failure: the clip must post either way.
-const transcribeClip = async (wavBuffer) => {
-    if (!process.env.DEEPGRAM_API_KEY) return null;
+// Speaker-attributed transcription of a finished clip. Each speaker's own
+// silence-padded track is transcribed separately, so utterance start times
+// are clip offsets and attribution is exact rather than diarization guesses.
+// Returns [] when unconfigured or on failure: the clip must post either way.
+const transcribeClipSpeakers = async (userWavs, namesByUserId) => {
+    if (!process.env.DEEPGRAM_API_KEY) return [];
     try {
         const client = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
-        const result = await client.listen.v1.media.transcribeFile(wavBuffer, {
-            model: 'nova-3', smart_format: true,
-        });
-        const transcript = result.results?.channels?.[0]?.alternatives?.[0]?.transcript;
-        return transcript ? transcript.trim() : null;
+        const perUser = await Promise.all([...userWavs].map(async ([userId, wav]) => {
+            const result = await client.listen.v1.media.transcribeFile(wav, {
+                model: 'nova-3', smart_format: true, utterances: true,
+            });
+            const name = namesByUserId.get(userId) || `user ${userId}`;
+            return (result.results?.utterances || [])
+                .filter((utterance) => utterance.transcript)
+                .map((utterance) => ({ start: utterance.start, name, text: utterance.transcript.trim() }));
+        }));
+        return perUser.flat();
     } catch (error) {
         logger.error('[Voice Mod] Clip transcription failed:', error);
-        return null;
+        return [];
     }
 };
 
-module.exports = { batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring, transcribeClip };
+// Pure formatter: time-sorted "[m:ss] **Name:** text" lines, truncated at
+// maxLen without splitting a line.
+const formatClipTranscript = (lines, maxLen = 1500) => {
+    const sorted = [...lines].sort((a, b) => a.start - b.start);
+    const rendered = sorted.map(({ start, name, text }) => {
+        const seconds = Math.max(0, Math.round(start));
+        return `[${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}] **${name}:** ${text}`;
+    });
+    let out = '';
+    for (const line of rendered) {
+        const next = out ? `${out}\n${line}` : line;
+        if (next.length > maxLen) return `${out}\n... (truncated)`;
+        out = next;
+    }
+    return out;
+};
+
+module.exports = {
+    batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring,
+    transcribeClipSpeakers, formatClipTranscript,
+};

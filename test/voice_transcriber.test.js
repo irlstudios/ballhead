@@ -31,3 +31,24 @@ test('a single line longer than the cap is truncated, not dropped', () => {
 test('empty input produces no batches', () => {
     assert.deepStrictEqual(batchTranscriptLines([]), []);
 });
+
+const { formatClipTranscript } = require('../utils/voice_moderation/transcriber');
+
+test('clip transcript lines are time-sorted with mm:ss offsets and names', () => {
+    const text = formatClipTranscript([
+        { start: 65.4, name: 'Sam', text: 'no you are' },
+        { start: 5.1, name: 'Roy', text: 'you are trash' },
+    ]);
+    assert.strictEqual(text, '[0:05] **Roy:** you are trash\n[1:05] **Sam:** no you are');
+});
+
+test('clip transcript truncates at the cap without splitting a line', () => {
+    const lines = Array.from({ length: 30 }, (_, i) => ({ start: i, name: 'A', text: 'x'.repeat(40) }));
+    const text = formatClipTranscript(lines, 200);
+    assert.ok(text.length <= 200 + '\n... (truncated)'.length);
+    assert.ok(text.endsWith('... (truncated)'));
+});
+
+test('empty utterances produce an empty string', () => {
+    assert.strictEqual(formatClipTranscript([]), '');
+});

@@ -6,13 +6,13 @@
 
 const fs = require('fs');
 const path = require('path');
-const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags, SeparatorBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock } = require('../utils/ui');
 const { getSessionByChannel } = require('../utils/host_session_manager');
 const { clipFromCapture } = require('../utils/voice_moderation/clipper');
 const { insertIncident } = require('../utils/voice_moderation/incidents');
-const { startMonitoring, stopMonitoring, isMonitoring, transcribeClip } = require('../utils/voice_moderation/transcriber');
+const { startMonitoring, stopMonitoring, isMonitoring, transcribeClipSpeakers, formatClipTranscript } = require('../utils/voice_moderation/transcriber');
 const {
     MODERATOR_ROLES, VOICE_EVIDENCE_CHANNEL_ID,
     VOICE_CLIP_DEFAULT_SECONDS, VOICE_CLIP_MIN_SECONDS, VOICE_CLIP_MAX_SECONDS,
@@ -87,16 +87,24 @@ const handleRoomEventClip = async (interaction) => {
     }
 
     const fileName = clipFileName(session.id, clip.windowEndMs);
-    const transcript = await transcribeClip(clip.wav);
+    // Display names for transcript attribution; mention strings stay in the
+    // meta block where Discord renders them, but transcript lines need text.
+    const namesByUserId = new Map();
+    for (const userId of clip.participantIds) {
+        const member = await interaction.guild.members.fetch(userId).catch(() => null);
+        namesByUserId.set(userId, member?.displayName || `user ${userId}`);
+    }
+    const transcript = formatClipTranscript(await transcribeClipSpeakers(clip.userWavs, namesByUserId));
     const evidence = {
         title: 'Voice Incident Captured',
         subtitle: `EMH session ${session.id}`,
         lines: [
-            `Captured by <@${interaction.user.id}> from <#${session.channelId}> (host <@${session.hostId}>).`,
-            `Window: <t:${Math.floor(clip.windowStartMs / 1000)}:T> to <t:${Math.floor(clip.windowEndMs / 1000)}:T> (${durationSeconds}s).`,
-            `Speakers in window: ${clip.participantIds.map((id) => `<@${id}>`).join(', ')}.`,
-            note ? `Note: ${note}` : null,
-            transcript ? `Transcript: ${transcript.length > 800 ? `${transcript.slice(0, 800)}...` : transcript}` : null,
+            `**Captured by:** <@${interaction.user.id}>`,
+            `**Host:** <@${session.hostId}>`,
+            `**Channel:** <#${session.channelId}>`,
+            `**Window:** <t:${Math.floor(clip.windowStartMs / 1000)}:T> to <t:${Math.floor(clip.windowEndMs / 1000)}:T> (${durationSeconds}s)`,
+            `**Speakers:** ${clip.participantIds.map((id) => `<@${id}>`).join(', ')}`,
+            note ? `**Note:** ${note}` : null,
         ],
     };
 
@@ -106,6 +114,12 @@ const handleRoomEventClip = async (interaction) => {
         const container = new ContainerBuilder().setAccentColor(0xDC2626);
         const block = buildTextBlock(evidence);
         if (block) container.addTextDisplayComponents(block);
+        container.addSeparatorComponents(new SeparatorBuilder());
+        const transcriptBlock = buildTextBlock({
+            subtitle: '**Transcript**',
+            lines: [transcript || 'Unavailable (transcription not configured or nothing intelligible).'],
+        });
+        if (transcriptBlock) container.addTextDisplayComponents(transcriptBlock);
         // Components V2 hides raw attachments; the File component is what
         // renders the WAV in the message.
         container.addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
