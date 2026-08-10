@@ -12,6 +12,7 @@ const { buildTextBlock } = require('../utils/ui');
 const { getSessionByChannel } = require('../utils/host_session_manager');
 const { clipFromCapture } = require('../utils/voice_moderation/clipper');
 const { insertIncident } = require('../utils/voice_moderation/incidents');
+const { startMonitoring, stopMonitoring, isMonitoring } = require('../utils/voice_moderation/transcriber');
 const {
     MODERATOR_ROLES, VOICE_EVIDENCE_CHANNEL_ID,
     VOICE_CLIP_DEFAULT_SECONDS, VOICE_CLIP_MIN_SECONDS, VOICE_CLIP_MAX_SECONDS,
@@ -140,11 +141,47 @@ const handleRoomEventClip = async (interaction) => {
     });
 };
 
-// Replaced by the real implementation in the monitoring task.
-const handleRoomEventMonitor = async (interaction) =>
-    notice(interaction, {
-        title: 'Not Yet Available', subtitle: 'Live Monitor',
-        lines: ['Live monitoring arrives with the next deploy.'],
+const handleRoomEventMonitor = async (interaction) => {
+    const subtitle = 'Live Monitor';
+    const callerRoleIds = [...interaction.member.roles.cache.keys()];
+    if (!isModerator(callerRoleIds)) {
+        return notice(interaction, {
+            title: 'Access Denied', subtitle,
+            lines: ['Only moderators can run live monitoring.'],
+        });
+    }
+    const explicit = interaction.options.getChannel('channel');
+    const channelId = explicit?.id || interaction.member.voice.channelId;
+    if (!channelId) {
+        return notice(interaction, {
+            title: 'Channel Required', subtitle,
+            lines: ['Join the session channel or pass the channel option.'],
+        });
+    }
+    const action = interaction.options.getString('action');
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    if (action === 'stop') {
+        if (!isMonitoring(channelId)) {
+            return notice(interaction, { title: 'Not Monitoring', subtitle, lines: ['That channel is not being monitored.'] });
+        }
+        await stopMonitoring(channelId);
+        return notice(interaction, { title: 'Monitoring Stopped', subtitle, lines: ['The transcript thread has been closed out.'] });
+    }
+
+    const result = await startMonitoring({ client: interaction.client, channelId, startedById: interaction.user.id });
+    if (!result.ok) {
+        const reasons = {
+            unconfigured: 'Live transcription is not configured (missing DEEPGRAM_API_KEY). Incident clipping still works.',
+            'no-session': 'That channel has no live event session.',
+            'already-monitoring': 'That channel is already being monitored.',
+        };
+        return notice(interaction, { title: 'Cannot Start', subtitle, lines: [reasons[result.reason]] });
+    }
+    return notice(interaction, {
+        title: 'Monitoring Started', subtitle,
+        lines: [`Live transcript: ${result.threadUrl}`, 'Stop it with `/room event monitor action:stop`.'],
     });
+};
 
 module.exports = { isModerator, canUseClip, handleRoomEventClip, handleRoomEventMonitor };

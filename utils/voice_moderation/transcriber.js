@@ -1,0 +1,174 @@
+'use strict';
+
+// Mod-triggered live transcription. One Deepgram streaming connection per
+// speaker gives true attribution with no diarization guesswork; the capture
+// tap hands this module decoded mono PCM only while monitoring is on, so
+// transcription cost accrues only then. Lines land in a thread on the
+// evidence channel in batches.
+//
+// Written against @deepgram/sdk v5: DeepgramClient, listen.v1.connect,
+// sendMedia/sendKeepAlive/sendCloseStream, 'message' events of type Results.
+
+const { DeepgramClient } = require('@deepgram/sdk');
+const logger = require('../logger');
+const { setTap, clearTap, getCaptureState } = require('./capture');
+const {
+    VOICE_EVIDENCE_CHANNEL_ID, VOICE_MONITOR_MAX_SPEAKERS, VOICE_TRANSCRIPT_FLUSH_SECONDS,
+} = require('../../config/constants');
+
+// channelId -> { thread, speakers: Map<userId, { live, keepAlive, name }>,
+//                pending: [], flushTimer, guild }
+const monitors = new Map();
+
+const batchTranscriptLines = (lines, maxLen = 1900) => {
+    const rendered = lines.map(({ name, text }) => {
+        const line = `**${name}:** ${text}`;
+        return line.length > maxLen ? line.slice(0, maxLen) : line;
+    });
+    const batches = [];
+    let current = '';
+    for (const line of rendered) {
+        if (current && current.length + 1 + line.length > maxLen) {
+            batches.push(current);
+            current = line;
+        } else {
+            current = current ? `${current}\n${line}` : line;
+        }
+    }
+    if (current) batches.push(current);
+    return batches;
+};
+
+const isMonitoring = (channelId) => monitors.has(channelId);
+
+const postBatches = async (monitor, lines) => {
+    for (const content of batchTranscriptLines(lines)) {
+        await monitor.thread.send({ content, allowedMentions: { parse: [] } }).catch((error) => {
+            logger.error('[Voice Mod] Transcript post failed:', error);
+        });
+    }
+};
+
+const flush = async (channelId) => {
+    const monitor = monitors.get(channelId);
+    if (!monitor || monitor.pending.length === 0) return;
+    await postBatches(monitor, monitor.pending.splice(0, monitor.pending.length));
+};
+
+const speakerName = async (monitor, userId) => {
+    const member = await monitor.guild.members.fetch(userId).catch(() => null);
+    return member?.displayName || `user ${userId}`;
+};
+
+const openSpeaker = async (monitor, channelId, userId) => {
+    if (monitor.speakers.has(userId) || monitor.speakers.size >= VOICE_MONITOR_MAX_SPEAKERS) return;
+    // Reserve the slot before the awaits below so a burst of packets cannot
+    // open several connections for the same speaker.
+    const speaker = { live: null, keepAlive: null, name: null };
+    monitor.speakers.set(userId, speaker);
+    try {
+        speaker.name = await speakerName(monitor, userId);
+        const client = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
+        const live = await client.listen.v1.connect({
+            model: 'nova-3', encoding: 'linear16', sample_rate: 48000, channels: 1,
+            smart_format: true, interim_results: false,
+        });
+        live.on('message', (data) => {
+            if (data?.type !== 'Results') return;
+            const text = data.channel?.alternatives?.[0]?.transcript;
+            if (text) monitor.pending.push({ name: speaker.name, text });
+        });
+        live.on('error', (error) => {
+            logger.error(`[Voice Mod] Deepgram error for ${userId} in ${channelId}:`, error);
+        });
+        live.on('close', () => {
+            clearInterval(speaker.keepAlive);
+            // Dropping the entry lets the next packet from this speaker reopen
+            // a fresh connection while monitoring is on: reconnect by rebirth.
+            const current = monitors.get(channelId);
+            if (current) current.speakers.delete(userId);
+        });
+        live.connect();
+        await live.waitForOpen();
+        speaker.keepAlive = setInterval(() => {
+            try {
+                live.sendKeepAlive({ type: 'KeepAlive' });
+            } catch {
+                // Connection is closing; the close handler cleans up.
+            }
+        }, 8000);
+        if (typeof speaker.keepAlive.unref === 'function') speaker.keepAlive.unref();
+        speaker.live = live;
+    } catch (error) {
+        monitor.speakers.delete(userId);
+        throw error;
+    }
+};
+
+const startMonitoring = async ({ client, channelId, startedById }) => {
+    if (!process.env.DEEPGRAM_API_KEY) return { ok: false, reason: 'unconfigured' };
+    if (monitors.has(channelId)) return { ok: false, reason: 'already-monitoring' };
+    const state = getCaptureState(channelId);
+    if (!state) return { ok: false, reason: 'no-session' };
+
+    const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
+    const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const thread = await evidenceChannel.threads.create({
+        name: `transcript session ${state.session.id} ${stamp}`,
+        autoArchiveDuration: 1440,
+    });
+    await thread.send({
+        content: `Live transcript of <#${channelId}> started by <@${startedById}>.`,
+        allowedMentions: { parse: [] },
+    });
+
+    const monitor = {
+        thread, speakers: new Map(), pending: [], flushTimer: null, guild: evidenceChannel.guild,
+    };
+    monitors.set(channelId, monitor);
+    monitor.flushTimer = setInterval(() => { void flush(channelId); }, VOICE_TRANSCRIPT_FLUSH_SECONDS * 1000);
+    if (typeof monitor.flushTimer.unref === 'function') monitor.flushTimer.unref();
+
+    setTap(channelId, (userId, monoPcm) => {
+        const speaker = monitor.speakers.get(userId);
+        if (speaker?.live) {
+            try {
+                speaker.live.sendMedia(monoPcm);
+            } catch {
+                // Connection is closing; rebirth on the next packet handles it.
+            }
+        } else if (!speaker) {
+            void openSpeaker(monitor, channelId, userId).catch((error) => {
+                logger.error(`[Voice Mod] Could not open transcription for ${userId}:`, error);
+            });
+        }
+    });
+    logger.info(`[Voice Mod] Monitoring started for channel ${channelId} by ${startedById}.`);
+    return { ok: true, threadUrl: thread.url };
+};
+
+const stopMonitoring = async (channelId) => {
+    const monitor = monitors.get(channelId);
+    if (!monitor) return;
+    monitors.delete(channelId);
+    clearTap(channelId);
+    clearInterval(monitor.flushTimer);
+    for (const { live, keepAlive } of monitor.speakers.values()) {
+        clearInterval(keepAlive);
+        try {
+            if (live) {
+                live.sendCloseStream({ type: 'CloseStream' });
+                live.close();
+            }
+        } catch {
+            // Already closed.
+        }
+    }
+    monitor.speakers.clear();
+    // flush() reads the registry, which no longer holds this entry: drain inline.
+    await postBatches(monitor, monitor.pending.splice(0, monitor.pending.length));
+    await monitor.thread.send({ content: 'Monitoring stopped.', allowedMentions: { parse: [] } }).catch(() => {});
+    logger.info(`[Voice Mod] Monitoring stopped for channel ${channelId}.`);
+};
+
+module.exports = { batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring };

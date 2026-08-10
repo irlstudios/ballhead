@@ -6,6 +6,7 @@
 
 const logger = require('../logger');
 const capture = require('./capture');
+const transcriber = require('./transcriber');
 
 const onSessionOpen = async ({ channel, session }) => {
     try {
@@ -16,6 +17,11 @@ const onSessionOpen = async ({ channel, session }) => {
 };
 
 const onSessionClose = async (channelId) => {
+    try {
+        await transcriber.stopMonitoring(channelId);
+    } catch (error) {
+        logger.error(`[Voice Mod] Could not stop monitoring for channel ${channelId}:`, error);
+    }
     try {
         capture.leaveSession(channelId);
     } catch (error) {
