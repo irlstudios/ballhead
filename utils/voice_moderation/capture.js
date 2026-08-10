@@ -28,6 +28,9 @@ const captureSlotByGuild = new Map();
 
 const getCaptureState = (channelId) => captures.get(channelId) || null;
 
+// Which channel currently holds the guild's single voice slot, if any.
+const getGuildCaptureChannel = (guildId) => captureSlotByGuild.get(guildId) || null;
+
 const setTap = (channelId, fn) => {
     const state = captures.get(channelId);
     if (!state) return false;
@@ -187,4 +190,4 @@ const leaveSession = (channelId) => {
     logger.info(`[Voice Mod] Stopped capturing channel ${channelId}; buffers discarded.`);
 };
 
-module.exports = { joinSession, leaveSession, getCaptureState, setTap, clearTap };
+module.exports = { joinSession, leaveSession, getCaptureState, getGuildCaptureChannel, setTap, clearTap };
