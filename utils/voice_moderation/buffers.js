@@ -39,4 +39,24 @@ const dropUser = (store, userId) => {
     store.users.delete(userId);
 };
 
-module.exports = { createStore, recordPacket, packetsBetween, dropUser };
+// Opus frames are exactly 20ms of audio, but they arrive with network and
+// event-loop jitter. Placing each frame at its raw arrival time makes
+// adjacent frames overlap or leave micro-gaps, which plays back as constant
+// crackle. The pacer pins frames to a 20ms grid anchored at the first frame
+// of a talk burst; an arrival far off the grid is a real pause, so the grid
+// re-anchors there.
+const createPacer = ({ frameMs = 20, resyncThresholdMs = 100 } = {}) => ({
+    frameMs, resyncThresholdMs, expectedNext: null,
+});
+
+const paceTimestamp = (pacer, arrivalMs) => {
+    const expected = pacer.expectedNext;
+    if (expected === null || Math.abs(arrivalMs - expected) > pacer.resyncThresholdMs) {
+        pacer.expectedNext = arrivalMs + pacer.frameMs;
+        return arrivalMs;
+    }
+    pacer.expectedNext = expected + pacer.frameMs;
+    return expected;
+};
+
+module.exports = { createStore, recordPacket, packetsBetween, dropUser, createPacer, paceTimestamp };

@@ -13,7 +13,7 @@ const { OpusEncoder } = require('@discordjs/opus');
 const { ContainerBuilder, MessageFlags } = require('discord.js');
 const logger = require('../logger');
 const { buildTextBlock } = require('../ui');
-const { createStore, recordPacket } = require('./buffers');
+const { createStore, recordPacket, createPacer, paceTimestamp } = require('./buffers');
 const { VOICE_BUFFER_MINUTES } = require('../../config/constants');
 
 // channelId -> { connection, store, session, subscriptions: Set<userId>,
@@ -66,8 +66,9 @@ const subscribeToUser = (state, userId) => {
     const stream = state.connection.receiver.subscribe(userId, {
         end: { behavior: EndBehaviorType.AfterSilence, duration: 1000 },
     });
+    const pacer = createPacer();
     stream.on('data', (packet) => {
-        recordPacket(state.store, userId, packet, Date.now());
+        recordPacket(state.store, userId, packet, paceTimestamp(pacer, Date.now()));
         if (state.tap) {
             try {
                 state.tap(userId, stereoToMono(decoderFor(state, userId).decode(packet)));

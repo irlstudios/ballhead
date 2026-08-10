@@ -57,3 +57,26 @@ test('packets keep arrival order for a user', () => {
     const got = packetsBetween(store, 0, 1000).get('u1');
     assert.deepStrictEqual(got.map((p) => p.at), [100, 150, 120]);
 });
+
+const { createPacer, paceTimestamp } = require('../utils/voice_moderation/buffers');
+
+test('jittered arrivals snap to the 20ms frame grid', () => {
+    const pacer = createPacer();
+    const placed = [1000, 1022, 1039, 1061, 1078].map((at) => paceTimestamp(pacer, at));
+    assert.deepStrictEqual(placed, [1000, 1020, 1040, 1060, 1080]);
+});
+
+test('a real pause re-anchors instead of stretching the grid', () => {
+    const pacer = createPacer();
+    assert.strictEqual(paceTimestamp(pacer, 1000), 1000);
+    assert.strictEqual(paceTimestamp(pacer, 1020), 1020);
+    assert.strictEqual(paceTimestamp(pacer, 1500), 1500);
+    assert.strictEqual(paceTimestamp(pacer, 1521), 1520);
+});
+
+test('slightly early packets still land on the grid', () => {
+    const pacer = createPacer();
+    assert.strictEqual(paceTimestamp(pacer, 1000), 1000);
+    assert.strictEqual(paceTimestamp(pacer, 1010), 1020);
+    assert.strictEqual(paceTimestamp(pacer, 1030), 1040);
+});
