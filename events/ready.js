@@ -26,6 +26,7 @@ const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
+const { ensureVoiceIncidentsSchema } = require('../utils/voice_moderation/incidents');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -171,6 +172,7 @@ module.exports = {
             ['poll', ensurePollTables],
             ['host_sessions', ensureHostSessionSchema],
             ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
+            ['voice_incidents', ensureVoiceIncidentsSchema],
         ];
         for (const [name, ensure] of migrations) {
             try {
