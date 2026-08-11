@@ -148,6 +148,11 @@ const joinSession = async ({ channel, session }) => {
         const connection = joinVoiceChannel({
             channelId: channel.id,
             guildId,
+            // @discordjs/voice keys connections by (group, guildId) and the
+            // default group is shared: without a per-client group a second
+            // worker's join MOVES the first worker's connection to the new
+            // channel instead of opening its own.
+            group: botClient.user.id,
             adapterCreator: botClient.guilds.cache.get(guildId).voiceAdapterCreator,
             selfMute: true,
             selfDeaf: false,

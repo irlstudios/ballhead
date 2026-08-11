@@ -113,6 +113,10 @@ const speak = async ({ channel, text }) => {
             connection = joinVoiceChannel({
                 channelId: channel.id,
                 guildId,
+                // Same per-client group as capture.js: joining in the shared
+                // default group would rip a capture worker's connection out of
+                // its session channel instead of opening the main bot's own.
+                group: channel.client.user.id,
                 adapterCreator: channel.guild.voiceAdapterCreator,
                 selfMute: false,
                 selfDeaf: true,
