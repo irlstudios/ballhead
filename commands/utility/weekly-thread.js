@@ -16,7 +16,8 @@ module.exports = {
         .addStringOption(option =>
             option.setName('topic')
                 .setDescription('The topic of the thread / discussion')
-                .setRequired(true)),
+                .setRequired(true)
+                .setMaxLength(500)),
     async execute(interaction) {
         const topic = interaction.options.getString('topic');
         if (!interaction.member.roles.cache.has(REQUIRED_ROLE_ID)) {
@@ -29,7 +30,8 @@ module.exports = {
         try {
             const channel = await interaction.client.channels.fetch(WEEKLY_DISCUSSION_CHANNEL_ID);
             const thread = await channel.threads.create({
-                name: `Weekly Discussion: ${topic}`,
+                // Discord caps thread names at 100 chars; full topic goes in the announcement.
+                name: `Weekly Discussion: ${topic}`.slice(0, 100),
                 autoArchiveDuration: 1440,
                 reason: 'Weekly discussion thread created by bot',
             });

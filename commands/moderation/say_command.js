@@ -28,12 +28,14 @@ const FAILURE_LINES = {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('say')
-        .setDescription('Make the bot speak in your voice channel (moderators only).')
+        .setDescription('Make the bot speak in voice or post in a text channel (moderators only).')
         .addStringOption((option) =>
             option.setName('text').setDescription('What to say').setRequired(true).setMaxLength(300))
         .addChannelOption((option) =>
-            option.setName('channel').setDescription('Voice or stage channel (defaults to yours)')
-                .addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)),
+            option.setName('channel').setDescription('Voice/stage to speak in, or text channel to post in (defaults to your voice channel)')
+                .addChannelTypes(
+                    ChannelType.GuildVoice, ChannelType.GuildStageVoice,
+                    ChannelType.GuildText, ChannelType.GuildAnnouncement)),
     async execute(interaction) {
         const subtitle = 'Bot Voice';
         if (!isModerator([...interaction.member.roles.cache.keys()])) {
@@ -45,12 +47,24 @@ module.exports = {
         const channel = interaction.options.getChannel('channel') || interaction.member.voice.channel;
         if (!channel) {
             return reply(interaction, {
-                title: 'Voice Channel Required', subtitle,
+                title: 'Channel Required', subtitle,
                 lines: ['Join a voice channel or pass the channel option.'],
             });
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const result = await speak({ channel, text: interaction.options.getString('text') });
+        const text = interaction.options.getString('text');
+        if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) {
+            try {
+                await channel.send(text);
+            } catch (error) {
+                return reply(interaction, {
+                    title: 'Cannot Post', subtitle,
+                    lines: [`Could not post in **${channel.name}**: ${error.message}`],
+                });
+            }
+            return reply(interaction, { title: 'Posted', subtitle, lines: [`Posted it in **${channel.name}**.`] });
+        }
+        const result = await speak({ channel, text });
         if (!result.ok) {
             return reply(interaction, { title: 'Cannot Speak', subtitle, lines: [FAILURE_LINES[result.reason]] });
         }
