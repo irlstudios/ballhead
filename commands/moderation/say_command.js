@@ -2,7 +2,6 @@
 
 const { SlashCommandBuilder, ContainerBuilder, MessageFlags, ChannelType } = require('discord.js');
 const { buildTextBlock } = require('../../utils/ui');
-const { isModerator } = require('../../handlers/room_event_voice');
 const { speak } = require('../../utils/voice_tts');
 
 const reply = (interaction, body) => {
@@ -25,24 +24,115 @@ const FAILURE_LINES = {
     failed: 'Speech synthesis failed; check the bot log.',
 };
 
+// https://discord.com/channels/<guild>/<channel>/<message>, plus the ptb,
+// canary, and legacy discordapp.com hosts the client also copies.
+const MESSAGE_LINK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/channels\/(\d+)\/(\d+)\/(\d+)$/;
+
+const parseMessageLink = (link) => {
+    const match = MESSAGE_LINK.exec((link || '').trim());
+    return match ? { guildId: match[1], channelId: match[2], messageId: match[3] } : null;
+};
+
+// Reply to and/or react to the message a link points at. Assumes the link was
+// validated and the interaction deferred.
+const actOnLinkedMessage = async ({ interaction, target, text, emoji, subtitle }) => {
+    let message;
+    try {
+        const linkChannel = await interaction.client.channels.fetch(target.channelId);
+        message = await linkChannel.messages.fetch(target.messageId);
+    } catch {
+        return reply(interaction, {
+            title: 'Message Not Found', subtitle,
+            lines: ['Could not fetch that message; check the link and that the bot can read that channel.'],
+        });
+    }
+    if (text) {
+        try {
+            await message.reply(text);
+        } catch (error) {
+            return reply(interaction, {
+                title: 'Cannot Reply', subtitle,
+                lines: [`Could not reply in **${message.channel.name}**: ${error.message}`],
+            });
+        }
+    }
+    if (emoji) {
+        try {
+            await message.react(emoji.trim());
+        } catch {
+            return reply(interaction, {
+                title: 'Cannot React', subtitle,
+                lines: [
+                    `**${emoji}** did not work as a reaction; use a standard emoji or one from this server.`,
+                    ...(text ? ['The reply itself was posted.'] : []),
+                ],
+            });
+        }
+    }
+    const did = [text && 'Replied', emoji && 'Reacted'].filter(Boolean).join(' & ');
+    return reply(interaction, { title: did, subtitle, lines: [`${did} in **${message.channel.name}**.`] });
+};
+
 module.exports = {
+    // Deliberately nonsense name, default permissions 0 so no member sees it
+    // in the slash picker (Discord still shows it to Administrators; the
+    // owner-id check in execute is the real gate and denies even them).
     data: new SlashCommandBuilder()
-        .setName('say')
-        .setDescription('Make the bot speak in voice or post in a text channel (moderators only).')
+        .setName('zzqvx')
+        .setDescription('Make the bot speak in voice or post in a text channel (bot owner only).')
+        .setDefaultMemberPermissions('0')
         .addStringOption((option) =>
-            option.setName('text').setDescription('What to say').setRequired(true).setMaxLength(300))
+            option.setName('text').setDescription('What to say (optional when only reacting)').setMaxLength(300))
         .addChannelOption((option) =>
             option.setName('channel').setDescription('Voice/stage to speak in, or text channel to post in (defaults to your voice channel)')
                 .addChannelTypes(
                     ChannelType.GuildVoice, ChannelType.GuildStageVoice,
-                    ChannelType.GuildText, ChannelType.GuildAnnouncement)),
+                    ChannelType.GuildText, ChannelType.GuildAnnouncement))
+        .addStringOption((option) =>
+            option.setName('message_link').setDescription('Message link to reply to (with text) and/or react to (with reaction)'))
+        .addStringOption((option) =>
+            option.setName('reaction').setDescription('Emoji to react with; needs message_link')),
+    parseMessageLink,
     async execute(interaction) {
         const subtitle = 'Bot Voice';
-        if (!isModerator([...interaction.member.roles.cache.keys()])) {
+        // Fail closed: no BOT_OWNER_ID configured means nobody may use it.
+        if (!process.env.BOT_OWNER_ID || interaction.user.id !== process.env.BOT_OWNER_ID) {
             return reply(interaction, {
                 title: 'Access Denied', subtitle,
-                lines: ['Only moderators can use this command.'],
+                lines: ['Only the bot owner can use this command.'],
             });
+        }
+        const text = interaction.options.getString('text');
+        const emoji = interaction.options.getString('reaction');
+        const link = interaction.options.getString('message_link');
+        if (!text && !emoji) {
+            return reply(interaction, {
+                title: 'Nothing To Do', subtitle,
+                lines: ['Give text to say, or a reaction emoji plus a message_link.'],
+            });
+        }
+        if (emoji && !link) {
+            return reply(interaction, {
+                title: 'Link Required', subtitle,
+                lines: ['A reaction needs message_link pointing at the message to react to.'],
+            });
+        }
+        if (link) {
+            const target = parseMessageLink(link);
+            if (!target) {
+                return reply(interaction, {
+                    title: 'Bad Link', subtitle,
+                    lines: ['That does not look like a Discord message link.'],
+                });
+            }
+            if (target.guildId !== interaction.guildId) {
+                return reply(interaction, {
+                    title: 'Wrong Server', subtitle,
+                    lines: ['That message link points outside this server.'],
+                });
+            }
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            return actOnLinkedMessage({ interaction, target, text, emoji, subtitle });
         }
         const channel = interaction.options.getChannel('channel') || interaction.member.voice.channel;
         if (!channel) {
@@ -52,7 +142,6 @@ module.exports = {
             });
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const text = interaction.options.getString('text');
         if (channel.type === ChannelType.GuildText || channel.type === ChannelType.GuildAnnouncement) {
             try {
                 await channel.send(text);
