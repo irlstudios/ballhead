@@ -74,13 +74,13 @@ const actOnLinkedMessage = async ({ interaction, target, text, emoji, subtitle }
 };
 
 module.exports = {
-    // Deliberately nonsense name, default permissions 0 so no member sees it
-    // in the slash picker (Discord still shows it to Administrators; the
-    // owner-id check in execute is the real gate and denies even them).
+    // Deliberately nonsense name. Discord cannot hide a command from the
+    // picker per user id (default_member_permissions is permission-based and
+    // would hide it from the non-admin owner too), so the command stays
+    // visible and the owner-id check in execute is the sole gate.
     data: new SlashCommandBuilder()
         .setName('zzqvx')
         .setDescription('Make the bot speak in voice or post in a text channel (bot owner only).')
-        .setDefaultMemberPermissions('0')
         .addStringOption((option) =>
             option.setName('text').setDescription('What to say (optional when only reacting)').setMaxLength(300))
         .addChannelOption((option) =>
