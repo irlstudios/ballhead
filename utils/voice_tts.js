@@ -13,6 +13,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { Readable } = require('stream');
+const { ChannelType } = require('discord.js');
 const {
     joinVoiceChannel, entersState, VoiceConnectionStatus,
     createAudioPlayer, createAudioResource, StreamType, AudioPlayerStatus,
@@ -116,6 +117,17 @@ const speak = async ({ channel, text }) => {
             });
         }
         await entersState(connection, VoiceConnectionStatus.Ready, 15000);
+
+        // Stages admit the bot as audience; it must become a speaker to be
+        // heard. Needs Mute Members on the stage channel.
+        if (channel.type === ChannelType.GuildStageVoice) {
+            try {
+                await channel.guild.members.me.voice.setSuppressed(false);
+            } catch (error) {
+                logger.error('[TTS] Could not become a stage speaker:', error);
+                return { ok: false, reason: 'stage-suppressed' };
+            }
+        }
 
         const player = createAudioPlayer();
         const subscription = connection.subscribe(player);
