@@ -14,22 +14,42 @@ const { ContainerBuilder, MessageFlags } = require('discord.js');
 const logger = require('../logger');
 const { buildTextBlock } = require('../ui');
 const { createStore, recordPacket, createPacer, paceTimestamp } = require('./buffers');
+const { getReadyWorkers } = require('./worker_pool');
 const { VOICE_BUFFER_MINUTES } = require('../../config/constants');
 
 // channelId -> { connection, store, session, subscriptions: Set<userId>,
-//                decoders: Map<userId, OpusEncoder>, tap: fn|null, guildId }
+//                decoders: Map<userId, OpusEncoder>, tap: fn|null, guildId,
+//                client, isMainClient }
 const captures = new Map();
-
-// One bot user holds one voice state per guild, so a second concurrent EMH
-// session in the same guild cannot be captured: joining it would silently rip
-// the connection out of the first room and cross-wire the receivers.
-// guildId -> channelId of the session currently holding the capture slot.
-const captureSlotByGuild = new Map();
 
 const getCaptureState = (channelId) => captures.get(channelId) || null;
 
-// Which channel currently holds the guild's single voice slot, if any.
-const getGuildCaptureChannel = (guildId) => captureSlotByGuild.get(guildId) || null;
+// The channel whose capture rides on the MAIN bot user, if any. Worker
+// captures never constrain TTS -- the main bot can join a channel alongside a
+// worker -- so only the capture sharing the main bot's voice slot is reported.
+const getGuildCaptureChannel = (guildId) => {
+    for (const [channelId, state] of captures) {
+        if (state.guildId === guildId && state.isMainClient) return channelId;
+    }
+    return null;
+};
+
+// One bot user holds one voice state per guild, so parallel sessions need
+// parallel bot users. Workers take captures first, keeping the main bot's
+// slot free for TTS; the main bot is the fallback when every worker is taken.
+const pickCaptureClient = ({ mainClient, workers, guildId, busyUserIds }) => {
+    const free = (candidate) => candidate.isReady() && !busyUserIds.has(candidate.user.id);
+    return workers.find((worker) => free(worker) && worker.guilds.cache.has(guildId))
+        || (free(mainClient) ? mainClient : null);
+};
+
+const busyUserIdsIn = (guildId) => {
+    const busy = new Set();
+    for (const state of captures.values()) {
+        if (state.guildId === guildId) busy.add(state.client.user.id);
+    }
+    return busy;
+};
 
 const setTap = (channelId, fn) => {
     const state = captures.get(channelId);
@@ -113,17 +133,22 @@ const postConsentNotice = async (channel) => {
 const joinSession = async ({ channel, session }) => {
     if (captures.has(channel.id)) return;
     const guildId = channel.guild.id;
-    const holder = captureSlotByGuild.get(guildId);
-    if (holder) {
-        logger.warn(`[Voice Mod] Session ${session.id} in ${channel.id} is not captured: the guild's capture slot is held by channel ${holder}.`);
+    const mainClient = channel.client;
+    const workers = getReadyWorkers();
+    const botClient = pickCaptureClient({
+        mainClient, workers, guildId, busyUserIds: busyUserIdsIn(guildId),
+    });
+    if (!botClient) {
+        // ponytail: capacity is 1 + workers-in-guild parallel sessions; add a
+        // handoff queue only if guilds ever run more sessions than that.
+        logger.warn(`[Voice Mod] Session ${session.id} in ${channel.id} is not captured: all capture bots (main + ${workers.length} workers) are busy in guild ${guildId}.`);
         return;
     }
-    captureSlotByGuild.set(guildId, channel.id);
     try {
         const connection = joinVoiceChannel({
             channelId: channel.id,
             guildId,
-            adapterCreator: channel.guild.voiceAdapterCreator,
+            adapterCreator: botClient.guilds.cache.get(guildId).voiceAdapterCreator,
             selfMute: true,
             selfDeaf: false,
         });
@@ -135,6 +160,8 @@ const joinSession = async ({ channel, session }) => {
             decoders: new Map(),
             tap: null,
             guildId,
+            client: botClient,
+            isMainClient: botClient === mainClient,
         };
         captures.set(channel.id, state);
 
@@ -167,10 +194,9 @@ const joinSession = async ({ channel, session }) => {
                 logger.error(`[Voice Mod] Failed to subscribe to ${userId} in ${channel.id}:`, error);
             }
         });
-        logger.info(`[Voice Mod] Capturing session ${session.id} in channel ${channel.id}.`);
+        logger.info(`[Voice Mod] Capturing session ${session.id} in channel ${channel.id} via ${state.isMainClient ? 'main bot' : botClient.user.tag}.`);
     } catch (error) {
         leaveSession(channel.id);
-        captureSlotByGuild.delete(guildId);
         throw error;
     }
 };
@@ -179,9 +205,6 @@ const leaveSession = (channelId) => {
     const state = captures.get(channelId);
     if (!state) return;
     captures.delete(channelId);
-    if (captureSlotByGuild.get(state.guildId) === channelId) {
-        captureSlotByGuild.delete(state.guildId);
-    }
     try {
         state.connection.destroy();
     } catch {
@@ -190,4 +213,7 @@ const leaveSession = (channelId) => {
     logger.info(`[Voice Mod] Stopped capturing channel ${channelId}; buffers discarded.`);
 };
 
-module.exports = { joinSession, leaveSession, getCaptureState, getGuildCaptureChannel, setTap, clearTap };
+module.exports = {
+    joinSession, leaveSession, getCaptureState, getGuildCaptureChannel,
+    pickCaptureClient, setTap, clearTap,
+};

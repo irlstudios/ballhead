@@ -1,11 +1,13 @@
 'use strict';
 
 // Piper text-to-speech into a voice channel. Piper runs locally on the host
-// (PIPER_BIN + PIPER_MODEL env vars), so speaking costs nothing per use. If a
-// moderation capture holds the target channel, its connection is borrowed:
-// unmute, speak, re-mute, capture never stops. A capture in a different
-// channel wins outright; the bot has one voice slot per guild and an event
-// being recorded outranks a TTS announcement.
+// (PIPER_BIN + PIPER_MODEL env vars), so speaking costs nothing per use.
+// Captures usually ride on worker bots, which never conflict with TTS: the
+// main bot just joins alongside. Only a capture on the MAIN bot matters here
+// (getGuildCaptureChannel reports exactly that): in the target channel its
+// connection is borrowed (unmute, speak, re-mute, capture never stops); in a
+// different channel it wins outright, because the main bot has one voice slot
+// per guild and an event being recorded outranks a TTS announcement.
 
 const { spawn } = require('child_process');
 const { randomUUID } = require('crypto');
