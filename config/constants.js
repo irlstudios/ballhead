@@ -40,7 +40,7 @@ const SQUAD_PRACTICE_CHANNEL_ID = '1233854185276051516';
 const GYM_CLASS_GENERAL_CHANNEL_ID = '752216589792706624';
 // Channel that hosts the "Weekly Discussion: <topic>" threads created by
 // /weekly-thread. The role-grant listener keys off this same channel.
-const WEEKLY_DISCUSSION_CHANNEL_ID = '1112183354725515274';
+const WEEKLY_DISCUSSION_CHANNEL_ID = GYM_CLASS_GENERAL_CHANNEL_ID;
 // Roles granted to anyone who posts in a weekly discussion thread
 // (feedback participants + feedback XP).
 const WEEKLY_FEEDBACK_ROLE_IDS = ['1186458354797789264', '1355230432324616314'];

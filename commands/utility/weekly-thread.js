@@ -3,7 +3,6 @@ const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('
 const logger = require('../../utils/logger');
 const {
     BOT_BUGS_CHANNEL_ID,
-    GYM_CLASS_GENERAL_CHANNEL_ID,
     WEEKLY_DISCUSSION_CHANNEL_ID,
 } = require('../../config/constants');
 
@@ -56,31 +55,6 @@ module.exports = {
                 // The client-wide allowedMentions strips role pings; this ping is intentional.
                 allowedMentions: { roles: [ANNOUNCEMENT_ROLE_ID] }
             });
-
-            const reminderEmbed = new EmbedBuilder()
-                .setDescription('Hey all, we would love to hear your thoughts on our weekly topic! 🌟 To join the discussion thread, simply hit the button below and let your ideas flow! 💬🚀');
-            const reminderButton = new ActionRowBuilder()
-                .addComponents(
-                    new ButtonBuilder()
-                        .setLabel('Join Thread')
-                        .setStyle(ButtonStyle.Link)
-                        .setURL(`https://discord.com/channels/${interaction.guild.id}/${thread.id}`)
-                );
-
-            const reminderChannel = await interaction.client.channels.fetch(GYM_CLASS_GENERAL_CHANNEL_ID);
-            let reminderMessage = await reminderChannel.send({embeds: [reminderEmbed], components: [reminderButton]});
-
-            // ponytail: in-memory reminder loop, dies on bot restart; move to a
-            // scheduled job in jobs/ if that ever matters.
-            const interval = 20 * 60 * 1000;
-            const duration = 24 * 60 * 60 * 1000;
-            const iterations = duration / interval;
-
-            for (let i = 0; i < iterations; i++) {
-                await new Promise(resolve => setTimeout(resolve, interval));
-                await reminderMessage.delete().catch(() => {});
-                reminderMessage = await reminderChannel.send({embeds: [reminderEmbed], components: [reminderButton]});
-            }
         } catch (error) {
             logger.error('[WeeklyThread] Command failed:', error);
             try {

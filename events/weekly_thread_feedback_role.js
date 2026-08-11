@@ -20,6 +20,11 @@ module.exports = {
             if (!channel.name?.startsWith('Weekly Discussion')) {
                 return;
             }
+            // Only bot-created threads count; anyone can start a thread in
+            // general with this name and would otherwise self-award the roles.
+            if (channel.ownerId !== message.client.user.id) {
+                return;
+            }
 
             const member = message.member ?? await message.guild.members.fetch(message.author.id);
             const missing = WEEKLY_FEEDBACK_ROLE_IDS.filter((id) => !member.roles.cache.has(id));

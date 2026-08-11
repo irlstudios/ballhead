@@ -6,15 +6,19 @@ const assert = require('node:assert');
 const listener = require('../events/weekly_thread_feedback_role');
 const { WEEKLY_DISCUSSION_CHANNEL_ID, WEEKLY_FEEDBACK_ROLE_IDS } = require('../config/constants');
 
-const makeMessage = ({ bot = false, isThread = true, parentId = WEEKLY_DISCUSSION_CHANNEL_ID, threadName = 'Weekly Discussion: Test', heldRoles = [] } = {}) => {
+const BOT_ID = 'bot-user';
+
+const makeMessage = ({ bot = false, isThread = true, parentId = WEEKLY_DISCUSSION_CHANNEL_ID, threadName = 'Weekly Discussion: Test', ownerId = BOT_ID, heldRoles = [] } = {}) => {
     const added = [];
     return {
         added,
         author: { id: 'user1', bot },
+        client: { user: { id: BOT_ID } },
         channel: {
             isThread: () => isThread,
             parentId,
             name: threadName,
+            ownerId,
         },
         member: {
             roles: {
@@ -43,6 +47,7 @@ test('ignores bots, non-threads, other channels, and other thread names', async 
         makeMessage({ isThread: false }),
         makeMessage({ parentId: 'other-channel' }),
         makeMessage({ threadName: 'Random thread' }),
+        makeMessage({ ownerId: 'some-user' }),
     ];
     for (const message of cases) {
         await listener.execute(message);
