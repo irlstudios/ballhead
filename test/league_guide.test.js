@@ -16,6 +16,7 @@ test('guide covers the owner-facing essentials', () => {
         '/league checkin', '/league settings', '/league update-invite',
         '/league add-co-owner', '/league submit-game', '/league appeal',
         '/league requirements', '/league guide', '/league content',
+        '/league request-official',
     ]) {
         assert.ok(text.includes(command), `guide should mention ${command}`);
     }

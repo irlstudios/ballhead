@@ -37,6 +37,7 @@ const LEAGUE_GUIDE_SECTIONS = Object.freeze([
         title: 'Track Your Games and Content',
         lines: Object.freeze([
             '- **/league submit-game** — record each completed league game by tagging the players. A game history builds your league\'s track record',
+            '- **/league request-official** — Active and Sponsored leagues can request a certified official for a game',
             '- Register a content hashtag with **/league settings** — it must start with #gc (for example #gcskyballers). Every post using it is tracked and credited to your league',
             '- **/league content** — see your hashtag and content totals anytime',
         ]),
@@ -52,7 +53,6 @@ const LEAGUE_GUIDE_SECTIONS = Object.freeze([
             '',
             'Check where you stand anytime with **/league requirements**.',
             `To stay Active: keep checking in monthly, hold ${KEEP.MIN_MEMBERS}+ members, and avoid strikes — leagues below the bar move back to Base.`,
-            'Active and Sponsored leagues can request certified officials for their games with **/league request-official**.',
             'Sponsored leagues (**/apply sponsored-league**) also unlock rewards via **/league request-reward**.',
         ]),
     }),

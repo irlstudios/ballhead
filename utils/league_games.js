@@ -1,5 +1,7 @@
 'use strict';
 
+const { ELIGIBLE_TIERS } = require('./league_officials');
+
 // Pure logic for owner-submitted league games and the weekly stats surfaces
 // (/league submit-game, /league games, /league overview). No Discord or DB work so
 // every rule is unit-testable, mirroring utils/league_officials.js.
@@ -106,6 +108,20 @@ function chunkLines(lines, maxChars = 3500) {
     return chunks;
 }
 
+// Appended to the monthly check-in confirmation (mirroring buildHashtagNudge)
+// so owners hear about game reporting and officials at the one moment every
+// league touches the bot. Officials line only shows when a league qualifies.
+function buildGameReportingNudge(leagues = []) {
+    if (leagues.length === 0) return [];
+    const lines = [
+        'Keep your track record current: record every completed game with `/league submit-game`.',
+    ];
+    if (leagues.some((l) => l && ELIGIBLE_TIERS.includes(l.league_type))) {
+        lines.push('Need a certified official for an upcoming game? Request one with `/league request-official`.');
+    }
+    return lines;
+}
+
 module.exports = {
     MIN_PLAYERS_PER_GAME,
     MAX_PLAYERS_PER_GAME,
@@ -115,4 +131,5 @@ module.exports = {
     buildWeeklyStatsLines,
     buildOverviewLines,
     chunkLines,
+    buildGameReportingNudge,
 };

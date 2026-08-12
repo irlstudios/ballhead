@@ -51,9 +51,10 @@ async function sendCheckinReminder(client) {
         try {
             const owner = await client.users.fetch(league.owner_id.toString());
             await owner.send(
-                "It's time for your monthly league check-in. " +
+                'It\'s time for your monthly league check-in. ' +
                 'Use `/league checkin` in the Gym Class server to confirm your league is still active. ' +
-                'Deadline: end of the month.'
+                'Deadline: end of the month. ' +
+                'While you are at it, record recent games with `/league submit-game` — and Active or Sponsored leagues can request a certified official with `/league request-official`.'
             ).catch(() => {});
             sent += 1;
         } catch (error) {
@@ -82,7 +83,7 @@ async function sendCheckinWarning(client) {
         try {
             const owner = await client.users.fetch(league.owner_id.toString());
             await owner.send(
-                "You haven't submitted your monthly check-in yet. " +
+                'You haven\'t submitted your monthly check-in yet. ' +
                 'You have 7 days remaining before your league is marked inactive. ' +
                 'Use `/league checkin` in the Gym Class server to confirm.'
             ).catch(() => {});

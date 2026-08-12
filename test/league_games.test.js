@@ -11,6 +11,7 @@ const {
     buildWeeklyStatsLines,
     buildOverviewLines,
     chunkLines,
+    buildGameReportingNudge,
 } = require('../utils/league_games');
 
 // --- parsePlayerIds ----------------------------------------------------------
@@ -118,4 +119,24 @@ test('splits when joined length would exceed the cap', () => {
 test('never emits an empty chunk and keeps oversized single lines', () => {
     assert.deepStrictEqual(chunkLines([], 10), []);
     assert.deepStrictEqual(chunkLines(['x'.repeat(50)], 10), [['x'.repeat(50)]]);
+});
+
+// --- buildGameReportingNudge -------------------------------------------------
+
+test('buildGameReportingNudge is silent with no leagues', () => {
+    assert.deepStrictEqual(buildGameReportingNudge([]), []);
+    assert.deepStrictEqual(buildGameReportingNudge(), []);
+});
+
+test('buildGameReportingNudge always points at submit-game', () => {
+    const lines = buildGameReportingNudge([{ league_type: 'Base' }]);
+    assert.ok(lines.some((l) => l.includes('/league submit-game')));
+    assert.ok(!lines.some((l) => l.includes('/league request-official')));
+});
+
+test('buildGameReportingNudge adds request-official for eligible tiers', () => {
+    for (const tier of ['Active', 'Sponsored']) {
+        const lines = buildGameReportingNudge([{ league_type: 'Base' }, { league_type: tier }]);
+        assert.ok(lines.some((l) => l.includes('/league request-official')), `${tier} should see officials line`);
+    }
 });
