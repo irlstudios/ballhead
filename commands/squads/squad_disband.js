@@ -1,18 +1,99 @@
 'use strict';
 
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder } = require('discord.js');
-const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const {
-    SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID,
-    AD_PREFERENCE,
+    GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID,
+    SQUAD_LEADER_ROLE_ID, COMPETITIVE_SQUAD_OWNER_ROLE_ID,
 } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
-const { disambiguateSquad, getRolesToRemove, AD_SQUAD_NAME, AD_SQUAD_TYPE, SL_SQUAD_NAME } = require('../../utils/squad_queries');
-const { withSquadLock } = require('../../utils/squad_lock');
+const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
+// Role ids to remove from the owner after a disband: the leader role only
+// when no squads remain at all, the competitive-owner role only when a
+// Competitive squad was disbanded and none remain.
+function ownerRolesAfterDisband({ remainingSquads, disbandedTypes }) {
+    const roles = [];
+    if (remainingSquads.length === 0) {
+        roles.push(SQUAD_LEADER_ROLE_ID);
+    }
+    const stillOwnsComp = remainingSquads.some((s) => s.squad_type === 'Competitive');
+    if (disbandedTypes.includes('Competitive') && !stillOwnsComp) {
+        roles.push(COMPETITIVE_SQUAD_OWNER_ROLE_ID);
+    }
+    return roles;
+}
+
+// Shared teardown for disband and force-disband: DMs + nickname resets +
+// mascot-role removal for members, then role cleanup for the owner.
+async function teardownDisbandedSquads(client, guild, disbanded, { byModerator = false } = {}) {
+    for (const { squad, members } of disbanded) {
+        const mascot = squad.event_squad ? findMascotByName(squad.event_squad) : null;
+        for (const m of members) {
+            try {
+                const member = await guild.members.fetch(m.user_id);
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'Squad Disbanded',
+                    subtitle: byModerator ? 'Moderator Action' : 'Squad Update',
+                    lines: [`The squad **${squad.name}** you were in has been disbanded${byModerator ? ' by a moderator' : ' by the squad leader'}.`],
+                });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.info(`Failed to DM ${m.user_id}: ${err.message}`));
+
+                if (member.nickname && member.nickname.toUpperCase().startsWith(`[${squad.name}]`)) {
+                    await member.setNickname(member.user.username).catch(nickError => {
+                        if (nickError.code !== 50013) logger.info(`Could not reset nickname for ${member.user.tag}: ${nickError.message}`);
+                    });
+                }
+                if (mascot && member.roles.cache.has(mascot.roleId)) {
+                    await member.roles.remove(mascot.roleId).catch(roleErr => {
+                        if (roleErr.code !== 50013 && roleErr.code !== 10011) {
+                            logger.info(`Failed to remove mascot role from ${member.user.tag}: ${roleErr.message}`);
+                        }
+                    });
+                }
+            } catch (fetchError) {
+                if (fetchError.code === 10007) logger.info(`Member ${m.user_id} not found in guild, skipping cleanup.`);
+                else logger.info(`Could not fetch member ${m.user_id} for cleanup: ${fetchError.message}`);
+            }
+        }
+    }
+
+    const ownerId = disbanded[0].squad.owner_id;
+    const squadName = disbanded[0].squad.name;
+    try {
+        const leader = await guild.members.fetch(ownerId);
+        const remainingSquads = await squadDb.fetchSquadsByOwner(ownerId);
+        const rolesToRemove = ownerRolesAfterDisband({
+            remainingSquads,
+            disbandedTypes: disbanded.map((d) => d.squad.squad_type),
+        });
+        const mascot = disbanded[0].squad.event_squad ? findMascotByName(disbanded[0].squad.event_squad) : null;
+        if (mascot) rolesToRemove.push(mascot.roleId);
+        const held = rolesToRemove.filter((id) => leader.roles.cache.has(id));
+        if (held.length > 0) {
+            await leader.roles.remove(held).catch(roleErr => {
+                if (roleErr.code !== 50013 && roleErr.code !== 10011) {
+                    logger.info(`Failed to remove owner roles from ${leader.user.tag}: ${roleErr.message}`);
+                }
+            });
+        }
+        if (leader.nickname && leader.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
+            await leader.setNickname(leader.user.username).catch(nickError => {
+                if (nickError.code !== 50013) logger.info(`Could not reset nickname for leader ${leader.user.tag}: ${nickError.message}`);
+            });
+        }
+    } catch (fetchError) {
+        if (fetchError.code === 10007) logger.info(`Leader ${ownerId} not found in guild, skipping cleanup.`);
+        else logger.info(`Could not fetch leader ${ownerId} for cleanup: ${fetchError.message}`);
+    }
+}
+
 module.exports = {
+    ownerRolesAfterDisband,
+    teardownDisbandedSquads,
     data: new SlashCommandBuilder()
         .setName('squad-disband')
         .setDescription('Disband your squad if you are the squad leader.')
@@ -28,21 +109,11 @@ module.exports = {
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
         const guild = interaction.guild;
-        const sheets = await getSheetsClient();
 
         try {
-            const results = await getCachedValues({
-                sheets,
-                spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E', 'All Data!A:H'],
-                ttlMs: 30000,
-            });
-            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
-            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
-            const allData = (results.get('All Data!A:H') || []).slice(1);
-
             const specifiedSquad = interaction.options.getString('squad');
-            const { squad, error } = disambiguateSquad(squadLeaders, userId, specifiedSquad);
+            const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, specifiedSquad);
             if (error) {
                 const infoContainer = buildNoticeContainer({
                     title: 'Disband Squad',
@@ -52,206 +123,57 @@ module.exports = {
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
 
-            const squadName = squad[SL_SQUAD_NAME];
-            if (!squadName || squadName === 'N/A') {
-                const errorContainer = buildNoticeContainer({
-                    title: 'Squad Name Missing',
+            // A Casual+Competitive pair shares its name and disbands together,
+            // matching the sheet-era behavior of clearing every row by name.
+            const rowsToDisband = ownedSquads.filter((s) => s.name === squad.name);
+            const disbanded = [];
+            for (const row of rowsToDisband) {
+                const result = await squadDb.disbandSquad(row.id, { ownerId: userId });
+                if (result) disbanded.push(result);
+            }
+            if (disbanded.length === 0) {
+                const infoContainer = buildNoticeContainer({
+                    title: 'Already Disbanded',
                     subtitle: 'Disband Squad',
-                    lines: ['Could not determine your squad name.'],
+                    lines: ['Your squad no longer exists. No changes were made.'],
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
             }
 
-            await withSquadLock(squadName, async () => {
-                // Determine squad type from All Data
-                const squadTypeRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[AD_SQUAD_NAME]?.toUpperCase() === squadName.toUpperCase());
-                const squadType = squadTypeRow ? squadTypeRow[AD_SQUAD_TYPE] : null;
-                const squadTypeRolesToRemove = [];
+            await teardownDisbandedSquads(interaction.client, guild, disbanded);
 
-                const eventSquadName = squad[3]; // SL_EVENT_SQUAD
-                let mascotRoleIdToRemove = null;
-                if (eventSquadName && eventSquadName !== 'N/A') {
-                    const mascotInfo = findMascotByName(eventSquadName);
-                    if (mascotInfo) {
-                        mascotRoleIdToRemove = mascotInfo.roleId;
-                    }
-                }
-
-                // Process squad members
-                const squadMembersToProcess = squadMembers.filter(row => row && row.length > 2 && row[2]?.toUpperCase() === squadName.toUpperCase());
-                const memberIdsToProcess = squadMembersToProcess.map(row => row[1]).filter(Boolean);
-
-                for (const memberRow of squadMembersToProcess) {
-                    const memberId = memberRow[1];
-                    if (!memberId) continue;
-                    try {
-                        const member = await guild.members.fetch(memberId);
-                        if (member) {
-                            const dmContainer = new ContainerBuilder();
-                            const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Squad Update', lines: [`The squad **${squadName}** you were in has been disbanded by the squad leader.`] });
-                            if (block) dmContainer.addTextDisplayComponents(block);
-                            await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.info(`Failed to DM ${memberId}: ${err.message}`));
-
-                            if (member.nickname && member.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
-                                await member.setNickname(member.user.username).catch(nickError => {
-                                    if (nickError.code !== 50013) logger.info(`Could not reset nickname for ${member.user.tag}: ${nickError.message}`);
-                                });
-                            }
-
-                            const rolesToRemove = [...squadTypeRolesToRemove];
-                            if (mascotRoleIdToRemove) rolesToRemove.push(mascotRoleIdToRemove);
-                            if (rolesToRemove.length > 0) {
-                                await member.roles.remove(rolesToRemove).catch(roleErr => {
-                                    if (roleErr.code !== 50013 && roleErr.code !== 10011) {
-                                        logger.info(`Failed to remove roles from ${member.user.tag}: ${roleErr.message}`);
-                                    }
-                                });
-                            }
-                        }
-                    } catch (fetchError) {
-                        if (fetchError.code === 10007) logger.info(`Member ${memberId} not found in guild, skipping cleanup.`);
-                        else logger.info(`Could not fetch member ${memberId} for cleanup: ${fetchError.message}`);
-                    }
-                }
-
-                // Process leader role removal with safety (check remaining squads)
+            const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
+                .then(g => g?.channels.fetch(LOGGING_CHANNEL_ID)).catch(() => null);
+            if (loggingChannel) {
                 try {
-                    const leader = await guild.members.fetch(userId);
-                    if (leader) {
-                        // Use role safety: only remove roles the user no longer needs
-                        const rolesToRemove = getRolesToRemove(allData, squadLeaders, userId, squadType, squadName);
-                        if (rolesToRemove.length > 0) {
-                            await leader.roles.remove(rolesToRemove).catch(roleErr => {
-                                if (roleErr.code !== 50013 && roleErr.code !== 10011) {
-                                    logger.info(`Failed to remove owner roles from leader ${leader.user.tag}: ${roleErr.message}`);
-                                }
-                            });
-                        }
-
-                        if (leader.nickname && leader.nickname.toUpperCase().startsWith(`[${squadName}]`)) {
-                            await leader.setNickname(leader.user.username).catch(nickError => {
-                                if (nickError.code !== 50013) logger.info(`Could not reset nickname for leader ${leader.user.tag}: ${nickError.message}`);
-                            });
-                        }
-
-                        // Remove level + mascot roles from leader
-                        const leaderRolesToRemove = [...squadTypeRolesToRemove];
-                        if (mascotRoleIdToRemove) leaderRolesToRemove.push(mascotRoleIdToRemove);
-                        if (leaderRolesToRemove.length > 0) {
-                            await leader.roles.remove(leaderRolesToRemove).catch(roleErr => {
-                                if (roleErr.code !== 50013 && roleErr.code !== 10011) {
-                                    logger.info(`Failed to remove level/mascot roles from leader ${leader.user.tag}: ${roleErr.message}`);
-                                }
-                            });
-                        }
-                    }
-                } catch (fetchError) {
-                    if (fetchError.code === 10007) logger.info(`Leader ${userId} not found in guild, skipping cleanup.`);
-                    else logger.info(`Could not fetch leader ${userId} for cleanup: ${fetchError.message}`);
+                    const logContainer = new ContainerBuilder();
+                    const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Moderator Log', lines: [`The squad **${squad.name}** was disbanded by **${userTag}** (${userId}).`] });
+                    if (block) logContainer.addTextDisplayComponents(block);
+                    await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+                } catch (logError) {
+                    logger.error('Failed to send log message:', logError);
                 }
+            }
 
-                // Update sheets: filter by squadName, not userId
-                const updatedSquadMembers = squadMembers.filter(row => !(row && row.length > 2 && row[2]?.toUpperCase() === squadName.toUpperCase()));
-                const updatedSquadLeaders = squadLeaders.filter(row => !(row && row.length > 2 && row[2]?.toUpperCase() === squadName.toUpperCase()));
-
-                // Update All Data: clear squad info for affected members
-                const disbandedMemberIds = new Set(memberIdsToProcess);
-                disbandedMemberIds.add(userId);
-
-                const updatedAllData = allData.map(row => {
-                    if (!row || row.length < 2) return row;
-                    const memberId = row[1];
-                    const rowSquadName = row[AD_SQUAD_NAME];
-                    // Only clear rows that match this specific squad
-                    if (disbandedMemberIds.has(memberId) && rowSquadName?.toUpperCase() === squadName.toUpperCase()) {
-                        const preference = row.length > AD_PREFERENCE ? row[AD_PREFERENCE] : '';
-                        return [row[0], row[1], 'N/A', 'N/A', 'N/A', 'FALSE', 'No', preference];
-                    }
-                    const fullRow = Array(8).fill('');
-                    for (let i = 0; i < Math.min(row.length, 8); i++) { fullRow[i] = row[i] ?? ''; }
-                    return fullRow;
-                });
-
-                // Write back to sheets
-                const sheetErrors = [];
-
-                await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A2:E' })
-                    .catch(err => { sheetErrors.push('Squad Members clear'); logger.error('Error clearing Squad Members:', err.message); });
-                if (updatedSquadMembers.length > 0) {
-                    await sheets.spreadsheets.values.update({
-                        spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Members!A2',
-                        valueInputOption: 'RAW', resource: { values: updatedSquadMembers },
-                    }).catch(err => { sheetErrors.push('Squad Members update'); logger.error('Error updating Squad Members:', err.message); });
-                }
-
-                await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A2:G' })
-                    .catch(err => { sheetErrors.push('Squad Leaders clear'); logger.error('Error clearing Squad Leaders:', err.message); });
-                if (updatedSquadLeaders.length > 0) {
-                    await sheets.spreadsheets.values.update({
-                        spreadsheetId: SPREADSHEET_SQUADS, range: 'Squad Leaders!A2',
-                        valueInputOption: 'RAW', resource: { values: updatedSquadLeaders },
-                    }).catch(err => { sheetErrors.push('Squad Leaders update'); logger.error('Error updating Squad Leaders:', err.message); });
-                }
-
-                // Re-fetch headers for full rewrite of All Data
-                const allDataFull = (await sheets.spreadsheets.values.get({
-                    spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1:H1',
-                }).catch(() => ({ data: { values: [] } }))).data.values || [];
-                const headers = allDataFull[0] || [];
-
-                await sheets.spreadsheets.values.update({
-                    spreadsheetId: SPREADSHEET_SQUADS, range: 'All Data!A1:H',
-                    valueInputOption: 'RAW', resource: { values: [headers, ...updatedAllData] },
-                }).catch(err => { sheetErrors.push('All Data update'); logger.error('Error updating All Data:', err.message); });
-
-                // Log the disband
-                const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
-                    .then(g => g?.channels.fetch(LOGGING_CHANNEL_ID)).catch(() => null);
-                if (loggingChannel) {
-                    try {
-                        const logContainer = new ContainerBuilder();
-                        const block = buildTextBlock({ title: 'Squad Disbanded', subtitle: 'Moderator Log', lines: [`The squad **${squadName}** was disbanded by **${userTag}** (${userId}).`] });
-                        if (block) logContainer.addTextDisplayComponents(block);
-                        await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
-                    } catch (logError) {
-                        logger.error('Failed to send log message:', logError);
-                    }
-                }
-
-                if (sheetErrors.length > 0) {
-                    const warnContainer = buildNoticeContainer({
-                        title: 'Squad Partially Disbanded',
-                        subtitle: 'Disband Squad',
-                        lines: [
-                            `Squad **${squadName}** was disbanded but some sheet updates failed: ${sheetErrors.join(', ')}.`,
-                            'Please contact an admin to verify the data.',
-                        ],
-                    });
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [warnContainer], ephemeral: true });
-                } else {
-                    const successContainer = new ContainerBuilder();
-                    const block = buildTextBlock({
-                        title: 'Squad Disbanded',
-                        subtitle: 'Disband Squad',
-                        lines: [
-                            `Your squad **${squadName}** has been successfully disbanded.`,
-                            'Members have been notified, roles removed, and nicknames reset (where possible).',
-                        ],
-                    });
-                    if (block) successContainer.addTextDisplayComponents(block);
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
-                }
+            const successContainer = new ContainerBuilder();
+            const block = buildTextBlock({
+                title: 'Squad Disbanded',
+                subtitle: 'Disband Squad',
+                lines: [
+                    `Your squad **${squad.name}** has been successfully disbanded.`,
+                    'Members have been notified, roles removed, and nicknames reset (where possible).',
+                ],
             });
-
+            if (block) successContainer.addTextDisplayComponents(block);
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
         } catch (error) {
             logger.error('Error during the disband-squad command execution:', error);
-            const errorMessage = `An error occurred while disbanding the squad. ${error.message || 'Please try again later.'}`;
             const errorContainer = buildNoticeContainer({
                 title: 'Disband Failed',
                 subtitle: 'Disband Squad',
-                lines: [errorMessage],
+                lines: [`An error occurred while disbanding the squad. ${error.message || 'Please try again later.'}`],
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
         }
     },
 };
