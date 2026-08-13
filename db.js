@@ -786,15 +786,16 @@ async function ensureTransferRequestsTable() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `;
-    return executeQuery(query);
+    await executeQuery(query);
+    await executeQuery('ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS squad_id INTEGER').catch(() => {});
 }
 
-async function insertTransferRequest({ leaderId, targetId, squadName, squadType, messageId, expiresAt }) {
+async function insertTransferRequest({ leaderId, targetId, squadName, squadType, messageId, expiresAt, squadId = null }) {
     const query = `
-        INSERT INTO transfer_requests (leader_id, target_id, squad_name, squad_type, message_id, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+        INSERT INTO transfer_requests (leader_id, target_id, squad_name, squad_type, message_id, expires_at, squad_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
     `;
-    const result = await executeQuery(query, [leaderId, targetId, squadName, squadType, messageId, expiresAt]);
+    const result = await executeQuery(query, [leaderId, targetId, squadName, squadType, messageId, expiresAt, squadId]);
     return result.rows[0];
 }
 

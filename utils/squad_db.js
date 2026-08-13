@@ -258,6 +258,17 @@ const transferSquadOwnership = async (squadId, oldOwnerId, newOwnerId, newOwnerU
     }
 };
 
+// Plain owner swap with no membership changes: used for the sibling row of a
+// Casual+Competitive pair when ownership transfers, so a name never ends up
+// split between two owners.
+const updateSquadOwner = async (squadId, ownerId, ownerUsername) => {
+    const r = await executeQuery(
+        'UPDATE squads SET owner_id = $2, owner_username = $3 WHERE id = $1 RETURNING *',
+        [squadId, ownerId, ownerUsername]
+    );
+    return r.rows[0] || null;
+};
+
 // Promote/demote between an owner's A and B teams, capacity-checked on the
 // destination under its row lock.
 const moveMemberBetweenSquads = async (fromSquadId, toSquadId, userId) => {
@@ -309,5 +320,6 @@ module.exports = {
     disbandSquad,
     renameSquad,
     transferSquadOwnership,
+    updateSquadOwner,
     moveMemberBetweenSquads,
 };

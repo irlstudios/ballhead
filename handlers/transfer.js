@@ -4,14 +4,9 @@ const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.
 const logger = require('../utils/logger');
 const { noticePayload } = require('../utils/ui');
 const { fetchTransferRequestByMessageId, updateTransferRequestStatus } = require('../db');
-const { getSheetsClient, getCachedValues } = require('../utils/sheets_cache');
-const { withSquadLock } = require('../utils/squad_lock');
+const squadDb = require('../utils/squad_db');
+const { ownerRolesAfterDisband } = require('../commands/squads/squad_disband');
 const {
-    findLeaderRow, findMemberRow, findAllDataRow, findAllDataRowIndex,
-    findUserAllDataRows, getRolesToRemove, AD_SQUAD_TYPE,
-} = require('../utils/squad_queries');
-const {
-    SPREADSHEET_SQUADS,
     GYM_CLASS_GUILD_ID,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
@@ -63,176 +58,100 @@ const handleTransferButton = async (interaction, action) => {
 const handleAccept = async (interaction, transfer) => {
     const { leader_id: leaderId, target_id: targetId, squad_name: squadName, squad_type: squadType } = transfer;
 
-    await withSquadLock(squadName, async () => {
-        const sheets = await getSheetsClient();
-        const results = await getCachedValues({
-            sheets,
-            spreadsheetId: SPREADSHEET_SQUADS,
-            ranges: ['Squad Leaders!A:G', 'Squad Members!A:E', 'All Data!A:H'],
-            ttlMs: 5000,
-        });
-        const squadLeaders = (results.get('Squad Leaders!A:G') || []);
-        const squadMembers = (results.get('Squad Members!A:E') || []);
-        const allData = (results.get('All Data!A:H') || []);
-
-        const squadLeadersHeaderless = squadLeaders.slice(1);
-        const squadMembersHeaderless = squadMembers.slice(1);
-        const allDataHeaderless = allData.slice(1);
-
-        // Re-validate: leader still owns the squad
-        const leaderRow = findLeaderRow(squadLeadersHeaderless, leaderId, squadName);
-        if (!leaderRow) {
-            await updateTransferRequestStatus(interaction.message.id, 'Failed');
-            return interaction.editReply(
-                noticePayload('The original leader no longer owns this squad.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
-            );
-        }
-
-        // Re-validate: target still in squad
-        const targetMemberRow = findMemberRow(squadMembersHeaderless, targetId, squadName);
-        if (!targetMemberRow) {
-            await updateTransferRequestStatus(interaction.message.id, 'Failed');
-            return interaction.editReply(
-                noticePayload('You are no longer a member of this squad.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
-            );
-        }
-
-        // Update Squad Leaders: swap target in, leader out
-        const leaderIndex = squadLeadersHeaderless.findIndex(
-            row => row && row.length > 2 && row[1] === leaderId && row[2]?.toUpperCase() === squadName.toUpperCase()
+    // Resolve the squad: new transfers carry squad_id; older pending rows fall
+    // back to (name, leader-owned) resolution.
+    let squad = transfer.squad_id ? await squadDb.fetchSquadById(transfer.squad_id) : null;
+    if (!squad) {
+        squad = (await squadDb.fetchSquadsByName(squadName))
+            .find(s => String(s.owner_id) === String(leaderId)) || null;
+    }
+    if (!squad || String(squad.owner_id) !== String(leaderId)) {
+        await updateTransferRequestStatus(interaction.message.id, 'Failed');
+        return interaction.editReply(
+            noticePayload('The original leader no longer owns this squad.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
         );
-        if (leaderIndex === -1) {
-            await updateTransferRequestStatus(interaction.message.id, 'Failed');
-            return interaction.editReply(
-                noticePayload('Could not locate leader row in sheet.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
-            );
-        }
+    }
 
-        const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
-        const targetMember = await guild.members.fetch(targetId).catch(() => null);
-        const leaderMember = await guild.members.fetch(leaderId).catch(() => null);
+    const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
+    const targetMember = await guild.members.fetch(targetId).catch(() => null);
+    const leaderMember = await guild.members.fetch(leaderId).catch(() => null);
+    const targetUsername = targetMember ? targetMember.user.username : targetId;
+    const leaderUsername = leaderMember ? leaderMember.user.username : leaderId;
 
-        // Preserve all 7 columns, swap username and ID
-        const updatedLeaderRow = [...leaderRow];
-        updatedLeaderRow[0] = targetMemberRow[0] || (targetMember ? targetMember.user.username : targetId);
-        updatedLeaderRow[1] = targetId;
-
-        const sheetRowIndex = leaderIndex + 2; // +1 for header, +1 for 1-based index
-        await sheets.spreadsheets.values.update({
-            spreadsheetId: SPREADSHEET_SQUADS,
-            range: `Squad Leaders!A${sheetRowIndex}:G${sheetRowIndex}`,
-            valueInputOption: 'RAW',
-            resource: { values: [updatedLeaderRow] },
-        });
-
-        // Remove target from Squad Members (they're now leader) - targeted row clear
-        const targetMemberIndex = squadMembersHeaderless.findIndex(
-            row => row && row.length > 2 && row[1] === targetId && row[2]?.toUpperCase() === squadName.toUpperCase()
+    // Atomic swap: owner guard + target-membership check + row swaps in one
+    // transaction; null means a re-validation failed.
+    const updated = await squadDb.transferSquadOwnership(squad.id, leaderId, targetId, targetUsername, leaderUsername);
+    if (!updated) {
+        await updateTransferRequestStatus(interaction.message.id, 'Failed');
+        return interaction.editReply(
+            noticePayload('You are no longer a member of this squad, or the squad changed hands already.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
         );
-        if (targetMemberIndex !== -1) {
-            const sheetRowSM = targetMemberIndex + 2;
-            await sheets.spreadsheets.values.clear({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: `Squad Members!A${sheetRowSM}:E${sheetRowSM}`,
-            });
-        }
+    }
 
-        // Add old leader as regular member
-        const currentDate = new Date();
-        const dateString = `${(currentDate.getMonth() + 1).toString().padStart(2, '0')}/${currentDate.getDate().toString().padStart(2, '0')}/${currentDate.getFullYear().toString().slice(-2)}`;
-        const leaderUsername = leaderMember ? leaderMember.user.username : leaderId;
-        const newMemberRow = [leaderUsername, leaderId, squadName, leaderRow[3] || 'N/A', dateString];
-        await sheets.spreadsheets.values.append({
-            spreadsheetId: SPREADSHEET_SQUADS,
-            range: 'Squad Members!A1',
-            valueInputOption: 'RAW',
-            resource: { values: [newMemberRow] },
-        });
+    // A Casual+Competitive pair shares its name; move the sibling row too so
+    // the name never splits between two owners.
+    const siblings = (await squadDb.fetchSquadsByName(squadName))
+        .filter(s => s.id !== squad.id && String(s.owner_id) === String(leaderId));
+    for (const sibling of siblings) {
+        await squadDb.updateSquadOwner(sibling.id, targetId, targetUsername);
+    }
 
-        // Update All Data: set old leader's Is Leader = No, new leader's Is Leader = Yes
-        const leaderAllDataIndex = findAllDataRowIndex(allDataHeaderless, leaderId, squadName);
-        if (leaderAllDataIndex !== -1) {
-            const updatedRow = [...allDataHeaderless[leaderAllDataIndex]];
-            updatedRow[6] = 'No';
-            const adRowIndex = leaderAllDataIndex + 2;
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: `All Data!A${adRowIndex}:H${adRowIndex}`,
-                valueInputOption: 'RAW',
-                resource: { values: [updatedRow] },
-            });
-        }
-
-        const targetAllDataIndex = findAllDataRowIndex(allDataHeaderless, targetId, squadName);
-        if (targetAllDataIndex !== -1) {
-            const updatedRow = [...allDataHeaderless[targetAllDataIndex]];
-            updatedRow[6] = 'Yes';
-            const adRowIndex = targetAllDataIndex + 2;
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: `All Data!A${adRowIndex}:H${adRowIndex}`,
-                valueInputOption: 'RAW',
-                resource: { values: [updatedRow] },
-            });
-        }
-
-        // Role management
-        // Give new leader the squad leader role
-        if (targetMember) {
-            await targetMember.roles.add(SQUAD_LEADER_ROLE_ID).catch(e =>
-                logger.error(`[Transfer] Failed to add leader role to ${targetId}:`, e.message)
+    // Role management: new leader gains, old leader keeps only what remaining
+    // squads justify.
+    if (targetMember) {
+        await targetMember.roles.add(SQUAD_LEADER_ROLE_ID).catch(e =>
+            logger.error(`[Transfer] Failed to add leader role to ${targetId}:`, e.message)
+        );
+        if (squadType === 'Competitive') {
+            await targetMember.roles.add(COMPETITIVE_SQUAD_OWNER_ROLE_ID).catch(e =>
+                logger.error(`[Transfer] Failed to add comp owner role to ${targetId}:`, e.message)
             );
-            if (squadType === 'Competitive') {
-                await targetMember.roles.add(COMPETITIVE_SQUAD_OWNER_ROLE_ID).catch(e =>
-                    logger.error(`[Transfer] Failed to add comp owner role to ${targetId}:`, e.message)
-                );
-            }
         }
-
-        // Remove roles from old leader only if they don't need them anymore
-        if (leaderMember) {
-            const rolesToRemove = getRolesToRemove(allDataHeaderless, squadLeadersHeaderless, leaderId, squadType, squadName);
-            for (const roleId of rolesToRemove) {
-                await leaderMember.roles.remove(roleId).catch(e =>
-                    logger.error(`[Transfer] Failed to remove role ${roleId} from ${leaderId}:`, e.message)
-                );
-            }
+    }
+    if (leaderMember) {
+        const remainingSquads = await squadDb.fetchSquadsByOwner(leaderId);
+        const transferredTypes = [squad, ...siblings].map(s => s.squad_type);
+        const rolesToRemove = ownerRolesAfterDisband({ remainingSquads, disbandedTypes: transferredTypes });
+        for (const roleId of rolesToRemove) {
+            await leaderMember.roles.remove(roleId).catch(e =>
+                logger.error(`[Transfer] Failed to remove role ${roleId} from ${leaderId}:`, e.message)
+            );
         }
+    }
 
-        await updateTransferRequestStatus(interaction.message.id, 'Accepted');
+    await updateTransferRequestStatus(interaction.message.id, 'Accepted');
 
-        // Update the DM message
-        const acceptedContainer = new ContainerBuilder()
-            .setAccentColor(0x2ECC71)
+    // Update the DM message
+    const acceptedContainer = new ContainerBuilder()
+        .setAccentColor(0x2ECC71)
+        .addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## Transfer Complete'),
+            new TextDisplayBuilder().setContent(`You are now the owner of **${squadName}** (${squadType}).`)
+        );
+    await interaction.message.edit({
+        flags: MessageFlags.IsComponentsV2,
+        components: [acceptedContainer],
+    }).catch(() => {});
+
+    await interaction.editReply(
+        noticePayload(`You are now the owner of **${squadName}**.`, { title: 'Transfer Complete', subtitle: 'Squad Transfer' })
+    );
+
+    // Notify old leader
+    const leader = await interaction.client.users.fetch(leaderId).catch(() => null);
+    if (leader) {
+        const notifyContainer = new ContainerBuilder()
             .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Transfer Complete'),
-                new TextDisplayBuilder().setContent(`You are now the owner of **${squadName}** (${squadType}).`)
+                new TextDisplayBuilder().setContent('## Transfer Accepted'),
+                new TextDisplayBuilder().setContent(
+                    `**${interaction.user.username}** accepted ownership of **${squadName}**. You are now a regular member.`
+                )
             );
-        await interaction.message.edit({
+        await leader.send({
             flags: MessageFlags.IsComponentsV2,
-            components: [acceptedContainer],
-        }).catch(() => {});
-
-        await interaction.editReply(
-            noticePayload(`You are now the owner of **${squadName}**.`, { title: 'Transfer Complete', subtitle: 'Squad Transfer' })
-        );
-
-        // Notify old leader
-        const leader = await interaction.client.users.fetch(leaderId).catch(() => null);
-        if (leader) {
-            const notifyContainer = new ContainerBuilder()
-                .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## Transfer Accepted'),
-                    new TextDisplayBuilder().setContent(
-                        `**${interaction.user.username}** accepted ownership of **${squadName}**. You are now a regular member.`
-                    )
-                );
-            await leader.send({
-                flags: MessageFlags.IsComponentsV2,
-                components: [notifyContainer],
-            }).catch(e => logger.error(`[Transfer] Failed to DM old leader ${leaderId}:`, e.message));
-        }
-    });
+            components: [notifyContainer],
+        }).catch(e => logger.error(`[Transfer] Failed to DM old leader ${leaderId}:`, e.message));
+    }
 };
 
 const handleDecline = async (interaction, transfer) => {
