@@ -17,6 +17,7 @@ const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, 
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
 const { handleOfficialsButton, handleOfficialsSelect, handleOfficialsModal } = require('./handlers/league-officials');
+const { handleBrowseButton, handleBrowseSelect, handleApplicationModal, handleApplicationButton } = require('./handlers/squad_discovery');
 const { handleAppealsButton, handleAppealsModal } = require('./handlers/league-appeals');
 const { handleRewardsButton, handleRewardsModal } = require('./handlers/league-rewards');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
@@ -193,6 +194,10 @@ const handleSelectMenu = async (interaction) => {
         await handleOfficialsSelect(interaction);
         return;
     }
+    if (interaction.customId.startsWith('squadbrowse:')) {
+        await handleBrowseSelect(interaction);
+        return;
+    }
     if (interaction.customId === 'select-platform') {
         const selectedPlatform = interaction.values[0];
         const modal = createModal(selectedPlatform);
@@ -222,6 +227,10 @@ const handleModalSubmit = async (interaction) => {
     }
     if (interaction.customId.startsWith('official:')) {
         await handleOfficialsModal(interaction);
+        return;
+    }
+    if (interaction.customId.startsWith('squadapp:')) {
+        await handleApplicationModal(interaction);
         return;
     }
     if (interaction.customId.startsWith('appeal:')) {
@@ -271,6 +280,16 @@ const handleButton = async (interaction, client) => {
 
         if (interaction.customId.startsWith('official:')) {
             await handleOfficialsButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('squadbrowse:')) {
+            await handleBrowseButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('squadapp:')) {
+            await handleApplicationButton(interaction);
             return;
         }
 
