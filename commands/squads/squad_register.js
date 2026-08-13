@@ -147,6 +147,16 @@ module.exports = {
             // registering the same name under the other type concurrently.
             // Re-check after insert and compensate, so a name never splits
             // across owners.
+            // The A team may have transferred away between the gate read and
+            // the insert; a cross-owner A/B link must never survive that race.
+            if (gate.bTeam) {
+                const parentNow = await squadDb.fetchSquadById(gate.parent.id);
+                if (!parentNow || String(parentNow.owner_id) !== String(userId)) {
+                    await squadDb.setParentSquad(created.id, null);
+                    gate.bTeam = false;
+                }
+            }
+
             const holdersAfter = await squadDb.fetchSquadsByName(squadName);
             if (holdersAfter.some((s) => String(s.owner_id) !== String(userId))) {
                 // Compensation must actually land: a swallowed failure here

@@ -225,6 +225,11 @@ const disbandSquad = async (squadId, { ownerId = null } = {}) => {
     }
 };
 
+// Set or clear a B team's link to its A team.
+const setParentSquad = async (squadId, parentSquadId) => {
+    await executeQuery('UPDATE squads SET parent_squad_id = $2 WHERE id = $1', [squadId, parentSquadId]);
+};
+
 // Throws pg 23505 when the new (name, type) is taken.
 const renameSquad = async (squadId, newName) => {
     const r = await executeQuery(
@@ -271,10 +276,6 @@ const transferSquadOwnership = async (squadId, oldOwnerId, newOwnerId, newOwnerU
             await client.query('ROLLBACK');
             return null;
         }
-        await client.query(
-            'INSERT INTO squad_members (squad_id, user_id, username) VALUES ($1, $2, $3)',
-            [squadId, oldOwnerId, oldOwnerUsername]
-        );
         // Main row plus same-name siblings still held by the old owner.
         const moved = await client.query(
             `UPDATE squads SET owner_id = $3, owner_username = $4
@@ -289,6 +290,19 @@ const transferSquadOwnership = async (squadId, oldOwnerId, newOwnerId, newOwnerU
                 OR parent_squad_id = ANY($1::int[])`,
             [movedIds]
         );
+        // The old owner only becomes a member when they no longer lead
+        // anything: an A/B owner transferring one half keeps leading the
+        // other, and a leader must never also be a member.
+        const stillOwns = await client.query(
+            'SELECT 1 FROM squads WHERE owner_id = $1 LIMIT 1',
+            [oldOwnerId]
+        );
+        if (stillOwns.rowCount === 0) {
+            await client.query(
+                'INSERT INTO squad_members (squad_id, user_id, username) VALUES ($1, $2, $3)',
+                [squadId, oldOwnerId, oldOwnerUsername]
+            );
+        }
         await client.query('COMMIT');
         return moved.rows.find((r) => r.id === squadId) || moved.rows[0];
     } catch (err) {
@@ -588,6 +602,7 @@ module.exports = {
     removeMembershipAnywhere,
     disbandSquad,
     renameSquad,
+    setParentSquad,
     transferSquadOwnership,
     renameSquads,
     moveMemberBetweenSquads,

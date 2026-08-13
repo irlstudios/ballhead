@@ -95,22 +95,40 @@ test('disbandSquad captures members and detaches B-team links before deleting', 
     assert.match(sqlLog(), /SET parent_squad_id = NULL/);
 });
 
-test('transferSquadOwnership moves the whole name group and severs A/B links in one transaction', async () => {
+test('transferSquadOwnership moves the whole name group, severs A/B links, and demotes a fully-out old owner to member', async () => {
     captured.length = 0;
     resultQueue.push(
         { rows: [], rowCount: 0 },                                  // BEGIN
         { rows: [{ id: 1, name: 'ABC', owner_id: 'old' }], rowCount: 1 },  // squad FOR UPDATE, owner guard
         { rows: [{ user_id: 'new' }], rowCount: 1 },                // new owner was a member
-        { rows: [], rowCount: 0 },                                  // INSERT old owner as member
         { rows: [{ id: 1, owner_id: 'new' }, { id: 5, owner_id: 'new' }], rowCount: 2 }, // name-group UPDATE RETURNING
         { rows: [], rowCount: 0 },                                  // sever A/B links
+        { rows: [], rowCount: 0 },                                  // old owner owns nothing else
+        { rows: [], rowCount: 0 },                                  // INSERT old owner as member
         { rows: [], rowCount: 0 }                                   // COMMIT
     );
     const squad = await squadDb.transferSquadOwnership(1, 'old', 'new', 'newname', 'oldname');
     assert.strictEqual(squad.owner_id, 'new');
     assert.strictEqual(squad.id, 1);
     assert.match(sqlLog(), /SET parent_squad_id = NULL/);
+    assert.ok(captured.some((c) => c.text.includes('INSERT INTO squad_members')));
     assert.match(sqlLog(), /BEGIN[\s\S]*COMMIT/);
+});
+
+test('transferSquadOwnership keeps an old owner who still leads another squad out of the member list', async () => {
+    captured.length = 0;
+    resultQueue.push(
+        { rows: [], rowCount: 0 },                                  // BEGIN
+        { rows: [{ id: 2, name: 'BBB', owner_id: 'old' }], rowCount: 1 },  // transferring the B team
+        { rows: [{ user_id: 'new' }], rowCount: 1 },
+        { rows: [{ id: 2, owner_id: 'new' }], rowCount: 1 },
+        { rows: [], rowCount: 0 },                                  // sever links
+        { rows: [{ '?column?': 1 }], rowCount: 1 },                 // old owner still owns the A team
+        { rows: [], rowCount: 0 }                                   // COMMIT
+    );
+    const squad = await squadDb.transferSquadOwnership(2, 'old', 'new', 'newname', 'oldname');
+    assert.strictEqual(squad.owner_id, 'new');
+    assert.ok(!captured.some((c) => c.text.includes('INSERT INTO squad_members')));
 });
 
 test('transferSquadOwnership refuses when the target is not a member', async () => {

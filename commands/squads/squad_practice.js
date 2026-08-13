@@ -103,10 +103,13 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('squad-practice')
         .setDescription('Run or schedule a squad practice session.')
-        .addSubcommand((s) => s.setName('start').setDescription('Start a practice session right now'))
+        .addSubcommand((s) => s.setName('start').setDescription('Start a practice session right now')
+            .addStringOption((o) => o.setName('squad').setDescription('Squad name (required if you own multiple)').setRequired(false)))
         .addSubcommand((s) => s.setName('schedule').setDescription('Schedule a practice with member RSVPs')
-            .addStringOption((o) => o.setName('in').setDescription('How far out: 45m, 2h, 1h30m, 1d (max 14d)').setRequired(true).setMaxLength(10)))
-        .addSubcommand((s) => s.setName('cancel').setDescription('Cancel your next scheduled practice')),
+            .addStringOption((o) => o.setName('in').setDescription('How far out: 45m, 2h, 1h30m, 1d (max 14d)').setRequired(true).setMaxLength(10))
+            .addStringOption((o) => o.setName('squad').setDescription('Squad name (required if you own multiple)').setRequired(false)))
+        .addSubcommand((s) => s.setName('cancel').setDescription('Cancel your next scheduled practice')
+            .addStringOption((o) => o.setName('squad').setDescription('Squad name (required if you own multiple)').setRequired(false))),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -114,9 +117,11 @@ module.exports = {
 
         try {
             const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
-            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, null);
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, interaction.options.getString('squad'));
             if (error) {
-                return interaction.editReply(notice('Not a Squad Leader', 'You cannot manage practice sessions because you do not own a squad.'));
+                // A+B owners hold two names and must say which squad; the
+                // disambiguation error carries the list.
+                return interaction.editReply(notice('Which Squad?', error));
             }
             const sub = interaction.options.getSubcommand();
             const members = await squadDb.fetchSquadMembers(squad.id);
