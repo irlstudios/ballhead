@@ -95,18 +95,21 @@ test('disbandSquad captures members and detaches B-team links before deleting', 
     assert.match(sqlLog(), /SET parent_squad_id = NULL/);
 });
 
-test('transferSquadOwnership swaps member and owner rows in one transaction', async () => {
+test('transferSquadOwnership moves the whole name group and severs A/B links in one transaction', async () => {
     captured.length = 0;
     resultQueue.push(
         { rows: [], rowCount: 0 },                                  // BEGIN
-        { rows: [{ id: 1, owner_id: 'old' }], rowCount: 1 },        // squad FOR UPDATE, owner guard
+        { rows: [{ id: 1, name: 'ABC', owner_id: 'old' }], rowCount: 1 },  // squad FOR UPDATE, owner guard
         { rows: [{ user_id: 'new' }], rowCount: 1 },                // new owner was a member
         { rows: [], rowCount: 0 },                                  // INSERT old owner as member
-        { rows: [{ id: 1, owner_id: 'new' }], rowCount: 1 },        // UPDATE squads RETURNING
+        { rows: [{ id: 1, owner_id: 'new' }, { id: 5, owner_id: 'new' }], rowCount: 2 }, // name-group UPDATE RETURNING
+        { rows: [], rowCount: 0 },                                  // sever A/B links
         { rows: [], rowCount: 0 }                                   // COMMIT
     );
     const squad = await squadDb.transferSquadOwnership(1, 'old', 'new', 'newname', 'oldname');
     assert.strictEqual(squad.owner_id, 'new');
+    assert.strictEqual(squad.id, 1);
+    assert.match(sqlLog(), /SET parent_squad_id = NULL/);
     assert.match(sqlLog(), /BEGIN[\s\S]*COMMIT/);
 });
 

@@ -52,6 +52,22 @@ test('planImport reports unresolvable squad types as anomalies and defaults Casu
     assert.strictEqual(plan.anomalies.length, 1);
 });
 
+test('planImport imports a Casual+Competitive pair as its two real types', () => {
+    const plan = planImport({
+        squadLeaders: [
+            ['owner', '111', 'ABC', 'N/A', 'FALSE', '01/02/25', ''],
+            ['owner', '111', 'ABC', 'N/A', 'FALSE', '01/02/25', ''],
+        ],
+        allData: [
+            ['owner', '111', 'ABC', 'Casual', 'N/A', 'FALSE', 'Yes', 'TRUE'],
+            ['owner', '111', 'ABC', 'Competitive', 'N/A', 'FALSE', 'Yes', 'TRUE'],
+        ],
+        squadMembers: [],
+    });
+    assert.deepStrictEqual(plan.squads.map((s) => s.squadType).sort(), ['Casual', 'Competitive']);
+    assert.deepStrictEqual(plan.anomalies, []);
+});
+
 test('planImport skips hole rows, orphan members, and duplicate (name,type) rows', () => {
     const plan = planImport({
         squadLeaders: [

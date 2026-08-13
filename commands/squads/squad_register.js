@@ -117,14 +117,25 @@ module.exports = {
                 return interaction.editReply(notice('Configuration Error', 'Required squad leader roles are missing.'));
             }
 
+            let created;
             try {
-                await squadDb.createSquad({ name: squadName, squadType, ownerId: userId, ownerUsername: username });
+                created = await squadDb.createSquad({ name: squadName, squadType, ownerId: userId, ownerUsername: username });
             } catch (err) {
                 // Unique-index backstop: lost a name race to a concurrent registration.
                 if (err.code === '23505') {
                     return interaction.editReply(notice('Squad Tag Taken', `The squad tag **${squadName}** is already taken.`));
                 }
                 throw err;
+            }
+
+            // The (name, type) unique index cannot stop a DIFFERENT owner
+            // registering the same name under the other type concurrently.
+            // Re-check after insert and compensate, so a name never splits
+            // across owners.
+            const holdersAfter = await squadDb.fetchSquadsByName(squadName);
+            if (holdersAfter.some((s) => String(s.owner_id) !== String(userId))) {
+                await squadDb.disbandSquad(created.id, { ownerId: userId }).catch(() => {});
+                return interaction.editReply(notice('Squad Tag Taken', `The squad tag **${squadName}** is already taken.`));
             }
 
             try {

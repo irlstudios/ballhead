@@ -35,11 +35,9 @@ function notice(title, lines) {
 // old name (a Casual+Competitive pair renames together), then sweep member
 // and leader nicknames and DM members.
 async function renameSquadRows(client, guild, rows, newName, { notifyLines }) {
-    const renamed = [];
-    for (const row of rows) {
-        const updated = await squadDb.renameSquad(row.id, newName);
-        if (updated) renamed.push(updated);
-    }
+    // One statement for the whole pair: a failure can never leave the Casual
+    // and Competitive rows under different names.
+    const renamed = await squadDb.renameSquads(rows.map((r) => r.id), newName);
     if (renamed.length === 0) {
         return null;
     }

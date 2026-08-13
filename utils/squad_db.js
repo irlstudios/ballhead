@@ -218,8 +218,23 @@ const renameSquad = async (squadId, newName) => {
     return r.rows[0] || null;
 };
 
+// Atomic pair rename: a Casual+Competitive pair renames in one statement so a
+// failure can never leave the two rows under different names. Throws 23505
+// when the new name is taken.
+const renameSquads = async (squadIds, newName) => {
+    const r = await executeQuery(
+        'UPDATE squads SET name = $2 WHERE id = ANY($1::int[]) RETURNING *',
+        [squadIds, normalizeSquadName(newName)]
+    );
+    return r.rows;
+};
+
 // Swap owner and member atomically: the old owner becomes a member, the new
-// owner's member row is consumed. Null when the guard or membership fails.
+// owner's member row is consumed, same-name sibling rows (the Casual half of
+// a pair) move in the same transaction so a name never splits between owners,
+// and any A/B parent link touching the transferred rows is severed (the pair
+// invariant is same-owner; a transferred B team must not keep settle rights
+// on someone else's A team). Null when the guard or membership fails.
 const transferSquadOwnership = async (squadId, oldOwnerId, newOwnerId, newOwnerUsername, oldOwnerUsername) => {
     const client = await pool.connect();
     try {
@@ -244,29 +259,28 @@ const transferSquadOwnership = async (squadId, oldOwnerId, newOwnerId, newOwnerU
             'INSERT INTO squad_members (squad_id, user_id, username) VALUES ($1, $2, $3)',
             [squadId, oldOwnerId, oldOwnerUsername]
         );
-        const updated = await client.query(
-            'UPDATE squads SET owner_id = $2, owner_username = $3 WHERE id = $1 RETURNING *',
-            [squadId, newOwnerId, newOwnerUsername]
+        // Main row plus same-name siblings still held by the old owner.
+        const moved = await client.query(
+            `UPDATE squads SET owner_id = $3, owner_username = $4
+             WHERE name = $2 AND owner_id = $1 RETURNING *`,
+            [oldOwnerId, squad.rows[0].name, newOwnerId, newOwnerUsername]
+        );
+        // Sever A/B links that now cross owners.
+        const movedIds = moved.rows.map((r) => r.id);
+        await client.query(
+            `UPDATE squads SET parent_squad_id = NULL
+             WHERE (id = ANY($1::int[]) AND parent_squad_id IS NOT NULL)
+                OR parent_squad_id = ANY($1::int[])`,
+            [movedIds]
         );
         await client.query('COMMIT');
-        return updated.rows[0];
+        return moved.rows.find((r) => r.id === squadId) || moved.rows[0];
     } catch (err) {
         await client.query('ROLLBACK');
         throw err;
     } finally {
         client.release();
     }
-};
-
-// Plain owner swap with no membership changes: used for the sibling row of a
-// Casual+Competitive pair when ownership transfers, so a name never ends up
-// split between two owners.
-const updateSquadOwner = async (squadId, ownerId, ownerUsername) => {
-    const r = await executeQuery(
-        'UPDATE squads SET owner_id = $2, owner_username = $3 WHERE id = $1 RETURNING *',
-        [squadId, ownerId, ownerUsername]
-    );
-    return r.rows[0] || null;
 };
 
 // Promote/demote between an owner's A and B teams, capacity-checked on the
@@ -320,6 +334,6 @@ module.exports = {
     disbandSquad,
     renameSquad,
     transferSquadOwnership,
-    updateSquadOwner,
+    renameSquads,
     moveMemberBetweenSquads,
 };

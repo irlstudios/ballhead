@@ -59,11 +59,13 @@ const handleAccept = async (interaction, transfer) => {
     const { leader_id: leaderId, target_id: targetId, squad_name: squadName, squad_type: squadType } = transfer;
 
     // Resolve the squad: new transfers carry squad_id; older pending rows fall
-    // back to (name, leader-owned) resolution.
+    // back to (name, leader-owned) resolution, preferring the Competitive row
+    // of a pair since that is where memberships live.
     let squad = transfer.squad_id ? await squadDb.fetchSquadById(transfer.squad_id) : null;
     if (!squad) {
-        squad = (await squadDb.fetchSquadsByName(squadName))
-            .find(s => String(s.owner_id) === String(leaderId)) || null;
+        const candidates = (await squadDb.fetchSquadsByName(squadName))
+            .filter(s => String(s.owner_id) === String(leaderId));
+        squad = candidates.find(s => s.squad_type === 'Competitive') || candidates[0] || null;
     }
     if (!squad || String(squad.owner_id) !== String(leaderId)) {
         await updateTransferRequestStatus(interaction.message.id, 'Failed');
@@ -78,22 +80,21 @@ const handleAccept = async (interaction, transfer) => {
     const targetUsername = targetMember ? targetMember.user.username : targetId;
     const leaderUsername = leaderMember ? leaderMember.user.username : leaderId;
 
-    // Atomic swap: owner guard + target-membership check + row swaps in one
-    // transaction; null means a re-validation failed.
+    // Types that will change hands (the whole same-name group moves inside
+    // the transfer transaction), captured before the swap for role cleanup.
+    const transferredTypes = (await squadDb.fetchSquadsByName(squadName))
+        .filter(s => String(s.owner_id) === String(leaderId))
+        .map(s => s.squad_type);
+
+    // Atomic swap: owner guard + target-membership check + row swaps +
+    // same-name siblings + A/B link severing, all in one transaction; null
+    // means a re-validation failed.
     const updated = await squadDb.transferSquadOwnership(squad.id, leaderId, targetId, targetUsername, leaderUsername);
     if (!updated) {
         await updateTransferRequestStatus(interaction.message.id, 'Failed');
         return interaction.editReply(
             noticePayload('You are no longer a member of this squad, or the squad changed hands already.', { title: 'Transfer Failed', subtitle: 'Squad Transfer' })
         );
-    }
-
-    // A Casual+Competitive pair shares its name; move the sibling row too so
-    // the name never splits between two owners.
-    const siblings = (await squadDb.fetchSquadsByName(squadName))
-        .filter(s => s.id !== squad.id && String(s.owner_id) === String(leaderId));
-    for (const sibling of siblings) {
-        await squadDb.updateSquadOwner(sibling.id, targetId, targetUsername);
     }
 
     // Role management: new leader gains, old leader keeps only what remaining
@@ -110,7 +111,6 @@ const handleAccept = async (interaction, transfer) => {
     }
     if (leaderMember) {
         const remainingSquads = await squadDb.fetchSquadsByOwner(leaderId);
-        const transferredTypes = [squad, ...siblings].map(s => s.squad_type);
         const rolesToRemove = ownerRolesAfterDisband({ remainingSquads, disbandedTypes: transferredTypes });
         for (const roleId of rolesToRemove) {
             await leaderMember.roles.remove(roleId).catch(e =>

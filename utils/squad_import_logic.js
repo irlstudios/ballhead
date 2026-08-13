@@ -54,13 +54,39 @@ function planImport({ allData = [], squadLeaders = [], squadMembers = [] }) {
     const squads = [];
     const seen = new Set();
 
+    // A Casual+Competitive pair appears as two leader rows sharing one name
+    // and owner. Pre-compute each (owner, name)'s remaining valid types so
+    // the pair imports as its two real types instead of both defaulting.
+    const typesByOwnerName = new Map();
+    for (const row of allData) {
+        if (!row || !row[1] || !normalizeSquadName(row[2])) continue;
+        const type = String(row[3] ?? '').trim();
+        if (!VALID_SQUAD_TYPES.has(type)) continue;
+        const key = `${String(row[1]).trim()}|${normalizeSquadName(row[2])}`;
+        if (!typesByOwnerName.has(key)) typesByOwnerName.set(key, new Set());
+        typesByOwnerName.get(key).add(type);
+    }
+
     for (const row of squadLeaders) {
         if (!row || !row[1] || !normalizeSquadName(row[2])) {
             continue; // hole row (sheet deletes are row clears)
         }
         const name = normalizeSquadName(row[2]);
         const ownerId = String(row[1]).trim();
-        const squadType = resolveType(allData, ownerId, name, anomalies);
+
+        // Consume one of the owner's known types for this name (Competitive
+        // first, so single-row squads keep today's behavior); fall back to
+        // the general resolution chain when none remain.
+        const ownerTypes = typesByOwnerName.get(`${ownerId}|${name}`);
+        let squadType;
+        if (ownerTypes && ownerTypes.size > 0) {
+            squadType = ownerTypes.has('Competitive') ? 'Competitive'
+                : ownerTypes.has('Casual') ? 'Casual' : [...ownerTypes][0];
+            ownerTypes.delete(squadType);
+        } else {
+            squadType = resolveType(allData, ownerId, name, anomalies);
+        }
+
         const key = `${name}|${squadType}`;
         if (seen.has(key)) {
             anomalies.push(`duplicate leader row for ${key}; first row wins`);
