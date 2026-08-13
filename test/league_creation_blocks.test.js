@@ -19,7 +19,7 @@ pg.Pool.prototype.connect = async function connect() {
 };
 
 const {
-    findActiveLeagueByName,
+    findActiveLeaguesByName,
     insertLeagueCreationBlock,
     findLeagueCreationBlock,
 } = require('../db');
@@ -28,13 +28,17 @@ const lastQuery = () => capturedQueries[capturedQueries.length - 1];
 
 // Force-disband looks a league up by name; it must never match a disbanded
 // league (a dead league can shadow a live one that reused the name) and must
-// never fuzzy-match, since the result is destroyed.
-test('findActiveLeagueByName excludes disbanded leagues and matches exactly', async () => {
-    await findActiveLeagueByName('Some League');
+// never fuzzy-match, since the result is destroyed. It returns every match
+// (no LIMIT): league names are not unique, and the caller must refuse to act
+// on an ambiguous name rather than destroy an arbitrary league.
+test('findActiveLeaguesByName excludes disbanded leagues, matches exactly, and returns all matches', async () => {
+    const rows = await findActiveLeaguesByName('Some League');
     const { text, params } = lastQuery();
     assert.ok(/league_status\s*<>\s*'Disbanded'/i.test(text), `query should exclude disbanded: ${text}`);
     assert.ok(!text.includes('%') && !/ILIKE/i.test(text), `query should not fuzzy-match: ${text}`);
+    assert.ok(!/LIMIT/i.test(text), `query should return every match for ambiguity detection: ${text}`);
     assert.deepStrictEqual(params, ['Some League']);
+    assert.deepStrictEqual(rows, []);
 });
 
 // The block is keyed by user, and re-blocking the same user must not throw:

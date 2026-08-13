@@ -93,8 +93,8 @@ async function runLeagueHealthCheck(client) {
                         const owner = await client.users.fetch(league.owner_id.toString());
                         await owner.send(
                             `Your league invite for **${league.league_name}** is no longer valid. ` +
-                            'Please update it with `/league update-invite` before the end of the month ' +
-                            'or your league will be marked inactive.'
+                            'Please update it with `/league update-invite` so players can find your league ' +
+                            'and the weekly health checks can verify it.'
                         ).catch(() => {});
                     } catch (dmError) {
                         logger.error(`[Health Check] Failed to DM owner ${league.owner_id}:`, dmError);

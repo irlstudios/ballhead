@@ -35,6 +35,8 @@ function resetState() {
     state.leaguesGate = null;
     state.rosterRows = [];
     state.rosterPushFailFor = null; // guildId (or Set of guildIds) that should reject
+    state.insertDupeFail = false; // insertOfficialRequest throws a 23505
+    state.assignPushFail = false; // tourny.assignOfficial rejects
     delete process.env.TOURNY_DASHBOARD_URL;
 }
 resetState();
@@ -53,6 +55,11 @@ installMock('../db', {
     },
     insertOfficialRequest: async (args) => {
         calls.push(['insertOfficialRequest', args]);
+        if (state.insertDupeFail) {
+            const err = new Error('duplicate key value violates unique constraint');
+            err.code = '23505';
+            throw err;
+        }
         return { id: 101, ...args };
     },
     setOfficialRequestOpsMessage: async () => {},
@@ -82,7 +89,12 @@ installMock('../utils/tourny_client', {
         return { games: state.games };
     },
     listTeams: async () => ({ teams: [] }),
-    assignOfficial: async (...args) => { calls.push(['assignOfficial', ...args]); },
+    assignOfficial: async (...args) => {
+        calls.push(['assignOfficial', ...args]);
+        if (state.assignPushFail) {
+            throw new Error('assign push rejected');
+        }
+    },
     clearOfficial: async (...args) => { calls.push(['clearOfficial', ...args]); },
     reportAsOfficial: async () => {},
     putOfficialsRoster: async (guildId, officials) => {
@@ -102,7 +114,7 @@ installMock('../handlers/league-officials', {
 installMock('../utils/logger', {
     info: () => {},
     warn: (...args) => calls.push(['warn', args.join(' ')]),
-    error: () => {},
+    error: (...args) => calls.push(['error', args.join(' ')]),
 });
 
 const { runTournySync } = require('../jobs/tourny-sync');
@@ -201,6 +213,9 @@ test('sweep repeats a missed clearOfficial push for a denied Pending request', a
         calls.find((c) => c[0] === 'clearOfficial'),
         ['clearOfficial', 'guild-1', 'g2', 's1']
     );
+    // The still-flagged game must not spawn a replacement request while its
+    // denied predecessor is awaiting the clear repair above.
+    assert.ok(!calls.some((c) => c[0] === 'insertOfficialRequest'));
 });
 
 test('sweep is a no-op skip when tourny already shows the denied game cleared (idempotent)', async () => {
@@ -333,4 +348,71 @@ test('roster pass leaves the hash unchanged when one serviced guild rejects the 
     state.rosterPushFailFor = null; // guild-2 recovers, but hash never advanced last sweep
     await runTournySync({});
     assert.strictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').length, 2);
+});
+
+test('roster pass pushes when a new league server appears even though roster content is unchanged', async () => {
+    resetState();
+    state.leagues = [league];
+    state.rosterRows = [{ discord_id: '904', discord_name: 'Ref Cuatro', sport: 'Basketball' }];
+
+    await runTournySync({});
+    assert.deepStrictEqual(calls.filter((c) => c[0] === 'putOfficialsRoster').map((c) => c[1]), ['guild-1']);
+
+    calls.length = 0;
+    state.leagues = [league, league2]; // same roster content, one new serviced guild
+
+    await runTournySync({});
+    const pushes = calls.filter((c) => c[0] === 'putOfficialsRoster');
+    assert.deepStrictEqual(pushes.map((c) => c[1]).sort(), ['guild-1', 'guild-2']);
+});
+
+// --- created request fields ----------------------------------------------------
+
+test('a sweep-created request carries the league sport, not the league name', async () => {
+    resetState();
+    state.leagues = [{ ...league, sport: 'Basketball' }];
+    state.games = [{ gameId: 'g9', officialRequested: true, status: 'scheduled' }];
+
+    await runTournySync({});
+
+    const [, args] = calls.find((c) => c[0] === 'insertOfficialRequest');
+    assert.strictEqual(args.sport, 'Basketball');
+    assert.strictEqual(args.tournyGameId, 'g9');
+});
+
+test('a 23505 on insert (request already linked concurrently) is swallowed, not fatal to the sweep', async () => {
+    resetState();
+    state.leagues = [league];
+    state.games = [{ gameId: 'g10', officialRequested: true, status: 'scheduled' }];
+    state.insertDupeFail = true;
+
+    await runTournySync({});
+
+    assert.ok(calls.some((c) => c[0] === 'insertOfficialRequest'));
+    assert.ok(!calls.some((c) => c[0] === 'error'), 'duplicate insert must not surface as a sweep error');
+});
+
+// --- repair isolation ------------------------------------------------------------
+
+test('a failing assignment repair does not block the completion pass for the same league', async () => {
+    resetState();
+    state.leagues = [league];
+    state.games = [
+        { gameId: 'gBroken', status: 'scheduled', officialId: 'someone-else' }, // repair target, push rejects
+        { gameId: 'gDone', status: 'final', officialId: 'off-1' }, // completion target
+    ];
+    state.linked = [
+        { id: 60, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'gBroken', tourny_season_id: 's1', assigned_official_id: 'off-1' },
+        { id: 61, status: 'Assigned', tourny_guild_id: 'guild-1', tourny_game_id: 'gDone', tourny_season_id: 's1', assigned_official_id: 'off-1' },
+    ];
+    state.completeResult = { id: 61, requested_by: 'req-61' };
+    state.assignPushFail = true;
+
+    await runTournySync({});
+
+    assert.ok(calls.some((c) => c[0] === 'assignOfficial'), 'repair push should be attempted');
+    assert.ok(
+        calls.some((c) => c[0] === 'completeOfficialRequestWithReport' && c[1] === 61),
+        'completion must still run after the repair push fails'
+    );
 });

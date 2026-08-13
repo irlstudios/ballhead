@@ -20,10 +20,13 @@ const {
 const { buildHashtagNudge } = require('../utils/league_content');
 const { buildGameReportingNudge } = require('../utils/league_games');
 
+// UTC, matching recentConsecutiveMonths (utils/league_enforcement.js) which
+// walks check-in months with getUTC*, so a host timezone change can never
+// split one month into two.
 function getCurrentMonth() {
     const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, '0');
     return `${year}-${month}`;
 }
 

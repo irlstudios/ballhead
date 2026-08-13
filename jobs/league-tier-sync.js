@@ -96,6 +96,7 @@ async function applyDemotion(client, guild, { league, checks }) {
         ],
         { title: 'Moved to Base League', subtitle: league.league_name }
     ));
+    return true;
 }
 
 async function runLeagueTierSync(client) {

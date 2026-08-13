@@ -90,14 +90,16 @@ async function syncOfficialsRoster(leagues) {
         return;
     }
     const officials = sync.projectRoster(rows);
-    const hash = sync.rosterHash(officials);
-    if (hash === lastRosterHash) {
-        return;
-    }
-    const guildIds = [...new Set((leagues || []).filter((l) => l.server_id).map((l) => l.server_id))];
+    const guildIds = [...new Set((leagues || []).filter((l) => l.server_id).map((l) => l.server_id))].sort();
     if (!guildIds.length) {
         // Nothing to push to yet; leave lastRosterHash untouched so a league
         // showing up later still gets the current roster pushed.
+        return;
+    }
+    // Fingerprint covers the destination guilds too: a new league server must
+    // trigger a push even when the roster's contents haven't changed.
+    const hash = `${sync.rosterHash(officials)}:${guildIds.join(',')}`;
+    if (hash === lastRosterHash) {
         return;
     }
     let allOk = true;
@@ -158,17 +160,30 @@ async function syncLeague(client, league, allLinked, allDenied) {
     // Auto-created from a tourny-marked game, so it deliberately bypasses the
     // per-league open-request cap that /league request-official enforces: these are
     // staff-visible work items tourny already knows about, not user-initiated
-    // spam a cap needs to police.
-    for (const game of sync.gamesNeedingRequests(activeGames, mine)) {
+    // spam a cap needs to police. Recently denied requests count as linked too:
+    // a denied game whose clearOfficial push has not landed yet still shows
+    // officialRequested in tourny, and creating a replacement request before
+    // the clear-repair pass below runs would resurrect what staff just denied.
+    for (const game of sync.gamesNeedingRequests(activeGames, [...mine, ...mineDenied])) {
         await createLinkedRequest(client, league, season, game, guildId);
     }
+    // Per-request isolation: one persistently failing push must not abort the
+    // completion/cancel passes below (they close requests and free the cap).
     for (const request of sync.assignmentsToRepair(mine, gamesById)) {
-        await tourny.assignOfficial(guildId, request.tourny_game_id, request.tourny_season_id, request.assigned_official_id);
-        logger.info(`[TournySync] repaired assignment push for request ${request.id}`);
+        try {
+            await tourny.assignOfficial(guildId, request.tourny_game_id, request.tourny_season_id, request.assigned_official_id);
+            logger.info(`[TournySync] repaired assignment push for request ${request.id}`);
+        } catch (error) {
+            logger.error(`[TournySync] assignment repair failed for request ${request.id}:`, error.message);
+        }
     }
     for (const request of sync.requestsToClear(mineDenied, gamesById)) {
-        await tourny.clearOfficial(guildId, request.tourny_game_id, request.tourny_season_id);
-        logger.info(`[TournySync] repaired deny/clear push for request ${request.id}`);
+        try {
+            await tourny.clearOfficial(guildId, request.tourny_game_id, request.tourny_season_id);
+            logger.info(`[TournySync] repaired deny/clear push for request ${request.id}`);
+        } catch (error) {
+            logger.error(`[TournySync] deny/clear repair failed for request ${request.id}:`, error.message);
+        }
     }
     for (const request of sync.requestsToComplete(mine, gamesById)) {
         const dashboardUrl = process.env.TOURNY_DASHBOARD_URL;
@@ -235,16 +250,26 @@ async function createLinkedRequest(client, league, season, game, guildId) {
     } catch {
         // Names are cosmetic on the card; ids are an acceptable fallback.
     }
-    const request = await insertOfficialRequest({
-        leagueId: league.league_id,
-        requestedBy: game.officialRequestedBy || league.owner_id,
-        sport: league.league_name,
-        matchDetails: sync.buildAutoDetails(game, teamNames),
-        proposedTime: game.scheduledAt ? `<t:${game.scheduledAt}:F>` : null,
-        tournyGuildId: guildId,
-        tournySeasonId: season.seasonId,
-        tournyGameId: game.gameId,
-    });
+    let request;
+    try {
+        request = await insertOfficialRequest({
+            leagueId: league.league_id,
+            requestedBy: game.officialRequestedBy || league.owner_id,
+            sport: league.sport || null,
+            matchDetails: sync.buildAutoDetails(game, teamNames),
+            proposedTime: game.scheduledAt ? `<t:${game.scheduledAt}:F>` : null,
+            tournyGuildId: guildId,
+            tournySeasonId: season.seasonId,
+            tournyGameId: game.gameId,
+        });
+    } catch (insErr) {
+        // Unique-index backstop (one open request per tourny game): a
+        // concurrent /league request-official already linked this game.
+        if (insErr.code === '23505') {
+            return;
+        }
+        throw insErr;
+    }
     try {
         const message = await postOfficialRequestCard(client, request, league.league_name);
         await setOfficialRequestOpsMessage(request.id, message.id);

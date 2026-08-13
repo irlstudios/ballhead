@@ -9,6 +9,7 @@ const {
     findLeagueApplication,
     updateLeagueApplicationApproval,
     updateLeagueApplicationDenial,
+    revertLeagueApplicationToPending,
     findActiveLeague,
     findActiveLeagueByOwnerAndName,
     findLeagueCreationBlock,
@@ -129,17 +130,31 @@ const handleApplyBaseLeagueModal = async (interaction) => {
         if (existingLeague.length > 0) {
             return await interaction.editReply(
                 noticePayload(
-                    'You already own a Base League.',
+                    'You already own a registered league. Each member can only own one league.',
                     { title: 'Application Blocked', subtitle: 'Base League' }
                 )
             );
         }
 
-        await insertActiveLeague([
-            user.id, user.username, leagueName, serverName, serverId, memberCount, user.id,
-            'Base', false, discordInvite, serverIcon, serverBanner, vanityUrl,
-            serverDescription, serverFeatures, ownerProfilePicture,
-        ]);
+        try {
+            await insertActiveLeague([
+                user.id, user.username, leagueName, serverName, serverId, memberCount, user.id,
+                'Base', false, discordInvite, serverIcon, serverBanner, vanityUrl,
+                serverDescription, serverFeatures, ownerProfilePicture,
+            ]);
+        } catch (insErr) {
+            // Unique-index backstop (one live league per owner / per server):
+            // a concurrent submission won the check-then-insert race.
+            if (insErr.code === '23505') {
+                return await interaction.editReply(
+                    noticePayload(
+                        'You already own a registered league, or this server is already registered.',
+                        { title: 'Application Blocked', subtitle: 'Base League' }
+                    )
+                );
+            }
+            throw insErr;
+        }
 
         // Grant the tier role (Base League Owner) and the general League Owner role.
         // Add each independently by ID so a failure on one role cannot block or
@@ -204,32 +219,48 @@ const handleApplyBaseLeagueModal = async (interaction) => {
 };
 
 const handleApproveLeague = async (interaction) => {
+    await interaction.deferReply({ ephemeral: true });
+
+    let claimedMessageId = null;
     try {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
-            return await interaction.reply({
-                ...noticePayload('You do not have permission to approve league applications.', { title: 'Permission Denied', subtitle: 'League Applications' }),
-                ephemeral: true,
-            });
+            return await interaction.editReply(
+                noticePayload('You do not have permission to approve league applications.', { title: 'Permission Denied', subtitle: 'League Applications' })
+            );
         }
 
         const messageId = interaction.message.id;
         const rows = await findLeagueApplication(messageId);
         if (rows.length === 0) {
-            return await interaction.reply({
-                ...noticePayload('League application not found.', { title: 'Not Found', subtitle: 'League Applications' }),
-                ephemeral: true,
-            });
+            return await interaction.editReply(
+                noticePayload('League application not found.', { title: 'Not Found', subtitle: 'League Applications' })
+            );
         }
 
         const application = rows[0];
-        const member = await interaction.guild.members.fetch(application.applicant_id);
+        const member = await interaction.guild.members.fetch(application.applicant_id).catch(() => null);
+        if (!member) {
+            return await interaction.editReply(
+                noticePayload('Could not fetch the applicant. They may have left the server.', { title: 'Member Unavailable', subtitle: 'League Applications' })
+            );
+        }
 
-        await updateLeagueApplicationApproval(messageId, interaction.user.id);
+        // Atomic Pending-only claim: a double click or a concurrent deny loses
+        // here and nothing below runs twice.
+        const claimed = await updateLeagueApplicationApproval(messageId, interaction.user.id);
+        if (!claimed) {
+            return await interaction.editReply(
+                noticePayload('This application has already been reviewed.', { title: 'Already Handled', subtitle: 'League Applications' })
+            );
+        }
+        claimedMessageId = messageId;
 
+        // Null fields mean "could not resolve": the update path keeps existing
+        // values via COALESCE, and the insert path falls back to placeholders.
         let serverData = {
-            serverName: 'Unknown Server Name', serverId: 'Unknown Server ID', memberCount: null,
-            serverIcon: 'Not Available', serverBanner: 'Not Available', vanityUrl: 'Not Available',
-            serverDescription: 'No description available', serverFeatures: 'None',
+            serverName: null, serverId: null, memberCount: null,
+            serverIcon: null, serverBanner: null, vanityUrl: null,
+            serverDescription: null, serverFeatures: null,
         };
 
         try {
@@ -238,14 +269,14 @@ const handleApproveLeague = async (interaction) => {
             if (guild) {
                 const rawCount = guild.memberCount || guild.approximateMemberCount || null;
                 serverData = {
-                    serverName: guild.name || serverData.serverName,
-                    serverId: guild.id || serverData.serverId,
+                    serverName: guild.name || null,
+                    serverId: guild.id || null,
                     memberCount: isNaN(rawCount) ? null : rawCount,
-                    serverIcon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : serverData.serverIcon,
-                    serverBanner: guild.banner ? `https://cdn.discordapp.com/banners/${guild.id}/${guild.banner}.png` : serverData.serverBanner,
-                    vanityUrl: guild.vanityURLCode ? `https://discord.gg/${guild.vanityURLCode}` : serverData.vanityUrl,
-                    serverDescription: guild.description || serverData.serverDescription,
-                    serverFeatures: guild.features.length > 0 ? guild.features.join(', ') : serverData.serverFeatures,
+                    serverIcon: guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : null,
+                    serverBanner: guild.banner ? `https://cdn.discordapp.com/banners/${guild.id}/${guild.banner}.png` : null,
+                    vanityUrl: guild.vanityURLCode ? `https://discord.gg/${guild.vanityURLCode}` : null,
+                    serverDescription: guild.description || null,
+                    serverFeatures: guild.features.length > 0 ? guild.features.join(', ') : null,
                 };
             }
         } catch (error) {
@@ -268,11 +299,12 @@ const handleApproveLeague = async (interaction) => {
         } else {
             await insertActiveLeague([
                 application.applicant_id, application.applicant_discord_name, application.league_name,
-                serverData.serverName, serverData.serverId, serverData.memberCount, application.applicant_id,
+                serverData.serverName ?? 'Unknown Server Name', serverData.serverId ?? 'Unknown Server ID',
+                serverData.memberCount, application.applicant_id,
                 application.applied_league_level, application.applied_league_level === 'Sponsored',
-                application.league_invite, serverData.serverIcon, serverData.serverBanner,
-                serverData.vanityUrl, serverData.serverDescription, serverData.serverFeatures,
-                ownerProfilePicture,
+                application.league_invite, serverData.serverIcon ?? 'Not Available', serverData.serverBanner ?? 'Not Available',
+                serverData.vanityUrl ?? 'Not Available', serverData.serverDescription ?? 'No description available',
+                serverData.serverFeatures ?? 'None', ownerProfilePicture,
             ]);
         }
 
@@ -285,8 +317,19 @@ const handleApproveLeague = async (interaction) => {
             newRoleId = SPONSORED_LEAGUE_ROLE_ID;
         }
 
-        if (oldRoleId) await member.roles.remove(oldRoleId);
-        if (newRoleId) await member.roles.add(newRoleId);
+        // Add first, remove second (mirrors the tier sync): a failed removal
+        // leaves an extra role, never a missing one, and neither failure
+        // aborts the rest of the approval.
+        if (newRoleId) {
+            await member.roles.add(newRoleId).catch((error) => {
+                logger.error(`Failed to add ${application.applied_league_level} role to ${member.id}:`, error.message);
+            });
+        }
+        if (oldRoleId) {
+            await member.roles.remove(oldRoleId).catch((error) => {
+                logger.error(`Failed to remove old tier role from ${member.id}:`, error.message);
+            });
+        }
 
         try {
             const dmContainer = new ContainerBuilder();
@@ -309,6 +352,11 @@ const handleApproveLeague = async (interaction) => {
             logger.error('Error sending DM to the applicant:', error);
         }
 
+        // Point of no return: once the card below loses its Approve/Deny
+        // buttons, reverting the claim would strand a Pending application no
+        // one can click. Everything before this is idempotent on retry.
+        claimedMessageId = null;
+
         const leagueApprovedContainer = new ContainerBuilder();
         const block = buildTextBlock({
             title: 'League Application Approved',
@@ -318,26 +366,35 @@ const handleApproveLeague = async (interaction) => {
         if (block) leagueApprovedContainer.addTextDisplayComponents(block);
         await interaction.message.edit({ flags: MessageFlags.IsComponentsV2, components: [leagueApprovedContainer] });
 
-        await interaction.reply({
-            ...noticePayload('Application has been approved.', { title: 'Approved', subtitle: application.league_name }),
-            ephemeral: true,
-        });
+        await interaction.editReply(
+            noticePayload('Application has been approved.', { title: 'Approved', subtitle: application.league_name })
+        );
     } catch (error) {
         logger.error('Error in handleApproveLeague:', error);
+        // Compensating revert: give the claim back so the reviewer can retry
+        // instead of being told the application was already handled.
+        if (claimedMessageId) {
+            await revertLeagueApplicationToPending(claimedMessageId)
+                .catch((revertError) => logger.error('Failed to revert application claim:', revertError));
+        }
+        await interaction.editReply(
+            noticePayload('An error occurred while approving the application. Nothing was finalized; you can retry.', { title: 'Approval Failed', subtitle: 'League Applications' })
+        ).catch((replyError) => logger.error('Error replying to interaction:', replyError));
     }
 };
 
 const handleDenyLeagueModal = async (interaction) => {
+    await interaction.deferReply({ ephemeral: true });
+
     try {
         const denialReason = interaction.fields.getTextInputValue('denial-reason');
         const [, messageId] = interaction.customId.split(':');
 
         const rows = await findLeagueApplication(messageId);
         if (rows.length === 0) {
-            await interaction.reply({
-                ...noticePayload('League application not found.', { title: 'Not Found', subtitle: 'League Applications' }),
-                ephemeral: true,
-            });
+            await interaction.editReply(
+                noticePayload('League application not found.', { title: 'Not Found', subtitle: 'League Applications' })
+            );
             return;
         }
 
@@ -348,14 +405,20 @@ const handleDenyLeagueModal = async (interaction) => {
             member = await interaction.guild.members.fetch(application.applicant_id);
         } catch (error) {
             logger.error('Error fetching member:', error);
-            await interaction.reply({
-                ...noticePayload('Could not fetch the applicant.', { title: 'Member Unavailable', subtitle: 'League Applications' }),
-                ephemeral: true,
-            });
+            await interaction.editReply(
+                noticePayload('Could not fetch the applicant.', { title: 'Member Unavailable', subtitle: 'League Applications' })
+            );
             return;
         }
 
-        await updateLeagueApplicationDenial(messageId, denialReason, interaction.user.id);
+        // Atomic Pending-only claim, mirroring handleApproveLeague.
+        const claimed = await updateLeagueApplicationDenial(messageId, denialReason, interaction.user.id);
+        if (!claimed) {
+            await interaction.editReply(
+                noticePayload('This application has already been reviewed.', { title: 'Already Handled', subtitle: 'League Applications' })
+            );
+            return;
+        }
 
         try {
             const dmContainer = new ContainerBuilder();
@@ -388,18 +451,14 @@ const handleDenyLeagueModal = async (interaction) => {
             logger.error('Error updating application message:', error);
         }
 
-        await interaction.reply({
-            ...noticePayload('Application has been denied.', { title: 'Denied', subtitle: application.league_name }),
-            ephemeral: true,
-        });
+        await interaction.editReply(
+            noticePayload('Application has been denied.', { title: 'Denied', subtitle: application.league_name })
+        );
     } catch (error) {
         logger.error('Error in handleDenyLeagueModal:', error);
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({
-                ...noticePayload('An error occurred while processing the denial.', { title: 'Denial Failed', subtitle: 'League Applications' }),
-                ephemeral: true,
-            }).catch(replyError => logger.error('Error replying to interaction:', replyError));
-        }
+        await interaction.editReply(
+            noticePayload('An error occurred while processing the denial.', { title: 'Denial Failed', subtitle: 'League Applications' })
+        ).catch(replyError => logger.error('Error replying to interaction:', replyError));
     }
 };
 

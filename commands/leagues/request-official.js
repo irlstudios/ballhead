@@ -24,9 +24,11 @@ const { postOfficialRequestCard } = require('../../handlers/league-officials');
 const SUB = 'Request Official';
 const MAX_AUTOCOMPLETE_CHOICES = 25;
 
+// UTC, matching every other check-in month computation, so a host timezone
+// change can never split one month into two.
 function currentMonth() {
     const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
 // Same resolution execute() has always used: prefer an already-eligible
@@ -187,20 +189,39 @@ module.exports = {
                         { title: 'Official Already Assigned', subtitle: SUB }
                     ));
                 }
+                if (game.officialRequested) {
+                    return interaction.editReply(noticePayload(
+                        'An official has already been requested for that game; the request is on its way to staff.',
+                        { title: 'Already Requested', subtitle: SUB }
+                    ));
+                }
 
                 const teamNames = await fetchTeamNames(league.server_id);
                 matchDetails = `${buildAutoDetails(game, teamNames)} — ${matchDetails}`;
                 tournyLink = { tournyGuildId: league.server_id, tournySeasonId: seasonId, tournyGameId: gameId };
             }
 
-            const request = await insertOfficialRequest({
-                leagueId: league.league_id,
-                requestedBy: userId,
-                sport: interaction.options.getString('sport'),
-                matchDetails,
-                proposedTime: interaction.options.getString('when'),
-                ...tournyLink,
-            });
+            let request;
+            try {
+                request = await insertOfficialRequest({
+                    leagueId: league.league_id,
+                    requestedBy: userId,
+                    sport: interaction.options.getString('sport'),
+                    matchDetails,
+                    proposedTime: interaction.options.getString('when'),
+                    ...tournyLink,
+                });
+            } catch (insErr) {
+                // Unique-index backstop: one open request per tourny game. The
+                // sweep (or a concurrent submit) already linked this game.
+                if (insErr.code === '23505') {
+                    return interaction.editReply(noticePayload(
+                        'An open official request already exists for that game.',
+                        { title: 'Already Requested', subtitle: SUB }
+                    ));
+                }
+                throw insErr;
+            }
 
             try {
                 const message = await postOfficialRequestCard(interaction.client, request, league.league_name);
