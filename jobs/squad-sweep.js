@@ -56,6 +56,9 @@ async function sweepPractices(client) {
     // and overlapping runs cannot double-send.
     for (const practice of await squadDb.fetchDuePracticeReminders(REMINDER_MINUTES)) {
         try {
+            // ponytail: claim-before-send is at-most-once delivery. A crash
+            // between claim and DMs loses that reminder rather than risking
+            // duplicate DMs to the whole roster. Deliberate.
             const claimed = await squadDb.claimPracticeReminder(practice.id);
             if (!claimed) continue;
             const squad = await squadDb.fetchSquadById(practice.squad_id);

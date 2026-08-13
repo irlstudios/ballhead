@@ -317,6 +317,16 @@ async function handleOwnerDecision(interaction, applicationId, action) {
         const claimed = await squadDb.claimApplication(applicationId, sameSquad ? 'Accepted' : 'Denied', interaction.user.id);
         if (claimed) {
             await finalizeApplicationCard(interaction.client, claimed, squad, `**Status:** ${sameSquad ? 'Accepted' : 'Denied (joined another squad)'}`);
+            if (sameSquad) {
+                // This click won the claim after a sibling click wrote the
+                // membership; the applicant still needs the join side effects.
+                await applyJoinSideEffects(interaction.client, squad, claimed.user_id, { notifyOwner: false });
+                await dmUser(interaction.client, claimed.user_id, {
+                    title: 'Application Accepted',
+                    subtitle: squad.name,
+                    lines: [`You are in! The owner of **${squad.name}** accepted your application.`],
+                });
+            }
         }
         return editNotice(interaction, sameSquad
             ? 'They are already in your squad; the application has been closed.'
