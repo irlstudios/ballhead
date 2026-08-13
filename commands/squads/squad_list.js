@@ -1,6 +1,7 @@
+'use strict';
+
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS } = require('../../config/constants');
+const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
 module.exports = {
@@ -10,34 +11,11 @@ module.exports = {
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
-        const sheets = await getSheetsClient();
-
         async function getSquadList() {
-            const range = '\'Squad Leaders\'!A:F';
-            try {
-                const response = await sheets.spreadsheets.values.get({
-                    spreadsheetId: SPREADSHEET_SQUADS,
-                    range,
-                });
-                const rows = response.data.values || [];
-
-                const dataRows = rows.slice(1);
-
-                if (dataRows.length > 0) {
-                    return dataRows
-                        .filter(row => row && row.length > 2 && row[1] && row[2])
-                        .map(row => {
-                            const squadName = row[2].trim();
-                            const ownerId = row[1].trim();
-                            return `- **${squadName}** (Owner: <@${ownerId}>)`;
-                        });
-                } else {
-                    return [];
-                }
-            } catch (error) {
-                logger.error('The API returned an error while fetching squad leaders:', error);
-                throw new Error('Failed to fetch squad list from the sheet.');
-            }
+            const rows = await squadDb.fetchAllSquadsWithCounts();
+            return rows.map((s) =>
+                `- **${s.name}** (${s.squad_type}) — ${s.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS} members (Owner: <@${s.owner_id}>)`
+            );
         }
 
         try {
