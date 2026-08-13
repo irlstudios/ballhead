@@ -27,7 +27,7 @@ module.exports = {
             if (result.rows.length > 0) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Active Post Found', subtitle: 'Squad Recruitment', lines: ['You already have an active recruitment post. Please close it before creating a new one.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -37,7 +37,7 @@ module.exports = {
             } else {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Form Unavailable', subtitle: 'Squad Recruitment', lines: ['Error loading the application form.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
         } catch (error) {

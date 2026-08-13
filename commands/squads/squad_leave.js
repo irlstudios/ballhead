@@ -3,7 +3,6 @@ const { getSheetsClient } = require('../../utils/sheets_cache');
 const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, AD_ID } = require('../../config/constants');
 const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
-const { stripLevelRoles } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 const SL_ID = 1;
@@ -128,7 +127,7 @@ module.exports = {
                     const ownerUser = await interaction.client.users.fetch(ownerId);
                     const dmContainer = new ContainerBuilder();
                     const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Update', lines: [`Hello ${ownerUsername},`, `User **${userTag}** (<@${userId}>) has left your squad **${squadName}**.`] });
-            if (block) dmContainer.addTextDisplayComponents(block);
+                    if (block) dmContainer.addTextDisplayComponents(block);
                     await ownerUser.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(dmError => {
                         logger.error(`Failed to DM squad leader ${ownerId}: ${dmError.message}`);
                     });
@@ -144,7 +143,7 @@ module.exports = {
                 const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
                 const logContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Member Left Squad', subtitle: 'Squad Activity', lines: [`User **${userTag}** (<@${userId}>) has left the squad **${squadName}**.`] });
-            if (block) logContainer.addTextDisplayComponents(block);
+                if (block) logContainer.addTextDisplayComponents(block);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
                 logger.error(`Failed to send log message: ${logError.message}`);
@@ -180,8 +179,6 @@ module.exports = {
                     }
                 }
 
-                // Strip level roles when leaving a squad
-                await stripLevelRoles(guild, userId);
             } catch (error) {
                 if (error.code === 10007) { logger.info(`Member ${userTag} (${userId}) not found in guild ${GYM_CLASS_GUILD_ID}, cannot reset nickname/roles.`); }
                 else { logger.error(`Error during nickname/role cleanup for ${userTag} (${userId}): ${error.message}`); }
@@ -208,7 +205,7 @@ module.exports = {
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Leave Squad Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 logger.error(`Failed to log error to error channel: ${logError.message}`);

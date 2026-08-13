@@ -119,7 +119,7 @@ module.exports = {
                 const loggingChannel = await loggingGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Opt-Out Error', subtitle: 'Command Failure', lines: [`**User:** ${interaction.user.tag} (${userId })`, `**Error:** ${error.message}`] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 logger.error('Failed to log error to Discord:', logError);

@@ -14,8 +14,6 @@ const {
     findUserSquads, findUserAllDataRows, isSquadNameTaken,
     AD_SQUAD_NAME, AD_SQUAD_TYPE, AD_IS_LEADER,
 } = require('../../utils/squad_queries');
-const { calculateSquadWins } = require('../../utils/top_squad_sync');
-const { getSquadLevel } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 const formatDate = () => {
@@ -95,8 +93,6 @@ module.exports = {
 
             const ownsCasual = ownedTypes.find(s => s.type === 'Casual');
             const ownsComp = ownedTypes.find(s => s.type === 'Competitive');
-            const ownsBTeam = userSquads.find(r => r.length > 6 && r[6] && r[6] !== '');
-
             let isBTeam = false;
             let aTeamSquadName = '';
 
@@ -110,20 +106,12 @@ module.exports = {
                     });
                 }
             } else if (squadType === 'Competitive') {
-                if (ownsComp && !ownsBTeam) {
-                    // They want a second comp squad (B team). Check level 50 requirement.
-                    const squadWins = await calculateSquadWins(sheets);
-                    const compData = squadWins.get(ownsComp.name);
-                    const level = compData ? getSquadLevel(compData.totalWins) : 0;
-                    if (level < 50) {
-                        return interaction.editReply({
-                            content: `Your Competitive squad must be level 50+ to create a B team. Current level: ${level}.`,
-                        });
-                    }
-                    isBTeam = true;
-                    aTeamSquadName = ownsComp.name;
-                } else if (ownsComp && ownsBTeam) {
-                    return interaction.editReply({ content: 'You already own an A team and B team.' });
+                if (ownsComp) {
+                    // B-team creation retired with the wins/levels scrap
+                    // (2026-08): the level-50 gate no longer exists.
+                    return interaction.editReply({
+                        content: 'You already own a Competitive squad. Creating a second one (B team) is currently closed.',
+                    });
                 } else if (ownsCasual && ownsCasual.name?.toUpperCase() !== squadName) {
                     return interaction.editReply({
                         content: `Your Competitive squad must share the same name as your Casual squad (${ownsCasual.name}).`,

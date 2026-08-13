@@ -6,11 +6,10 @@ const {
     SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID,
     AD_PREFERENCE,
 } = require('../../config/constants');
-const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { findMascotByName } = require('../../config/squads');
 const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
 const { disambiguateSquad, getRolesToRemove, AD_SQUAD_NAME, AD_SQUAD_TYPE, SL_SQUAD_NAME } = require('../../utils/squad_queries');
 const { withSquadLock } = require('../../utils/squad_lock');
-const { stripLevelRoles } = require('../../utils/squad_level_sync');
 const logger = require('../../utils/logger');
 
 module.exports = {
@@ -67,7 +66,7 @@ module.exports = {
                 // Determine squad type from All Data
                 const squadTypeRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[AD_SQUAD_NAME]?.toUpperCase() === squadName.toUpperCase());
                 const squadType = squadTypeRow ? squadTypeRow[AD_SQUAD_TYPE] : null;
-                const squadTypeRolesToRemove = squadType === 'Competitive' ? [...compSquadLevelRoles] : [];
+                const squadTypeRolesToRemove = [];
 
                 const eventSquadName = squad[3]; // SL_EVENT_SQUAD
                 let mascotRoleIdToRemove = null;

@@ -5,9 +5,8 @@ const {
     SPREADSHEET_SQUADS,
     GYM_CLASS_GUILD_ID,
     LOGGING_CHANNEL_ID,
-    TOP_COMP_SQUAD_ROLE_ID,
 } = require('../config/constants');
-const { getSquadTypeRoles, findMascotByName } = require('../config/squads');
+const { findMascotByName } = require('../config/squads');
 const { withSquadLock } = require('./squad_lock');
 const {
     findSquadMembers,
@@ -206,8 +205,7 @@ async function disbandDepartedOwnerSquad(sheets, squadName, guildMemberIds, allG
         const eventSquadName = leaderRows
             .map(item => String(item.row?.[3] ?? '').trim())
             .find(value => value && value !== 'N/A');
-        const roleIds = [...getSquadTypeRoles(typeResolution.squadType)];
-        if (typeResolution.squadType === 'Competitive') roleIds.push(TOP_COMP_SQUAD_ROLE_ID);
+        const roleIds = [];
         const mascot = eventSquadName ? findMascotByName(eventSquadName) : null;
         if (mascot) roleIds.push(mascot.roleId);
 

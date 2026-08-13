@@ -95,7 +95,7 @@ module.exports = {
             if (squadLeaderRowIndex === -1) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Not Found', subtitle: 'Force Squad Name', lines: [`The squad **${currentSquadName}** does not exist in the Squad Leaders sheet.`] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
             const squadLeaderRow = squadLeaders[squadLeaderRowIndex];
@@ -105,7 +105,7 @@ module.exports = {
             if (isSquadNameTaken) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Name Already Used', subtitle: 'Force Squad Name', lines: [`The squad name **${newSquadName}** is already in use.`, 'Please choose a different name.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -172,7 +172,7 @@ module.exports = {
                     if (guildMember) {
                         const dmContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Name Changed', subtitle: 'Moderator Update', lines: [`Your squad's name (**${currentSquadName}**) has been forcefully changed to **${newSquadName}** by a moderator.`] });
-            if (block) dmContainer.addTextDisplayComponents(block);
+                        if (block) dmContainer.addTextDisplayComponents(block);
                         await guildMember.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.info(`Failed to DM ${memberId}: ${err.message}`));
 
                         try {
@@ -216,7 +216,7 @@ module.exports = {
                 try {
                     const logContainer = new ContainerBuilder();
                     const block = buildTextBlock({ title: 'Squad Force Rename', subtitle: 'Moderator Action', lines: [`Squad **${currentSquadName}** was forcefully renamed to **${newSquadName}**.`, `Moderator: **${moderatorUserTag}** (${moderatorUserId })`] });
-            if (block) logContainer.addTextDisplayComponents(block);
+                    if (block) logContainer.addTextDisplayComponents(block);
                     await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
                 } catch (logError) {
                     logger.error('Failed to send log message:', logError);

@@ -2,7 +2,7 @@
 
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, SPREADSHEET_COMP_WINS, MAX_SQUAD_MEMBERS } = require('../../config/constants');
+const { SPREADSHEET_SQUADS, MAX_SQUAD_MEMBERS } = require('../../config/constants');
 const { findABTeams, findMemberRow, findAllDataRowIndex, SM_SQUAD_NAME } = require('../../utils/squad_queries');
 const { withSquadLock } = require('../../utils/squad_lock');
 const logger = require('../../utils/logger');
@@ -107,32 +107,6 @@ module.exports = {
                         });
                     }
 
-                    // Update COMP_WINS Squad Members
-                    try {
-                        const compResults = await getCachedValues({
-                            sheets,
-                            spreadsheetId: SPREADSHEET_COMP_WINS,
-                            ranges: ["'Squad Members'!A:ZZ"],
-                            ttlMs: 30000,
-                        });
-                        const compMembers = compResults.get("'Squad Members'!A:ZZ") || [];
-                        const compMemberIndex = compMembers.findIndex(
-                            (row, i) => i > 0 && row && row[1]?.toUpperCase() === aTeamName.toUpperCase() && row[0] === targetUser.id
-                        );
-                        if (compMemberIndex !== -1) {
-                            const updatedCompRow = [...compMembers[compMemberIndex]];
-                            updatedCompRow[1] = bTeamName;
-                            const compSheetRow = compMemberIndex + 1;
-                            await sheets.spreadsheets.values.update({
-                                spreadsheetId: SPREADSHEET_COMP_WINS,
-                                range: `'Squad Members'!A${compSheetRow}`,
-                                valueInputOption: 'RAW',
-                                resource: { values: [updatedCompRow] },
-                            });
-                        }
-                    } catch (e) {
-                        logger.error('[Demote] Failed to update COMP_WINS:', e.message);
-                    }
                 });
             });
 

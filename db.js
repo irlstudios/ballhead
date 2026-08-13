@@ -751,33 +751,6 @@ const removeRep = async (user_id, amount) => {
     return result.rows;
 };
 
-// Squad State
-async function ensureSquadStateTable() {
-    const query = `
-        CREATE TABLE IF NOT EXISTS squad_state (
-            key VARCHAR(255) PRIMARY KEY,
-            value VARCHAR(1024),
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-    `;
-    return executeQuery(query);
-}
-
-async function getSquadState(key) {
-    const query = 'SELECT value, updated_at FROM squad_state WHERE key = $1';
-    const result = await executeQuery(query, [key]);
-    return result.rows[0] || null;
-}
-
-async function setSquadState(key, value) {
-    const query = `
-        INSERT INTO squad_state (key, value, updated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
-    `;
-    return executeQuery(query, [key, value]);
-}
-
 // Transfer Requests
 async function ensureTransferRequestsTable() {
     const query = `
@@ -2114,9 +2087,6 @@ module.exports = {
     loadAllLfgParticipants,
     findLfgParticipantsByKey,
     upsertLfgQueue,
-    ensureSquadStateTable,
-    getSquadState,
-    setSquadState,
     ensureTransferRequestsTable,
     insertTransferRequest,
     fetchTransferRequestByMessageId,

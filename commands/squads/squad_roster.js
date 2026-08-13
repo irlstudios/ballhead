@@ -1,120 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS } = require('../../config/constants');
+const { SPREADSHEET_SQUADS } = require('../../config/constants');
 const logger = require('../../utils/logger');
-
-async function fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction) {
-    try {
-        const squadMembersResponse = await sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_COMP_WINS,
-            range: '\'Squad Members\'!A:ZZ',
-        });
-
-        const squadMembersData = squadMembersResponse.data.values || [];
-        if (squadMembersData.length < 1) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Competitive Roster Unavailable\n' + squadNameInput),
-                new TextDisplayBuilder().setContent(`Could not read headers from the competitive members sheet for "${squadNameInput}".`)
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-            return;
-        }
-        const squadMembersHeaders = squadMembersData.shift() || [];
-        const dateColumns = squadMembersHeaders.slice(3).map(dateStr => {
-            try {
-                return new Date(dateStr);
-            } catch { return null; }
-        }).filter(date => date !== null);
-
-        const relevantMembers = squadMembersData.filter(row => row && row.length > 1 && row[1]?.trim().toLowerCase() === squadNameNormalized);
-
-        if (relevantMembers.length === 0) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## No Competitive Members\n' + squadNameInput),
-                new TextDisplayBuilder().setContent(`No members found listed in the competitive tracking sheet for squad "${squadNameInput}".`)
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-            return;
-        }
-
-        const membersWithWins = relevantMembers.map(memberRow => {
-            const discordId = memberRow[0]?.trim();
-            const joinedSquadStr = memberRow[2]?.trim();
-            const joinedSquadDate = joinedSquadStr ? new Date(joinedSquadStr) : new Date(0);
-
-            let totalWins = 0;
-            for (let i = 3; i < squadMembersHeaders.length; i++) {
-                const winStr = memberRow[i]?.trim();
-                const wins = parseInt(winStr) || 0;
-                if (i - 3 < dateColumns.length) {
-                    const weekDate = dateColumns[i - 3];
-                    if (weekDate && weekDate >= joinedSquadDate) {
-                        totalWins += wins;
-                    }
-                }
-            }
-
-            return {
-                discordId,
-                totalWins,
-                isLeader: discordId === leaderId,
-            };
-        }).filter(m => m.discordId);
-
-        const totalSquadWins = membersWithWins.reduce((sum, member) => sum + member.totalWins, 0);
-        const squadLevel = Math.floor(totalSquadWins / 50) + 1;
-
-        membersWithWins.sort((a, b) => {
-            if (a.isLeader && !b.isLeader) return -1;
-            if (!a.isLeader && b.isLeader) return 1;
-            return b.totalWins - a.totalWins;
-        });
-
-        const leader = membersWithWins.find(member => member.isLeader);
-        const members = membersWithWins.filter(member => !member.isLeader);
-        let memberContributions = 'No other members found in competitive tracking.';
-        if (members.length > 0) {
-            memberContributions = members
-                .map(member => `<@${member.discordId}> (${member.totalWins} Wins)`)
-                .join('\n');
-        }
-
-        const container = new ContainerBuilder()
-            .setAccentColor(0x14B8A6)
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`## ${squadNameInput.toUpperCase()}`),
-                new TextDisplayBuilder().setContent(`Level ${squadLevel} • ${totalSquadWins} Total Wins`)
-            )
-            .addSeparatorComponents(
-                new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
-            )
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`**Leader**\n${leaderId ? `<@${leaderId}> (${leader ? leader.totalWins + ' Wins' : 'N/A'})` : 'Not found'}`),
-                new TextDisplayBuilder().setContent(`**Members**\n${memberContributions}`)
-            )
-            .addSeparatorComponents(
-                new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small)
-            )
-            .addTextDisplayComponents(
-                new TextDisplayBuilder().setContent(`-# Competitive • Formed ${squadMade || 'Unknown'}`)
-            );
-
-        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-
-    } catch (error) {
-        logger.error(`Error in fetchCompetitiveRoster for ${squadNameInput}:`, error);
-        const container = new ContainerBuilder();
-        container.addTextDisplayComponents(
-            new TextDisplayBuilder().setContent('## Roster Error\nCompetitive Squad'),
-            new TextDisplayBuilder().setContent('An error occurred while fetching the competitive squad roster.')
-        );
-        await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-    }
-}
-
-
 
 async function fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType) {
     try {
@@ -217,11 +104,9 @@ module.exports = {
             const squadDataRow = allData.find(row => row && row.length > 2 && row[2]?.trim().toLowerCase() === squadNameNormalized);
             const squadType = squadDataRow ? squadDataRow[3]?.trim() : 'Unknown';
 
-            if (squadType === 'Competitive') {
-                await fetchCompetitiveRoster(sheets, SPREADSHEET_COMP_WINS, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction);
-            } else {
-                await fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType);
-            }
+            // Wins/levels were scrapped 2026-08; every squad type renders the
+            // plain members roster now.
+            await fetchNonCompetitiveRoster(sheets, SPREADSHEET_SQUADS, squadNameInput, squadNameNormalized, squadMade, leaderId, interaction, squadType);
 
         } catch (error) {
             logger.error(`Error fetching roster for ${squadNameInput}:`, error);

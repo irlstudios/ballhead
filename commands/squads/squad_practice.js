@@ -56,7 +56,7 @@ module.exports = {
             if (!userIsLeaderRow) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Not a Squad Leader', subtitle: 'Practice Session', lines: ['You cannot start a practice session because you do not own a squad.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -64,7 +64,7 @@ module.exports = {
             if (!squadName || squadName === 'N/A') {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Name Missing', subtitle: 'Practice Session', lines: ['Could not determine your squad name from the sheet.', 'Please contact an admin.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -73,7 +73,7 @@ module.exports = {
                 logger.error(`Practice channel ${CHANNEL_ID} not found or is not a text channel.`);
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Channel Missing', subtitle: 'Practice Session', lines: ['Could not find the designated channel for practice sessions.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -126,7 +126,7 @@ module.exports = {
             for (const memberId of allParticipantIds) {
                 const dmContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Practice Session Started', subtitle: 'Private Thread', lines: [`A practice session for squad **${squadName}** has started in <#${thread.id}>.`, 'Join the thread for more details!'] });
-            if (block) dmContainer.addTextDisplayComponents(block);
+                if (block) dmContainer.addTextDisplayComponents(block);
 
                 dmPromises.push(
                     interaction.client.users.fetch(memberId).then(user => {
@@ -146,7 +146,7 @@ module.exports = {
                     `**Started by:** ${userTag} (<@${userId}>)`,
                     `**Thread:** <#${thread.id}>`
                 ] });
-            if (block) logContainer.addTextDisplayComponents(block);
+                if (block) logContainer.addTextDisplayComponents(block);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
                 logger.error(`Failed to send practice start log message: ${logError.message}`);
@@ -166,7 +166,7 @@ module.exports = {
                     for (const memberId of allParticipantIds) {
                         const notificationContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Practice Session Ended', subtitle: 'Thread Closed', lines: [`The practice session thread for squad **${squadName}** has ended and been deleted.`] });
-            if (block) notificationContainer.addTextDisplayComponents(block);
+                        if (block) notificationContainer.addTextDisplayComponents(block);
                         endDmPromises.push(
                             interaction.client.users.fetch(memberId).then(user => {
                                 return user.send({ flags: MessageFlags.IsComponentsV2, components: [notificationContainer] });
@@ -181,7 +181,7 @@ module.exports = {
                         const loggingChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID);
                         const endLogContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Squad Practice Session Ended', subtitle: 'Logging', lines: [`The practice session for squad **${squadName}** has concluded.`] });
-            if (block) endLogContainer.addTextDisplayComponents(block);
+                        if (block) endLogContainer.addTextDisplayComponents(block);
                         await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [endLogContainer] });
                     } catch (logError) {
                         logger.error(`Failed to send practice end log message: ${logError.message}`);
@@ -193,7 +193,7 @@ module.exports = {
                         const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
                         const errorContainer = new ContainerBuilder();
                         const block = buildTextBlock({ title: 'Error During Practice Cleanup', subtitle: 'Automation Failure', lines: [`**Squad:** ${squadName}`, `**Thread ID:** ${thread.id}`, `**Error:** ${error.message}`] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                        if (block) errorContainer.addTextDisplayComponents(block);
                         await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                     } catch (logError) {
                         logger.error('Failed to log cleanup error:', logError);
@@ -226,7 +226,7 @@ module.exports = {
                 const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorLogContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Squad Practice Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (<@${userId}>)`, `**Error:** ${error.message}`] });
-            if (block) errorLogContainer.addTextDisplayComponents(block);
+                if (block) errorLogContainer.addTextDisplayComponents(block);
                 await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorLogContainer] });
             } catch (logError) {
                 logger.error('Failed to log error to Discord:', logError);
@@ -235,7 +235,7 @@ module.exports = {
             if (!interaction.replied) {
                 const replyContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Squad Practice', lines: [`An error occurred: ${error.message || 'Please try again later.'}`] });
-            if (block) replyContainer.addTextDisplayComponents(block);
+                if (block) replyContainer.addTextDisplayComponents(block);
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
                     components: [replyContainer],

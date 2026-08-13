@@ -243,7 +243,7 @@ module.exports = {
                 }
                 const leaderDmContainer = new ContainerBuilder();
                 const leaderBlock = buildTextBlock({ title: 'New Member Joined!', subtitle: 'Random Squad Join', lines: [leaderDmDescription] });
-            if (leaderBlock) leaderDmContainer.addTextDisplayComponents(leaderBlock);
+                if (leaderBlock) leaderDmContainer.addTextDisplayComponents(leaderBlock);
                 await leaderUser.send({ flags: MessageFlags.IsComponentsV2, components: [leaderDmContainer] });
             } catch (dmError) {
                 logger.error(`Failed to send DM notification to leader ${chosenSquad.leaderId}: ${dmError.message}`);
@@ -258,7 +258,7 @@ module.exports = {
                 }
                 const logContainer = new ContainerBuilder();
                 const logBlock = buildTextBlock({ title: 'User Joined Random Squad', subtitle: 'Squad Activity', lines: [logDescription] });
-            if (logBlock) logContainer.addTextDisplayComponents(logBlock);
+                if (logBlock) logContainer.addTextDisplayComponents(logBlock);
                 await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
             } catch (logError) {
                 logger.error('Failed to log random join action:', logError);
@@ -273,7 +273,7 @@ module.exports = {
                 const errorChannel = await errorGuild.channels.fetch(BOT_BUGS_CHANNEL_ID);
                 const errorContainer = new ContainerBuilder();
                 const errorBlock = buildTextBlock({ title: 'Join Random Squad Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (${userId })`, `**Error:** ${error.message}`] });
-            if (errorBlock) errorContainer.addTextDisplayComponents(errorBlock);
+                if (errorBlock) errorContainer.addTextDisplayComponents(errorBlock);
                 await errorChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             } catch (logError) {
                 logger.error('Failed to log join command error:', logError);

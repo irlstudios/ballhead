@@ -51,7 +51,7 @@ module.exports = {
             if (!postDetails) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'No Active Post', subtitle: 'Remove Participant', lines: ['You do not have any active posts.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -60,7 +60,7 @@ module.exports = {
             if (!participants.includes(user.id)) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Participant Not Found', subtitle: 'Remove Participant', lines: [`<@${user.id}> is not a participant in your post.`] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
@@ -68,7 +68,7 @@ module.exports = {
             if (!thread) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Thread Not Found', subtitle: 'Remove Participant', lines: ['The post thread could not be found.'] });
-            if (block) errorContainer.addTextDisplayComponents(block);
+                if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 

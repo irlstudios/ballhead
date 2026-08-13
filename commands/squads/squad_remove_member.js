@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient, getCachedValues, invalidateRanges } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD, TOP_COMP_SQUAD_ROLE_ID } = require('../../config/constants');
-const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID, BOT_BUGS_CHANNEL_ID, SL_SQUAD_NAME, SL_EVENT_SQUAD } = require('../../config/constants');
+const { findMascotByName } = require('../../config/squads');
 const {
     buildSquadMemberChoices,
     findAllDataRowIndex,
@@ -15,7 +15,6 @@ const {
 } = require('../../utils/squad_queries');
 const logger = require('../../utils/logger');
 
-const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -149,7 +148,7 @@ module.exports = {
             targetUserTag = String(targetMemberRow[SM_USERNAME] ?? '').trim() || targetUserID;
 
             const { squadType: squadTypeForRoles } = resolveSquadType(allData, commandUserID, leaderSquadName);
-            const squadTypeRolesToRemove = squadTypeForRoles === 'Competitive' ? extendedCompRoles : [];
+            const squadTypeRolesToRemove = [];
 
             const eventSquadName = leaderRow[SL_EVENT_SQUAD];
             let mascotRoleIdToRemove = null;

@@ -4,15 +4,14 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder 
 const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
 const {
     SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID,
-    MODERATOR_ROLES, TOP_COMP_SQUAD_ROLE_ID, AD_PREFERENCE,
+    MODERATOR_ROLES, AD_PREFERENCE,
 } = require('../../config/constants');
-const { compSquadLevelRoles, findMascotByName } = require('../../config/squads');
+const { findMascotByName } = require('../../config/squads');
 const { buildNoticeContainer } = require('../../utils/ui');
 const { getRolesToRemove, AD_SQUAD_NAME, AD_SQUAD_TYPE } = require('../../utils/squad_queries');
 const { withSquadLock } = require('../../utils/squad_lock');
 const logger = require('../../utils/logger');
 
-const extendedCompRoles = [...compSquadLevelRoles, TOP_COMP_SQUAD_ROLE_ID];
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -73,7 +72,7 @@ module.exports = {
                 // Determine squad type from All Data
                 const squadTypeRow = allData.find(row => row && row.length > AD_SQUAD_TYPE && row[AD_SQUAD_NAME]?.toUpperCase() === squadNameToDisband);
                 const squadType = squadTypeRow ? squadTypeRow[AD_SQUAD_TYPE] : null;
-                const squadTypeRoles = squadType === 'Competitive' ? extendedCompRoles : [];
+                const squadTypeRoles = [];
 
                 const eventSquadName = squadLeaderRow[3];
                 let mascotRoleIdToRemove = null;

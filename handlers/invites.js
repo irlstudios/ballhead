@@ -6,7 +6,6 @@ const { buildTextBlock, buildNoticeContainer, noticePayload } = require('../util
 const { fetchInviteById, updateInviteStatus, deleteInvite } = require('../db');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const { mascotSquads } = require('../config/squads');
-const { assignLevelRoleOnJoin } = require('../utils/squad_level_sync');
 const { withSquadLock } = require('../utils/squad_lock');
 const { isSameSquad, normalizeId, normalizeSquadName } = require('../utils/squad_queries');
 const {
@@ -396,11 +395,6 @@ const handleAcceptInvite = async (interaction, ctx) => {
             }
         }
     }
-
-    // Assign level role for competitive squads
-    await assignLevelRoleOnJoin(guild, invitedMemberId, squadName).catch(e =>
-        logger.error(`[Invite Accept] Failed to assign level role to ${invitedMemberId}:`, e.message)
-    );
 
     const acceptanceContainer = new ContainerBuilder()
         .setAccentColor(0x2ECC71)
