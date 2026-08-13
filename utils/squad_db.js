@@ -13,6 +13,35 @@ function normalizeSquadName(raw) {
     return String(raw ?? '').trim().toUpperCase();
 }
 
+// Pure: pick which owned squad a command targets. A Casual+Competitive pair
+// shares a name and acts as one squad for membership purposes (the sheet era
+// keyed members by name); the Competitive row wins so members attach where
+// the import put them.
+function disambiguateOwnedSquad(ownedSquads, specifiedName) {
+    const byName = new Map();
+    for (const s of ownedSquads) {
+        const existing = byName.get(s.name);
+        if (!existing || (existing.squad_type !== 'Competitive' && s.squad_type === 'Competitive')) {
+            byName.set(s.name, s);
+        }
+    }
+    const unique = [...byName.values()];
+    if (unique.length === 0) {
+        return { squad: null, error: 'You do not own any squads.' };
+    }
+    if (unique.length === 1) {
+        return { squad: unique[0], error: null };
+    }
+    if (!specifiedName) {
+        return { squad: null, error: `You own multiple squads. Please specify which squad: ${unique.map((s) => s.name).join(', ')}` };
+    }
+    const match = unique.find((s) => s.name === normalizeSquadName(specifiedName));
+    if (!match) {
+        return { squad: null, error: `You do not own a squad named "${specifiedName}".` };
+    }
+    return { squad: match, error: null };
+}
+
 const fetchSquadsByOwner = async (ownerId) => {
     const r = await executeQuery('SELECT * FROM squads WHERE owner_id = $1 ORDER BY id', [ownerId]);
     return r.rows;
@@ -262,6 +291,7 @@ const moveMemberBetweenSquads = async (fromSquadId, toSquadId, userId) => {
 module.exports = {
     MAX_SQUAD_MEMBERS,
     normalizeSquadName,
+    disambiguateOwnedSquad,
     fetchSquadsByOwner,
     fetchSquadByNameAndType,
     fetchSquadsByName,

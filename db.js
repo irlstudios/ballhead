@@ -679,20 +679,40 @@ const deleteSquadApplicationById = async (id) => {
 };
 
 const ensureInvitesSchema = async () => {
+    // Historically this table only ever existed in prod; the CREATE brings it
+    // under code management so fresh environments work (2026-08).
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS invites (
+            id SERIAL PRIMARY KEY,
+            command_user_id TEXT NOT NULL,
+            invited_member_id TEXT NOT NULL,
+            squad_name TEXT NOT NULL,
+            squad_type TEXT,
+            invite_status TEXT NOT NULL DEFAULT 'Pending',
+            message_id TEXT,
+            tracking_message_id TEXT,
+            squad_id INTEGER,
+            expires_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    `);
     await executeQuery(
         'ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ'
     ).catch(() => {});
     await executeQuery(
         'ALTER TABLE invites ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()'
     ).catch(() => {});
+    await executeQuery(
+        'ALTER TABLE invites ADD COLUMN IF NOT EXISTS squad_id INTEGER'
+    ).catch(() => {});
 };
 
-const insertInvite = async (command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt) => {
+const insertInvite = async (command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt, squadId = null) => {
     const query = `
-        INSERT INTO invites (command_user_id, invited_member_id, squad_name, invite_status, message_id, tracking_message_id, squad_type, expires_at, created_at)
-        VALUES ($1, $2, $3, 'Pending', $4, $5, $6, $7, NOW())
+        INSERT INTO invites (command_user_id, invited_member_id, squad_name, invite_status, message_id, tracking_message_id, squad_type, expires_at, created_at, squad_id)
+        VALUES ($1, $2, $3, 'Pending', $4, $5, $6, $7, NOW(), $8)
     `;
-    await executeQuery(query, [command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt || null]);
+    await executeQuery(query, [command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt || null, squadId]);
 };
 
 const fetchExpiredPendingInvites = async () => {
