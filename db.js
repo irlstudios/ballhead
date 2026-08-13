@@ -2051,6 +2051,57 @@ const ensureSquadsSchema = async () => {
             invites_opt_in BOOLEAN NOT NULL DEFAULT TRUE
         )
     `);
+
+    // Discovery + recruiting profile (2026-08 sub-project 2). recruiting
+    // supersedes open_squad; NULL reads as Invite-only, the backfill below is
+    // idempotent because it only touches NULL rows.
+    for (const col of ['description TEXT', 'playstyle TEXT', 'region TEXT', 'recruiting TEXT']) {
+        await executeQuery(`ALTER TABLE squads ADD COLUMN IF NOT EXISTS ${col}`).catch(() => {});
+    }
+    await executeQuery(`
+        UPDATE squads SET recruiting = CASE WHEN open_squad THEN 'Open' ELSE 'Invite-only' END
+        WHERE recruiting IS NULL
+    `).catch((err) => logger.error('[DB] recruiting backfill:', err.message));
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squad_applications (
+            id SERIAL PRIMARY KEY,
+            squad_id INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
+            username TEXT,
+            message TEXT,
+            status TEXT NOT NULL DEFAULT 'Pending',
+            dm_message_id TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            resolved_at TIMESTAMPTZ,
+            resolved_by TEXT
+        )
+    `);
+    await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_squad_apps_pending
+        ON squad_applications (squad_id, user_id) WHERE status = 'Pending'`)
+        .catch((err) => logger.error('[DB] idx_squad_apps_pending:', err.message));
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squad_practices (
+            id SERIAL PRIMARY KEY,
+            squad_id INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+            scheduled_at TIMESTAMPTZ NOT NULL,
+            created_by TEXT NOT NULL,
+            thread_id TEXT,
+            rsvp_message_id TEXT,
+            status TEXT NOT NULL DEFAULT 'Scheduled',
+            reminder_sent BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    `);
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squad_practice_rsvps (
+            practice_id INTEGER NOT NULL REFERENCES squad_practices(id) ON DELETE CASCADE,
+            user_id TEXT NOT NULL,
+            response TEXT NOT NULL,
+            PRIMARY KEY (practice_id, user_id)
+        )
+    `);
 };
 
 module.exports = {

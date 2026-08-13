@@ -28,7 +28,15 @@ function ownerRolesAfterDisband({ remainingSquads, disbandedTypes }) {
 // Shared teardown for disband and force-disband: DMs + nickname resets +
 // mascot-role removal for members, then role cleanup for the owner.
 async function teardownDisbandedSquads(client, guild, disbanded, { byModerator = false } = {}) {
-    for (const { squad, members } of disbanded) {
+    for (const { squad, members, practices = [] } of disbanded) {
+        // The DB cascade already removed practice rows; the Discord threads
+        // outlive them unless deleted here.
+        for (const practice of practices) {
+            const thread = await client.channels.fetch(practice.thread_id).catch(() => null);
+            if (thread) {
+                await thread.delete('Squad disbanded.').catch(() => {});
+            }
+        }
         const mascot = squad.event_squad ? findMascotByName(squad.event_squad) : null;
         for (const m of members) {
             try {

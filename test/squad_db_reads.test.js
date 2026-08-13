@@ -47,7 +47,7 @@ test('fetchMembership splits squad and member fields', async () => {
 test('fetchOpenSquadsWithSpace filters open squads under capacity and excludes the Casual half of a pair', async () => {
     state.rows = [];
     await squadDb.fetchOpenSquadsWithSpace();
-    assert.match(lastQuery().text, /open_squad/);
+    assert.match(lastQuery().text, /recruiting = 'Open'/);
     assert.match(lastQuery().text, /HAVING COUNT/i);
     assert.match(lastQuery().text, /NOT EXISTS/i);
     assert.deepStrictEqual(lastQuery().params, [squadDb.MAX_SQUAD_MEMBERS - 1]);

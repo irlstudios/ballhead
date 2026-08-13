@@ -1,224 +1,199 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');
-const { MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
-const { SQUAD_PRACTICE_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+'use strict';
+
+// Squad practices (rebuilt 2026-08, sub-project 2): sessions are rows in
+// squad_practices, so reminders, starts, and cleanup survive restarts (the
+// old version lost its 24h setTimeout on every deploy). The squad sweep job
+// (jobs/squad-sweep.js) does all timing.
+
+const {
+    SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder,
+    ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+} = require('discord.js');
+const { SQUAD_PRACTICE_CHANNEL_ID } = require('../../config/constants');
 const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
-function buildTextBlock({ title, subtitle, lines } = {}) {
-    const parts = [];
-    if (title) {
-        parts.push(`## ${title}`);
-    }
-    if (subtitle) {
-        parts.push(subtitle);
-    }
-    if (Array.isArray(lines) && lines.length > 0) {
-        if (parts.length > 0) {
-            parts.push('');
-        }
-        parts.push(...lines.filter(Boolean));
-    }
-    if (parts.length === 0) {
+// The text channel practice threads are created under (pre-existing value).
+const PRACTICE_PARENT_CHANNEL_ID = '1214781415670153266';
+const MIN_SCHEDULE_MS = 10 * 60 * 1000;
+const MAX_SCHEDULE_MS = 14 * 24 * 60 * 60 * 1000;
+
+// '2h', '45m', '1d', '1h30m' -> ms within [10m, 14d]; null otherwise.
+function parseDuration(raw) {
+    const s = String(raw ?? '').trim().toLowerCase();
+    if (!/^(\d+d)?(\d+h)?(\d+m)?$/.test(s) || s === '') {
         return null;
     }
-    return new TextDisplayBuilder().setContent(parts.join('\n'));
+    const get = (unit) => Number((s.match(new RegExp(`(\\d+)${unit}`)) || [])[1] || 0);
+    const ms = ((get('d') * 24 + get('h')) * 60 + get('m')) * 60 * 1000;
+    return ms >= MIN_SCHEDULE_MS && ms <= MAX_SCHEDULE_MS ? ms : null;
 }
 
-const CHANNEL_ID = '1214781415670153266';
-const PRACTICE_DURATION_MS = 24 * 60 * 60 * 1000;
+// Pure RSVP card body.
+function buildRsvpCardLines(practice, yes, no) {
+    const ts = Math.floor(new Date(practice.scheduled_at).getTime() / 1000);
+    return [
+        `**When:** <t:${ts}:F> (<t:${ts}:R>)`,
+        `**Yes (${yes.length}):** ${yes.length ? yes.map((r) => `<@${r.user_id}>`).join(' ') : 'nobody yet'}`,
+        `**No (${no.length}):** ${no.length ? no.map((r) => `<@${r.user_id}>`).join(' ') : 'nobody yet'}`,
+        '',
+        'RSVP with the buttons below. Everyone who said Yes gets a reminder DM 15 minutes before start.',
+    ];
+}
+
+function rsvpComponents(practiceId) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`practice:rsvp:${practiceId}:Yes`).setLabel('Yes, I am in').setStyle(ButtonStyle.Success),
+        new ButtonBuilder().setCustomId(`practice:rsvp:${practiceId}:No`).setLabel('Cannot make it').setStyle(ButtonStyle.Secondary),
+    );
+}
+
+function notice(title, lines) {
+    const container = new ContainerBuilder();
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`## ${title}`),
+        new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
+    );
+    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+}
+
+// Creates the private practice thread and invites the roster. Returns the
+// thread, or null when the parent channel is unavailable.
+async function createPracticeThread(client, squad, members, { scheduled, practice }) {
+    const channel = await client.channels.fetch(PRACTICE_PARENT_CHANNEL_ID).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildText) {
+        logger.error(`[Practice] Parent channel ${PRACTICE_PARENT_CHANNEL_ID} not found or not a text channel.`);
+        return null;
+    }
+    const thread = await channel.threads.create({
+        name: `${squad.name} Practice${scheduled ? ' (scheduled)' : ' Session'}`,
+        autoArchiveDuration: 1440,
+        type: ChannelType.PrivateThread,
+        reason: `Practice for squad ${squad.name}`,
+        invitable: false,
+    });
+
+    const container = new ContainerBuilder();
+    const headline = scheduled
+        ? buildRsvpCardLines(practice, [], [])
+        : [`Practice is on now! Started by <@${squad.owner_id}>.`, 'This thread cleans itself up 24 hours after start.'];
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`## [${squad.name}] Practice`),
+        new TextDisplayBuilder().setContent(headline.join('\n'))
+    );
+    const payload = { flags: MessageFlags.IsComponentsV2, components: [container] };
+    if (scheduled) {
+        payload.components.push(rsvpComponents(practice.id));
+    }
+    const card = await thread.send(payload);
+
+    for (const userId of [String(squad.owner_id), ...members.map((m) => String(m.user_id))]) {
+        await thread.members.add(userId).catch(() => {});
+    }
+    return { thread, card };
+}
 
 module.exports = {
+    parseDuration,
+    buildRsvpCardLines,
+    rsvpComponents,
+    MIN_SCHEDULE_MS,
+    MAX_SCHEDULE_MS,
+    PRACTICE_PARENT_CHANNEL_ID,
     data: new SlashCommandBuilder()
         .setName('squad-practice')
-        .setDescription('Starts a private practice session thread for your squad.'),
+        .setDescription('Run or schedule a squad practice session.')
+        .addSubcommand((s) => s.setName('start').setDescription('Start a practice session right now'))
+        .addSubcommand((s) => s.setName('schedule').setDescription('Schedule a practice with member RSVPs')
+            .addStringOption((o) => o.setName('in').setDescription('How far out: 45m, 2h, 1h30m, 1d (max 14d)').setRequired(true).setMaxLength(10)))
+        .addSubcommand((s) => s.setName('cancel').setDescription('Cancel your next scheduled practice')),
 
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
-
         const userId = interaction.user.id;
-        const userTag = interaction.user.tag;
-
-        let thread;
 
         try {
             const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
-            const { squad } = squadDb.disambiguateOwnedSquad(ownedSquads, null);
-            const ownedSquad = squad || ownedSquads[0] || null;
-
-            if (!ownedSquad) {
-                const errorContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Not a Squad Leader', subtitle: 'Practice Session', lines: ['You cannot start a practice session because you do not own a squad.'] });
-                if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, null);
+            if (error) {
+                return interaction.editReply(notice('Not a Squad Leader', 'You cannot manage practice sessions because you do not own a squad.'));
             }
+            const sub = interaction.options.getSubcommand();
+            const members = await squadDb.fetchSquadMembers(squad.id);
 
-            const squadName = ownedSquad.name;
-
-            const channel = await interaction.client.channels.fetch(CHANNEL_ID);
-            if (!channel || channel.type !== ChannelType.GuildText) {
-                logger.error(`Practice channel ${CHANNEL_ID} not found or is not a text channel.`);
-                const errorContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Channel Missing', subtitle: 'Practice Session', lines: ['Could not find the designated channel for practice sessions.'] });
-                if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
-            }
-
-            thread = await channel.threads.create({
-                name: `${squadName} Practice Session`,
-                autoArchiveDuration: 1440,
-                type: ChannelType.PrivateThread,
-                reason: `${userTag} started a practice session for squad ${squadName}`,
-                invitable: false
-            }).catch(err => {
-                logger.error(`Failed to create thread for ${squadName}: ${err.message}`);
-                throw new Error('Failed to create the practice thread. Please check bot permissions.');
-            });
-
-            const threadContainer = new ContainerBuilder();
-            const threadBlock = buildTextBlock({ title: `[${squadName}] Practice Session`, subtitle: 'Private Thread', lines: [
-                `Welcome to the **[${squadName}]** practice thread, started by <@${interaction.user.id}>!`,
-                'Use this space to coordinate activities and track progress. Good luck!',
-                '*This thread will be automatically deleted after 24 hours.*'
-            ] });
-            if (threadBlock) threadContainer.addTextDisplayComponents(threadBlock);
-            await thread.send({ flags: MessageFlags.IsComponentsV2, components: [threadContainer] });
-
-            const squadMemberIds = (await squadDb.fetchSquadMembers(ownedSquad.id))
-                .map((m) => String(m.user_id))
-                .filter(Boolean);
-
-            const allParticipantIds = [...new Set([userId, ...squadMemberIds])];
-
-            const invitePromises = [];
-            for (const memberId of squadMemberIds) {
-                if (memberId !== userId) {
-                    invitePromises.push(thread.members.add(memberId).catch(err => {
-                        logger.warn(`Could not add member ${memberId} to thread ${thread.id}: ${err.message}`);
-                    }));
+            if (sub === 'cancel') {
+                const next = await squadDb.fetchNextScheduledPractice(squad.id);
+                if (!next) {
+                    return interaction.editReply(notice('Nothing Scheduled', 'Your squad has no scheduled practice to cancel.'));
                 }
-            }
-            await Promise.all(invitePromises);
-
-            const dmPromises = [];
-            for (const memberId of allParticipantIds) {
-                const dmContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Squad Practice Session Started', subtitle: 'Private Thread', lines: [`A practice session for squad **${squadName}** has started in <#${thread.id}>.`, 'Join the thread for more details!'] });
-                if (block) dmContainer.addTextDisplayComponents(block);
-
-                dmPromises.push(
-                    interaction.client.users.fetch(memberId).then(user => {
-                        return user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
-                    }).catch(error => {
-                        logger.info(`Could not send practice start DM to ${memberId}:`, error.message);
-                    })
-                );
-            }
-            await Promise.all(dmPromises);
-
-            try {
-                const loggingChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID);
-                const logContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Squad Practice Session Started', subtitle: 'Logging', lines: [
-                    `**Squad:** ${squadName}`,
-                    `**Started by:** ${userTag} (<@${userId}>)`,
-                    `**Thread:** <#${thread.id}>`
-                ] });
-                if (block) logContainer.addTextDisplayComponents(block);
-                await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
-            } catch (logError) {
-                logger.error(`Failed to send practice start log message: ${logError.message}`);
-            }
-
-            setTimeout(async () => {
-                try {
-                    logger.info(`Attempting to delete practice thread ${thread.id} for squad ${squadName}.`);
-                    const fetchedThread = await channel.threads.fetch(thread.id).catch(() => null);
-                    if (fetchedThread) {
-                        await fetchedThread.delete(`Practice session ended after ${PRACTICE_DURATION_MS / (60*60*1000)} hours.`);
-                    } else {
-                        logger.info(`Practice thread ${thread.id} already deleted or not found.`);
-                    }
-
-                    const endDmPromises = [];
-                    for (const memberId of allParticipantIds) {
-                        const notificationContainer = new ContainerBuilder();
-                        const block = buildTextBlock({ title: 'Squad Practice Session Ended', subtitle: 'Thread Closed', lines: [`The practice session thread for squad **${squadName}** has ended and been deleted.`] });
-                        if (block) notificationContainer.addTextDisplayComponents(block);
-                        endDmPromises.push(
-                            interaction.client.users.fetch(memberId).then(user => {
-                                return user.send({ flags: MessageFlags.IsComponentsV2, components: [notificationContainer] });
-                            }).catch(error => {
-                                logger.info(`Could not send practice end DM to ${memberId}:`, error.message);
-                            })
-                        );
-                    }
-                    await Promise.all(endDmPromises);
-
-                    try {
-                        const loggingChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID);
-                        const endLogContainer = new ContainerBuilder();
-                        const block = buildTextBlock({ title: 'Squad Practice Session Ended', subtitle: 'Logging', lines: [`The practice session for squad **${squadName}** has concluded.`] });
-                        if (block) endLogContainer.addTextDisplayComponents(block);
-                        await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [endLogContainer] });
-                    } catch (logError) {
-                        logger.error(`Failed to send practice end log message: ${logError.message}`);
-                    }
-
-                } catch (error) {
-                    logger.error(`Error during scheduled thread deletion/notification for ${thread.id}:`, error.message);
-                    try {
-                        const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
-                        const errorContainer = new ContainerBuilder();
-                        const block = buildTextBlock({ title: 'Error During Practice Cleanup', subtitle: 'Automation Failure', lines: [`**Squad:** ${squadName}`, `**Thread ID:** ${thread.id}`, `**Error:** ${error.message}`] });
-                        if (block) errorContainer.addTextDisplayComponents(block);
-                        await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
-                    } catch (logError) {
-                        logger.error('Failed to log cleanup error:', logError);
+                const cancelled = await squadDb.claimPracticeCancel(next.id);
+                if (!cancelled) {
+                    return interaction.editReply(notice('Too Late', 'That practice already started or was cancelled.'));
+                }
+                if (cancelled.thread_id) {
+                    const thread = await interaction.client.channels.fetch(cancelled.thread_id).catch(() => null);
+                    if (thread) {
+                        await thread.send({
+                            ...notice('Practice Cancelled', `The scheduled practice was cancelled by <@${userId}>.`),
+                            ephemeral: undefined,
+                        }).catch(() => {});
+                        await thread.setArchived(true).catch(() => {});
                     }
                 }
-            }, PRACTICE_DURATION_MS);
+                return interaction.editReply(notice('Practice Cancelled', 'Your scheduled practice was cancelled and the thread archived.'));
+            }
 
-            const successContainer = new ContainerBuilder();
-            const successBlock = buildTextBlock({ title: 'Practice Session Started', subtitle: 'Squad Practice', lines: [
-                `Practice session for squad **${squadName}** started in <#${thread.id}>!`,
-                'Members have been invited and notified.',
-                'The thread will be deleted in 24 hours.'
-            ] });
-            if (successBlock) successContainer.addTextDisplayComponents(successBlock);
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            if (sub === 'schedule') {
+                const durationMs = parseDuration(interaction.options.getString('in'));
+                if (durationMs === null) {
+                    return interaction.editReply(notice('Invalid Time', 'Use a duration like `45m`, `2h`, `1h30m`, or `1d` (minimum 10m, maximum 14d).'));
+                }
+                const existing = await squadDb.fetchNextScheduledPractice(squad.id);
+                if (existing) {
+                    return interaction.editReply(notice('Already Scheduled', 'Your squad already has a scheduled practice. Cancel it first with `/squad practice cancel`.'));
+                }
+                const scheduledAt = new Date(Date.now() + durationMs);
+                const practice = await squadDb.insertPractice({ squadId: squad.id, scheduledAt, createdBy: userId });
+                const created = await createPracticeThread(interaction.client, squad, members, { scheduled: true, practice });
+                if (!created) {
+                    await squadDb.claimPracticeCancel(practice.id).catch(() => {});
+                    return interaction.editReply(notice('Channel Missing', 'Could not create the practice thread. Please contact an admin.'));
+                }
+                await squadDb.setPracticeThread(practice.id, created.thread.id, created.card.id);
+                const ts = Math.floor(scheduledAt.getTime() / 1000);
+                logger.info(`[Practice] Scheduled practice ${practice.id} for ${squad.name} at ${scheduledAt.toISOString()}`);
+                return interaction.editReply(notice('Practice Scheduled', [
+                    `Practice for **${squad.name}** is set for <t:${ts}:F> (<t:${ts}:R>).`,
+                    `Your squad has been invited to ${created.thread} to RSVP.`,
+                    'Yes-RSVPs get a reminder DM 15 minutes before start.',
+                ]));
+            }
 
+            // start (immediate)
+            const practice = await squadDb.insertPractice({ squadId: squad.id, scheduledAt: new Date(), createdBy: userId });
+            await squadDb.setPracticeStatus(practice.id, 'Started');
+            const created = await createPracticeThread(interaction.client, squad, members, { scheduled: false, practice });
+            if (!created) {
+                await squadDb.setPracticeStatus(practice.id, 'Cancelled');
+                return interaction.editReply(notice('Channel Missing', 'Could not create the practice thread. Please contact an admin.'));
+            }
+            await squadDb.setPracticeThread(practice.id, created.thread.id, created.card.id);
+
+            const logChannel = await interaction.client.channels.fetch(SQUAD_PRACTICE_CHANNEL_ID).catch(() => null);
+            if (logChannel) {
+                await logChannel.send({
+                    ...notice('Practice Started', `**${squad.name}** started a practice session (${members.length + 1} invited).`),
+                    ephemeral: undefined,
+                }).catch(() => {});
+            }
+            logger.info(`[Practice] Immediate practice ${practice.id} started for ${squad.name}`);
+            return interaction.editReply(notice('Practice Started', [
+                `Practice thread created for **${squad.name}**: ${created.thread}`,
+                'The thread cleans itself up 24 hours after start.',
+            ]));
         } catch (error) {
-            logger.error(`Error during /squad practice for ${userTag} (${userId}):`, error);
-
-            if (thread) {
-                try {
-                    await thread.delete(`Error during setup: ${error.message}`);
-                    logger.info(`Cleaned up thread ${thread.id} due to error.`);
-                } catch (cleanupError) {
-                    logger.error(`Failed to clean up thread ${thread.id} after error: ${cleanupError.message}`);
-                }
-            }
-
-            try {
-                const errorLoggingChannel = await interaction.client.channels.fetch(BOT_BUGS_CHANNEL_ID);
-                const errorLogContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Squad Practice Command Error', subtitle: 'Command Failure', lines: [`**User:** ${userTag} (<@${userId}>)`, `**Error:** ${error.message}`] });
-                if (block) errorLogContainer.addTextDisplayComponents(block);
-                await errorLoggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [errorLogContainer] });
-            } catch (logError) {
-                logger.error('Failed to log error to Discord:', logError);
-            }
-
-            if (!interaction.replied) {
-                const replyContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Squad Practice', lines: [`An error occurred: ${error.message || 'Please try again later.'}`] });
-                if (block) replyContainer.addTextDisplayComponents(block);
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [replyContainer],
-                    ephemeral: true
-                }).catch(logger.error);
-            }
+            logger.error(`[Practice] Error for ${userId}:`, error);
+            return interaction.editReply(notice('Practice Failed', `An error occurred: ${error.message || 'Please try again later.'}`)).catch(() => {});
         }
-    }
+    },
 };
