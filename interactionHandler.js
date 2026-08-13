@@ -18,6 +18,7 @@ const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
 const { handleOfficialsButton, handleOfficialsSelect, handleOfficialsModal } = require('./handlers/league-officials');
 const { handleBrowseButton, handleBrowseSelect, handleApplicationModal, handleApplicationButton } = require('./handlers/squad_discovery');
+const { handlePracticeButton } = require('./handlers/squad_practices');
 const { handleAppealsButton, handleAppealsModal } = require('./handlers/league-appeals');
 const { handleRewardsButton, handleRewardsModal } = require('./handlers/league-rewards');
 const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
@@ -290,6 +291,11 @@ const handleButton = async (interaction, client) => {
 
         if (interaction.customId.startsWith('squadapp:')) {
             await handleApplicationButton(interaction);
+            return;
+        }
+
+        if (interaction.customId.startsWith('practice:')) {
+            await handlePracticeButton(interaction);
             return;
         }
 
