@@ -5,6 +5,7 @@ const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesForDirectory } = require('../../db');
 const { buildDirectoryLines } = require('../../utils/league_directory');
+const { chunkLines } = require('../../utils/league_games');
 
 const SUB = 'League Directory';
 
@@ -18,7 +19,14 @@ module.exports = {
 
         try {
             const leagues = await fetchLeaguesForDirectory();
-            return interaction.editReply(noticePayload(buildDirectoryLines(leagues), { title: 'League Directory', subtitle: SUB }));
+            // Chunked so a long directory stays under Discord's 4000-char text
+            // display limit; extra chunks go out as follow-ups (as /league overview does).
+            const chunks = chunkLines(buildDirectoryLines(leagues));
+            await interaction.editReply(noticePayload(chunks[0], { title: 'League Directory', subtitle: SUB }));
+            for (const chunk of chunks.slice(1)) {
+                await interaction.followUp({ ...noticePayload(chunk, { subtitle: SUB }), ephemeral: true });
+            }
+            return undefined;
         } catch (error) {
             logger.error('[Directory] league-directory failed:', error);
             return interaction.editReply(noticePayload('An error occurred while loading the directory.', { title: 'Directory Error', subtitle: SUB }));

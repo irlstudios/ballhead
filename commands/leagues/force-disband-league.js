@@ -4,7 +4,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const {
-    findActiveLeagueByName,
+    findActiveLeaguesByName,
     markLeagueDisbanded,
     insertLeagueCreationBlock,
 } = require('../../db');
@@ -66,8 +66,8 @@ module.exports = {
             const reason = interaction.options.getString('reason');
             const blockOwner = interaction.options.getBoolean('block-owner');
 
-            const league = await findActiveLeagueByName(leagueName);
-            if (!league) {
+            const matches = await findActiveLeaguesByName(leagueName);
+            if (matches.length === 0) {
                 return interaction.editReply(
                     noticePayload(`No active league matching **${leagueName}** was found.`, {
                         title: 'League Not Found',
@@ -75,6 +75,20 @@ module.exports = {
                     })
                 );
             }
+            // Destructive action: never pick one of several same-named leagues.
+            if (matches.length > 1) {
+                return interaction.editReply(
+                    noticePayload(
+                        [
+                            `${matches.length} leagues share the name **${leagueName}**:`,
+                            ...matches.map((l) => `- id ${l.league_id}, owner <@${l.owner_id}>`),
+                            'Resolve the ambiguity manually (rename or handle in the database) before force-disbanding.',
+                        ],
+                        { title: 'Ambiguous League Name', subtitle: 'Force Disband League' }
+                    )
+                );
+            }
+            const league = matches[0];
 
             const plan = buildDisbandPlan(league);
 

@@ -442,17 +442,40 @@ const findLeagueApplication = async (applicationMessageId) => {
     return result.rows;
 };
 
+// Atomic claim: only a still-Pending application transitions, so a double
+// click or a deny/approve race resolves to exactly one winner. Returns true
+// when this call made the transition.
 const updateLeagueApplicationApproval = async (messageId, reviewerId) => {
-    await executeQuery(
-        'UPDATE "League Applications" SET review_status = $1, is_approved = $2, reviewed_date = NOW(), reviewed_by = $3 WHERE application_message_id = $4',
-        ['Approved', true, reviewerId, messageId]
+    const result = await executeQuery(
+        `UPDATE "League Applications"
+         SET review_status = 'Approved', is_approved = TRUE, reviewed_date = NOW(), reviewed_by = $1
+         WHERE application_message_id = $2 AND review_status = 'Pending'
+         RETURNING application_message_id`,
+        [reviewerId, messageId]
     );
+    return result.rows.length > 0;
 };
 
 const updateLeagueApplicationDenial = async (messageId, denialReason, reviewerId) => {
+    const result = await executeQuery(
+        `UPDATE "League Applications"
+         SET review_status = 'Denied', denial_reason = $1, reviewed_date = NOW(), reviewed_by = $2
+         WHERE application_message_id = $3 AND review_status = 'Pending'
+         RETURNING application_message_id`,
+        [denialReason, reviewerId, messageId]
+    );
+    return result.rows.length > 0;
+};
+
+// Compensating revert for a failed approval: puts a claimed application back
+// to Pending so the reviewer can retry, mirroring the compensating deletes
+// used when an ops-card post fails after an insert.
+const revertLeagueApplicationToPending = async (messageId) => {
     await executeQuery(
-        'UPDATE "League Applications" SET review_status = $1, denial_reason = $2, reviewed_date = NOW(), reviewed_by = $3 WHERE application_message_id = $4',
-        ['Denied', denialReason, reviewerId, messageId]
+        `UPDATE "League Applications"
+         SET review_status = 'Pending', is_approved = FALSE, reviewed_date = NULL, reviewed_by = NULL
+         WHERE application_message_id = $1 AND review_status = 'Approved'`,
+        [messageId]
     );
 };
 
@@ -464,9 +487,9 @@ const findActiveLeague = async (key, value) => {
     // Disbanded leagues are soft-deleted: they keep their owner_id/server_id but
     // must not count as an existing league, otherwise the registration guards
     // wrongly block a user (or server) whose only league was disbanded.
-    const query = key === 'owner_id'
-        ? 'SELECT * FROM "Active Leagues" WHERE owner_id = $1 AND league_type = \'Base\' AND league_status <> \'Disbanded\''
-        : `SELECT * FROM "Active Leagues" WHERE ${key} = $1 AND league_status <> 'Disbanded'`;
+    // No tier filter: one league per owner, whatever its tier. Everything else
+    // in the system (fetchLeaguesByOwner(...)[0]) assumes that invariant.
+    const query = `SELECT * FROM "Active Leagues" WHERE ${key} = $1 AND league_status <> 'Disbanded'`;
     const result = await executeQuery(query, [value]);
     return result.rows;
 };
@@ -488,12 +511,22 @@ const insertActiveLeague = async (params) => {
     );
 };
 
+// Server metadata params may be null (invite could not be resolved at approval
+// time); COALESCE keeps the existing values so a failed fetch can never
+// overwrite good data with placeholders.
 const updateActiveLeague = async (params) => {
     await executeQuery(
         `UPDATE "Active Leagues" SET
-            league_type = $1, approval_date = NOW(), server_id = $2, server_name = $3,
-            member_count = $4, server_icon = $5, server_banner = $6, vanity_url = $7,
-            server_description = $8, server_features = $9, owner_profile_picture = $10
+            league_type = $1, approval_date = NOW(),
+            server_id = COALESCE($2, server_id),
+            server_name = COALESCE($3, server_name),
+            member_count = COALESCE($4, member_count),
+            server_icon = COALESCE($5, server_icon),
+            server_banner = COALESCE($6, server_banner),
+            vanity_url = COALESCE($7, vanity_url),
+            server_description = COALESCE($8, server_description),
+            server_features = COALESCE($9, server_features),
+            owner_profile_picture = COALESCE($10, owner_profile_picture)
          WHERE owner_id = $11 AND league_name = $12`,
         params
     );
@@ -647,10 +680,10 @@ const deleteSquadApplicationById = async (id) => {
 
 const ensureInvitesSchema = async () => {
     await executeQuery(
-        `ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`
+        'ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ'
     ).catch(() => {});
     await executeQuery(
-        `ALTER TABLE invites ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()`
+        'ALTER TABLE invites ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()'
     ).catch(() => {});
 };
 
@@ -664,7 +697,7 @@ const insertInvite = async (command_user_id, invited_member_id, squad_name, mess
 
 const fetchExpiredPendingInvites = async () => {
     const result = await executeQuery(
-        `SELECT * FROM invites WHERE invite_status = 'Pending' AND expires_at IS NOT NULL AND expires_at <= NOW()`
+        'SELECT * FROM invites WHERE invite_status = \'Pending\' AND expires_at IS NOT NULL AND expires_at <= NOW()'
     );
     return result.rows;
 };
@@ -784,7 +817,7 @@ async function updateTransferRequestStatus(messageId, status) {
 }
 
 async function fetchExpiredPendingTransfers() {
-    const query = "SELECT * FROM transfer_requests WHERE status = 'Pending' AND expires_at < NOW()";
+    const query = 'SELECT * FROM transfer_requests WHERE status = \'Pending\' AND expires_at < NOW()';
     const result = await executeQuery(query);
     return result.rows;
 }
@@ -807,6 +840,16 @@ const ensureLeagueActivitySchema = async () => {
         ON "Active Leagues" (server_id)
         WHERE league_status = 'Active'
     `).catch(() => {});
+
+    // One live league per owner, enforced at the data layer: the registration
+    // guard is check-then-insert and can race. Logged, not swallowed: a
+    // failure here means duplicate owner rows already exist and need manual
+    // cleanup before the invariant is actually enforced.
+    await executeQuery(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_active_leagues_owner
+        ON "Active Leagues" (owner_id)
+        WHERE league_status <> 'Disbanded'
+    `).catch((err) => logger.error('[DB] Could not create unique owner index (duplicate owner rows?):', err.message));
 
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS league_checkins (
@@ -871,7 +914,7 @@ const updateLeagueHealthData = async (leagueId, data) => {
              server_features = $7, last_health_check = NOW()
          WHERE league_id = $8`,
         [data.serverName, data.memberCount, data.serverIcon, data.serverBanner,
-         data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
+            data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
     );
 };
 
@@ -885,14 +928,14 @@ const insertLeagueCheckin = async (leagueId, ownerId, activityNotes, checkinMont
 
 const updateLeagueCheckinDate = async (leagueId) => {
     await executeQuery(
-        `UPDATE "Active Leagues" SET last_checkin_date = NOW() WHERE league_id = $1`,
+        'UPDATE "Active Leagues" SET last_checkin_date = NOW() WHERE league_id = $1',
         [leagueId]
     );
 };
 
 const updateLeagueStatus = async (leagueId, status) => {
     await executeQuery(
-        `UPDATE "Active Leagues" SET league_status = $1 WHERE league_id = $2`,
+        'UPDATE "Active Leagues" SET league_status = $1 WHERE league_id = $2',
         [status, leagueId]
     );
 };
@@ -982,7 +1025,7 @@ const updateLeagueInvite = async (leagueId, invite, data) => {
              vanity_url = $7, server_description = $8, server_features = $9
          WHERE league_id = $10`,
         [invite, data.serverName, data.serverId, data.memberCount, data.serverIcon,
-         data.serverBanner, data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
+            data.serverBanner, data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
     );
 };
 
@@ -1215,6 +1258,15 @@ const ensureLeagueOfficialsSchema = async () => {
         await executeQuery(`ALTER TABLE league_official_requests ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
     }
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_tourny_game ON league_official_requests (tourny_game_id)').catch(() => {});
+    // At most one open request per tourny game: the sweep's check-then-insert
+    // and the slash command's game validation both race; this makes the insert
+    // itself the arbiter (loser gets a 23505 and treats it as "already exists").
+    // Logged, not swallowed: a failure means duplicate open rows already exist
+    // and the backstop is not actually in place until they are cleaned up.
+    await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_league_official_requests_open_game
+        ON league_official_requests (tourny_guild_id, tourny_game_id)
+        WHERE status IN ('Pending', 'Assigned') AND tourny_game_id IS NOT NULL`)
+        .catch((err) => logger.error('[DB] Could not create unique open-game index (duplicate open requests?):', err.message));
 
     // Bounds fetchRecentDeniedLinkedRequests to a recent window: Denied is
     // terminal, so without a timestamp every request ever denied would be
@@ -1716,15 +1768,16 @@ const ensureLeagueEnforcementSchema = async () => {
 
 // Exact match only (case-insensitive): this feeds a destructive mod action,
 // so a fuzzy lookup must never silently resolve to a different league.
-const findActiveLeagueByName = async (name) => {
+// Returns every match (league names are not unique) so the caller can refuse
+// to act on an ambiguous name instead of destroying an arbitrary league.
+const findActiveLeaguesByName = async (name) => {
     const result = await executeQuery(
         `SELECT * FROM "Active Leagues"
          WHERE league_status <> 'Disbanded'
-           AND LOWER(league_name) = LOWER($1)
-         LIMIT 1`,
+           AND LOWER(league_name) = LOWER($1)`,
         [name]
     );
-    return result.rows[0] || null;
+    return result.rows;
 };
 
 const insertLeagueCreationBlock = async (userId, reason, blockedBy) => {
@@ -1895,10 +1948,13 @@ const setRewardPoc = async (leagueId, userId) => {
     await executeQuery('UPDATE "Active Leagues" SET reward_poc_id = $2 WHERE league_id = $1', [leagueId, userId]);
 };
 
+// Month is compared in UTC on both sides: callers compute the 'YYYY-MM'
+// string with getUTC*, and created_at is bucketed at UTC here, so the cap
+// cannot drift when the bot host and the DB run different timezones.
 const countRewardRequestsThisMonth = async (leagueId, month) => {
     const result = await executeQuery(
         `SELECT COUNT(*)::int AS n FROM league_reward_requests
-         WHERE league_id = $1 AND to_char(created_at, 'YYYY-MM') = $2`,
+         WHERE league_id = $1 AND to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM') = $2`,
         [leagueId, month]
     );
     return result.rows[0]?.n ?? 0;
@@ -2004,6 +2060,7 @@ module.exports = {
     findLeagueApplication,
     updateLeagueApplicationApproval,
     updateLeagueApplicationDenial,
+    revertLeagueApplicationToPending,
     findActiveLeague,
     findActiveLeagueByOwnerAndName,
     insertActiveLeague,
@@ -2093,7 +2150,7 @@ module.exports = {
     updateLeagueContentSettings,
     getLeagueContentSummary,
     ensureLeagueEnforcementSchema,
-    findActiveLeagueByName,
+    findActiveLeaguesByName,
     insertLeagueCreationBlock,
     findLeagueCreationBlock,
     insertStrike,

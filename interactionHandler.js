@@ -72,6 +72,24 @@ const interactionHandler = async (interaction, client) => {
                     logger.error('Failed to reply to interaction:', err);
                 }
             });
+        } else if (!interaction.isAutocomplete() && interaction.deferred && !interaction.replied) {
+            // A handler that threw after deferring would otherwise leave the
+            // user staring at an eternal "thinking..." spinner. A component
+            // interaction deferred via deferUpdate (ephemeral stays null) must
+            // not be editReply'd -- that would overwrite the component's own
+            // message (e.g. an ops card) -- so it gets an ephemeral follow-up;
+            // a deferReply (ephemeral is set) resolves its spinner via editReply.
+            const errorNotice = noticePayload(
+                'We encountered an error while processing your request. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.',
+                { title: 'Request Failed', subtitle: 'Interaction Error' }
+            );
+            if (interaction.isMessageComponent() && interaction.ephemeral === null) {
+                await interaction.followUp({ ...errorNotice, ephemeral: true })
+                    .catch((err) => logger.error('Failed to follow up with error notice:', err));
+            } else {
+                await interaction.editReply(errorNotice)
+                    .catch((err) => logger.error('Failed to edit deferred reply with error notice:', err));
+            }
         }
 
         try {

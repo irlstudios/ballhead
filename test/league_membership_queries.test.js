@@ -76,3 +76,14 @@ test('findActiveLeague by server_id excludes disbanded leagues', async () => {
         `query should exclude disbanded leagues: ${lastQuery()}`
     );
 });
+
+// One league per owner regardless of tier: a Base-only filter here would let
+// an owner whose league was upgraded to Active/Sponsored register a second
+// league, breaking every fetchLeaguesByOwner(...)[0] call in the system.
+test('findActiveLeague by owner_id matches any tier, not just Base', async () => {
+    await findActiveLeague('owner_id', 'owner-1');
+    assert.ok(
+        !/league_type/i.test(lastQuery()),
+        `query should not filter by tier: ${lastQuery()}`
+    );
+});
