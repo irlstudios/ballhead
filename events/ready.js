@@ -20,6 +20,7 @@ const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
 const { runPollNudge } = require('../jobs/poll-nudge');
 const { runTournySync } = require('../jobs/tourny-sync');
+const { runSquadSweep } = require('../jobs/squad-sweep');
 const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { resumeSessions } = require('../utils/host_session_manager');
@@ -327,6 +328,16 @@ module.exports = {
             }
         });
 
+        // Every 5 minutes: squad sweep (application expiry, practice
+        // reminders/starts/cleanup). DB-driven so restarts lose nothing.
+        cron.schedule('*/5 * * * *', async () => {
+            try {
+                await runSquadSweep(client);
+            } catch (error) {
+                logger.error('[Cron] Squad sweep failed:', error.message);
+            }
+        });
+
         // Daily: mirror the Active Leagues table into the leagues spreadsheet - 7:00 AM Chicago
         cron.schedule('0 7 * * *', async () => {
             try {
@@ -336,6 +347,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
+        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
     },
 };
