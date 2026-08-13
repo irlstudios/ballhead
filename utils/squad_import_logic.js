@@ -67,19 +67,27 @@ function planImport({ allData = [], squadLeaders = [], squadMembers = [] }) {
         typesByOwnerName.get(key).add(type);
     }
 
+    // The consume-a-type path only applies to true pairs (multiple leader
+    // rows for one owner+name). A single leader row with conflicting All
+    // Data types stays on the resolution chain, which reports the ambiguity.
+    const leaderRowCounts = new Map();
+    for (const row of squadLeaders) {
+        if (!row || !row[1] || !normalizeSquadName(row[2])) continue;
+        const key = `${String(row[1]).trim()}|${normalizeSquadName(row[2])}`;
+        leaderRowCounts.set(key, (leaderRowCounts.get(key) || 0) + 1);
+    }
+
     for (const row of squadLeaders) {
         if (!row || !row[1] || !normalizeSquadName(row[2])) {
             continue; // hole row (sheet deletes are row clears)
         }
         const name = normalizeSquadName(row[2]);
         const ownerId = String(row[1]).trim();
+        const key = `${ownerId}|${name}`;
 
-        // Consume one of the owner's known types for this name (Competitive
-        // first, so single-row squads keep today's behavior); fall back to
-        // the general resolution chain when none remain.
-        const ownerTypes = typesByOwnerName.get(`${ownerId}|${name}`);
+        const ownerTypes = typesByOwnerName.get(key);
         let squadType;
-        if (ownerTypes && ownerTypes.size > 0) {
+        if ((leaderRowCounts.get(key) || 0) > 1 && ownerTypes && ownerTypes.size > 0) {
             squadType = ownerTypes.has('Competitive') ? 'Competitive'
                 : ownerTypes.has('Casual') ? 'Casual' : [...ownerTypes][0];
             ownerTypes.delete(squadType);
@@ -87,12 +95,12 @@ function planImport({ allData = [], squadLeaders = [], squadMembers = [] }) {
             squadType = resolveType(allData, ownerId, name, anomalies);
         }
 
-        const key = `${name}|${squadType}`;
-        if (seen.has(key)) {
-            anomalies.push(`duplicate leader row for ${key}; first row wins`);
+        const seenKey = `${name}|${squadType}`;
+        if (seen.has(seenKey)) {
+            anomalies.push(`duplicate leader row for ${seenKey}; first row wins`);
             continue;
         }
-        seen.add(key);
+        seen.add(seenKey);
         squads.push({
             name,
             squadType,

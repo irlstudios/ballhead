@@ -134,7 +134,12 @@ module.exports = {
             // across owners.
             const holdersAfter = await squadDb.fetchSquadsByName(squadName);
             if (holdersAfter.some((s) => String(s.owner_id) !== String(userId))) {
-                await squadDb.disbandSquad(created.id, { ownerId: userId }).catch(() => {});
+                // Compensation must actually land: a swallowed failure here
+                // would keep the row while telling the user it was rejected,
+                // recreating the split-owner state this check exists to stop.
+                // A throw falls through to the outer catch, which logs and
+                // reports the error.
+                await squadDb.disbandSquad(created.id, { ownerId: userId });
                 return interaction.editReply(notice('Squad Tag Taken', `The squad tag **${squadName}** is already taken.`));
             }
 

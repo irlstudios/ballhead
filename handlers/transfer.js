@@ -82,7 +82,9 @@ const handleAccept = async (interaction, transfer) => {
 
     // Types that will change hands (the whole same-name group moves inside
     // the transfer transaction), captured before the swap for role cleanup.
-    const transferredTypes = (await squadDb.fetchSquadsByName(squadName))
+    // Keyed on the resolved row's CURRENT name: the request's stored name
+    // goes stale if the squad was renamed while the transfer sat pending.
+    const transferredTypes = (await squadDb.fetchSquadsByName(squad.name))
         .filter(s => String(s.owner_id) === String(leaderId))
         .map(s => s.squad_type);
 
@@ -103,7 +105,9 @@ const handleAccept = async (interaction, transfer) => {
         await targetMember.roles.add(SQUAD_LEADER_ROLE_ID).catch(e =>
             logger.error(`[Transfer] Failed to add leader role to ${targetId}:`, e.message)
         );
-        if (squadType === 'Competitive') {
+        // Current types, not the request's stored squad_type: a legacy row may
+        // be labelled Casual while the pair also moves a Competitive squad.
+        if (transferredTypes.includes('Competitive')) {
             await targetMember.roles.add(COMPETITIVE_SQUAD_OWNER_ROLE_ID).catch(e =>
                 logger.error(`[Transfer] Failed to add comp owner role to ${targetId}:`, e.message)
             );

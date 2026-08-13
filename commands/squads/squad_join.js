@@ -7,20 +7,6 @@ const { buildTextBlock, buildNoticeContainer } = require('../../utils/ui');
 const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
-// A Casual+Competitive pair shares its name and roster; members attach to the
-// Competitive row (where the import put them), so the pool must never offer
-// the Casual row of a pair as a separate join target.
-function collapsePairs(pool) {
-    const byName = new Map();
-    for (const s of pool || []) {
-        const existing = byName.get(s.name);
-        if (!existing || (existing.squad_type !== 'Competitive' && s.squad_type === 'Competitive')) {
-            byName.set(s.name, s);
-        }
-    }
-    return [...byName.values()];
-}
-
 function pickRandomSquad(pool) {
     if (!Array.isArray(pool) || pool.length === 0) {
         return null;
@@ -30,7 +16,6 @@ function pickRandomSquad(pool) {
 
 module.exports = {
     pickRandomSquad,
-    collapsePairs,
     data: new SlashCommandBuilder()
         .setName('squad-join-random')
         .setDescription('Attempt to join a random squad that is currently open.'),
@@ -88,7 +73,7 @@ module.exports = {
             let chosenSquad = null;
             let joined = false;
             for (let attempt = 0; attempt < 2 && !joined; attempt++) {
-                const pool = collapsePairs(await squadDb.fetchOpenSquadsWithSpace());
+                const pool = await squadDb.fetchOpenSquadsWithSpace();
                 chosenSquad = pickRandomSquad(pool);
                 if (!chosenSquad) {
                     const infoContainer = buildNoticeContainer({

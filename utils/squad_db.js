@@ -98,10 +98,18 @@ const fetchAllSquadsWithCounts = async () => {
 };
 
 // The /squad join-random pool: open squads with room for one more member.
+// The Casual half of a Casual+Competitive pair is excluded at the source
+// (members live on the Competitive row), so a full Competitive can never
+// expose its empty Casual sibling as a separate join target.
 const fetchOpenSquadsWithSpace = async () => {
     const r = await executeQuery(
         `SELECT s.* FROM squads s LEFT JOIN squad_members m ON m.squad_id = s.id
          WHERE s.open_squad
+           AND NOT EXISTS (
+               SELECT 1 FROM squads c
+               WHERE c.name = s.name AND c.owner_id = s.owner_id
+                 AND c.squad_type = 'Competitive' AND c.id <> s.id
+           )
          GROUP BY s.id
          HAVING COUNT(m.user_id) < $1`,
         [MAX_SQUAD_MEMBERS - 1]
