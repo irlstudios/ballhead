@@ -16,12 +16,11 @@ const {
     LEVEL_5_ROLE_ID,
     HIGHER_LEVEL_ROLES,
     SQUAD_OWNER_ROLES,
-    TOP_COMP_SQUAD_ROLE_ID,
     BOOSTER_ROLE_ID,
     MODERATOR_ROLES,
     PROGRAM_ROLE_IDS,
 } = require('../../config/constants');
-const { compSquadLevelRoles, mascotSquads } = require('../../config/squads');
+const { mascotSquads } = require('../../config/squads');
 const { RANK_ROLE_IDS } = require('../../jobs/rank-role-sync');
 
 const SUBTITLE = 'Role Customization';
@@ -36,7 +35,6 @@ const PROTECTED_ROLE_IDS = new Set([
     ...MODERATOR_ROLES,
     ...HIGHER_LEVEL_ROLES,
     ...SQUAD_OWNER_ROLES,
-    ...compSquadLevelRoles,
     ...mascotSquads.map(squad => squad.roleId),
     ...RANK_ROLE_IDS,
     FF_OFFICIAL_ROLE_ID,
@@ -48,7 +46,6 @@ const PROTECTED_ROLE_IDS = new Set([
     LEAGUE_OWNER_ROLE_ID,
     LEAGUE_CO_OWNER_ROLE_ID,
     LEVEL_5_ROLE_ID,
-    TOP_COMP_SQUAD_ROLE_ID,
     BOOSTER_ROLE_ID,
 ]);
 

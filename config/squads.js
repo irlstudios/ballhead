@@ -9,25 +9,11 @@ const mascotSquads = Object.freeze([
     Object.freeze({ name: 'Alligator Squad', roleId: '1361466697059664043' }),
 ]);
 
-const compSquadLevelRoles = Object.freeze([
-    '1288918067178508423',
-    '1288918165417365576',
-    '1288918209294237707',
-    '1288918281343733842',
-]);
-
-function getSquadTypeRoles(squadType) {
-    if (squadType === 'Competitive') return compSquadLevelRoles;
-    return [];
-}
-
 function findMascotByName(eventSquadName) {
     return mascotSquads.find(m => m.name === eventSquadName) || null;
 }
 
 module.exports = {
     mascotSquads,
-    compSquadLevelRoles,
-    getSquadTypeRoles,
     findMascotByName,
 };

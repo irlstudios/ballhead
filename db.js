@@ -679,20 +679,40 @@ const deleteSquadApplicationById = async (id) => {
 };
 
 const ensureInvitesSchema = async () => {
+    // Historically this table only ever existed in prod; the CREATE brings it
+    // under code management so fresh environments work (2026-08).
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS invites (
+            id SERIAL PRIMARY KEY,
+            command_user_id TEXT NOT NULL,
+            invited_member_id TEXT NOT NULL,
+            squad_name TEXT NOT NULL,
+            squad_type TEXT,
+            invite_status TEXT NOT NULL DEFAULT 'Pending',
+            message_id TEXT,
+            tracking_message_id TEXT,
+            squad_id INTEGER,
+            expires_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    `);
     await executeQuery(
         'ALTER TABLE invites ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ'
     ).catch(() => {});
     await executeQuery(
         'ALTER TABLE invites ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()'
     ).catch(() => {});
+    await executeQuery(
+        'ALTER TABLE invites ADD COLUMN IF NOT EXISTS squad_id INTEGER'
+    ).catch(() => {});
 };
 
-const insertInvite = async (command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt) => {
+const insertInvite = async (command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt, squadId = null) => {
     const query = `
-        INSERT INTO invites (command_user_id, invited_member_id, squad_name, invite_status, message_id, tracking_message_id, squad_type, expires_at, created_at)
-        VALUES ($1, $2, $3, 'Pending', $4, $5, $6, $7, NOW())
+        INSERT INTO invites (command_user_id, invited_member_id, squad_name, invite_status, message_id, tracking_message_id, squad_type, expires_at, created_at, squad_id)
+        VALUES ($1, $2, $3, 'Pending', $4, $5, $6, $7, NOW(), $8)
     `;
-    await executeQuery(query, [command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt || null]);
+    await executeQuery(query, [command_user_id, invited_member_id, squad_name, message_id, tracking_message_id, squad_type, expiresAt || null, squadId]);
 };
 
 const fetchExpiredPendingInvites = async () => {
@@ -751,33 +771,6 @@ const removeRep = async (user_id, amount) => {
     return result.rows;
 };
 
-// Squad State
-async function ensureSquadStateTable() {
-    const query = `
-        CREATE TABLE IF NOT EXISTS squad_state (
-            key VARCHAR(255) PRIMARY KEY,
-            value VARCHAR(1024),
-            updated_at TIMESTAMP DEFAULT NOW()
-        )
-    `;
-    return executeQuery(query);
-}
-
-async function getSquadState(key) {
-    const query = 'SELECT value, updated_at FROM squad_state WHERE key = $1';
-    const result = await executeQuery(query, [key]);
-    return result.rows[0] || null;
-}
-
-async function setSquadState(key, value) {
-    const query = `
-        INSERT INTO squad_state (key, value, updated_at)
-        VALUES ($1, $2, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()
-    `;
-    return executeQuery(query, [key, value]);
-}
-
 // Transfer Requests
 async function ensureTransferRequestsTable() {
     const query = `
@@ -793,15 +786,16 @@ async function ensureTransferRequestsTable() {
             created_at TIMESTAMP DEFAULT NOW()
         )
     `;
-    return executeQuery(query);
+    await executeQuery(query);
+    await executeQuery('ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS squad_id INTEGER').catch(() => {});
 }
 
-async function insertTransferRequest({ leaderId, targetId, squadName, squadType, messageId, expiresAt }) {
+async function insertTransferRequest({ leaderId, targetId, squadName, squadType, messageId, expiresAt, squadId = null }) {
     const query = `
-        INSERT INTO transfer_requests (leader_id, target_id, squad_name, squad_type, message_id, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
+        INSERT INTO transfer_requests (leader_id, target_id, squad_name, squad_type, message_id, expires_at, squad_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id
     `;
-    const result = await executeQuery(query, [leaderId, targetId, squadName, squadType, messageId, expiresAt]);
+    const result = await executeQuery(query, [leaderId, targetId, squadName, squadType, messageId, expiresAt, squadId]);
     return result.rows[0];
 }
 
@@ -2019,9 +2013,50 @@ const fetchLeaguesForDirectory = async () => {
     return result.rows;
 };
 
+// ---------------------------------------------------------------------------
+// Squads (Postgres source of truth; replaced the Squads Google Sheet 2026-08)
+// ---------------------------------------------------------------------------
+
+const ensureSquadsSchema = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squads (
+            id              SERIAL PRIMARY KEY,
+            name            TEXT NOT NULL,
+            squad_type      TEXT NOT NULL,
+            owner_id        TEXT NOT NULL,
+            owner_username  TEXT,
+            event_squad     TEXT,
+            open_squad      BOOLEAN NOT NULL DEFAULT FALSE,
+            parent_squad_id INTEGER REFERENCES squads(id),
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (name, squad_type)
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_squads_owner ON squads (owner_id)')
+        .catch((err) => logger.error('[DB] idx_squads_owner:', err.message));
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squad_members (
+            squad_id  INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+            user_id   TEXT NOT NULL UNIQUE,
+            username  TEXT,
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (squad_id, user_id)
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS user_squad_prefs (
+            user_id        TEXT PRIMARY KEY,
+            invites_opt_in BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    `);
+};
+
 module.exports = {
     executeQuery,
     removeRep,
+    ensureSquadsSchema,
     fetchTopUsersByReputation,
     insertCommandUsage,
     insertSquadApplication,
@@ -2073,9 +2108,6 @@ module.exports = {
     loadAllLfgParticipants,
     findLfgParticipantsByKey,
     upsertLfgQueue,
-    ensureSquadStateTable,
-    getSquadState,
-    setSquadState,
     ensureTransferRequestsTable,
     insertTransferRequest,
     fetchTransferRequestByMessageId,

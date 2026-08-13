@@ -6,8 +6,8 @@ const assert = require('node:assert/strict');
 const OWNER_ID = '111111111111111111';
 const DEPARTED_MEMBER_ID = '222222222222222222';
 
-function installSheetsMock(mockExports) {
-    const modulePath = require.resolve('../utils/sheets_cache');
+function installMock(relativePath, mockExports) {
+    const modulePath = require.resolve(relativePath);
     require.cache[modulePath] = {
         id: modulePath,
         filename: modulePath,
@@ -25,48 +25,31 @@ function payloadText(payload) {
 }
 
 test('/squad remove-member removes a stored member who is no longer in the guild', async () => {
-    const clearedRanges = [];
-    const updates = [];
+    const removals = [];
     const replies = [];
     const followUps = [];
-    const sheetValues = {
-        'All Data!A:H': [
-            ['Username', 'Discord ID', 'Squad', 'Type', 'Event', 'Active', 'Leader', 'Preference'],
-            ['Owner', OWNER_ID, 'ALPHA', 'Casual', 'N/A', 'TRUE', 'Yes', 'TRUE'],
-            ['Departed Player', DEPARTED_MEMBER_ID, 'ALPHA', 'Casual', 'N/A', 'TRUE', 'No', 'FALSE'],
-        ],
-        'Squad Leaders!A:G': [
-            ['Username', 'Discord ID', 'Squad', 'Event Squad', 'Unknown', 'Created', 'Parent'],
-            ['Owner', OWNER_ID, 'ALPHA', 'N/A', 'FALSE', '07/25/26', ''],
-            ['Owner', OWNER_ID, 'BETA', 'N/A', 'FALSE', '07/25/26', ''],
-        ],
-        'Squad Members!A:E': [
-            ['Username', 'Discord ID', 'Squad', 'Joined', 'Unknown'],
-            ['Departed Player', DEPARTED_MEMBER_ID, 'ALPHA', '07/01/26', ''],
-        ],
-    };
-    const sheets = {
-        spreadsheets: {
-            values: {
-                get: async ({ range }) => ({ data: { values: sheetValues[range] || [] } }),
-                clear: async ({ range }) => {
-                    clearedRanges.push(range);
-                },
-                update: async (request) => {
-                    updates.push(request);
-                },
-            },
-        },
-    };
 
-    installSheetsMock({
-        getSheetsClient: async () => sheets,
-        getCachedValues: async () => new Map(),
-        invalidateRanges: () => {},
+    const alpha = { id: 1, name: 'ALPHA', squad_type: 'Casual', owner_id: OWNER_ID, event_squad: null };
+    const beta = { id: 2, name: 'BETA', squad_type: 'Casual', owner_id: OWNER_ID, event_squad: null };
+
+    installMock('../utils/squad_db', {
+        normalizeSquadName: (raw) => String(raw ?? '').trim().toUpperCase(),
+        disambiguateOwnedSquad: () => ({ squad: alpha, error: null }),
+        fetchSquadsByOwner: async () => [alpha, beta],
+        fetchMembership: async (userId) => (userId === DEPARTED_MEMBER_ID
+            ? { squad: alpha, member: { user_id: DEPARTED_MEMBER_ID, username: 'Departed Player', joined_at: null } }
+            : null),
+        fetchSquadMembers: async () => [{ squad_id: 1, user_id: DEPARTED_MEMBER_ID, username: 'Departed Player' }],
+        removeSquadMember: async (squadId, userId) => {
+            removals.push([squadId, userId]);
+            return { squad_id: squadId, user_id: userId };
+        },
     });
+
     const commandPath = require.resolve('../commands/squads/squad_remove_member');
     delete require.cache[commandPath];
     const command = require(commandPath);
+
     const guild = {
         members: {
             fetch: async () => {
@@ -104,9 +87,7 @@ test('/squad remove-member removes a stored member who is no longer in the guild
 
     await command.execute(interaction);
 
-    assert.deepEqual(clearedRanges, ['Squad Members!A2:E2']);
-    assert.deepEqual(updates.map(update => update.range), ['All Data!C3:G3']);
-    assert.deepEqual(updates[0].resource.values, [['N/A', 'N/A', 'N/A', 'FALSE', 'No']]);
+    assert.deepEqual(removals, [[1, DEPARTED_MEMBER_ID]]);
     assert.equal(followUps.length, 0);
     assert.match(payloadText(replies.at(-1)), /no longer in the server/i);
     assert.match(payloadText(replies.at(-1)), /successfully removed/i);

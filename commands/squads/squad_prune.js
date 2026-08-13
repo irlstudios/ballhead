@@ -1,9 +1,8 @@
 'use strict';
 
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID } = require('../../config/constants');
-const { disambiguateSquad } = require('../../utils/squad_queries');
+const { GYM_CLASS_GUILD_ID } = require('../../config/constants');
+const squadDb = require('../../utils/squad_db');
 const { pruneSquad } = require('../../utils/squad_prune');
 const logger = require('../../utils/logger');
 
@@ -23,29 +22,18 @@ module.exports = {
         try {
             const userId = interaction.user.id;
             const specifiedSquad = interaction.options.getString('squad');
-            const sheets = await getSheetsClient();
             const guild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
 
-            const results = await getCachedValues({
-                sheets,
-                spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E', 'All Data!A:H'],
-                ttlMs: 30000,
-            });
-            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
-            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
-            const allData = (results.get('All Data!A:H') || []).slice(1);
-
-            const { squad, error } = disambiguateSquad(squadLeaders, userId, specifiedSquad);
+            const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, specifiedSquad);
             if (error) {
                 return interaction.editReply({ content: error });
             }
 
-            const squadName = squad[2];
             const allGuildMembers = await guild.members.fetch();
             const guildMemberIds = new Set(allGuildMembers.keys());
 
-            const pruned = await pruneSquad(sheets, guild, guildMemberIds, squadName, squadMembers, allData);
+            const pruned = await pruneSquad(guild, guildMemberIds, squad);
 
             if (pruned.length === 0) {
                 return interaction.editReply({ content: 'All members are still in the server.' });
@@ -58,11 +46,10 @@ module.exports = {
                     `## Squad Prune Results\nRemoved ${pruned.length} members who left the server: ${names}`
                 )
             );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
         } catch (error) {
             logger.error('[Squad Prune Command] Error:', error);
-            await interaction.editReply({ content: 'An error occurred while pruning the squad.' });
+            return interaction.editReply({ content: 'An error occurred while pruning the squad.' });
         }
     },
 };

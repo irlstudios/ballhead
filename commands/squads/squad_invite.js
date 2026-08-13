@@ -1,28 +1,47 @@
 const { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { insertInvite, fetchInviteById, deleteInvite } = require('../../db');
-const { getSheetsClient } = require('../../utils/sheets_cache');
 const {
-    SPREADSHEET_SQUADS,
     GYM_CLASS_GUILD_ID,
     LOGGING_CHANNEL_ID,
     BOT_BUGS_CHANNEL_ID,
-    MAX_SQUAD_MEMBERS,
-    COMPETITIVE_SQUAD_OWNER_ROLE_ID,
 } = require('../../config/constants');
-const {
-    disambiguateSquad,
-    isSameSquad,
-    normalizeId,
-    resolveSquadType,
-} = require('../../utils/squad_queries');
+const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
+
+// Pure invite gate so every refusal is unit-testable. Order matters: identity
+// problems first, then the target's state, then capacity.
+function inviteGate({ inviter, target, targetIsBot, targetInGuild, targetMembership, targetOwnedSquads, optIn, memberCount }) {
+    if (target === inviter) {
+        return { ok: false, code: 'SELF' };
+    }
+    if (targetIsBot) {
+        return { ok: false, code: 'BOT' };
+    }
+    if (!targetInGuild) {
+        return { ok: false, code: 'NOT_IN_GUILD' };
+    }
+    if (targetOwnedSquads.length > 0) {
+        return { ok: false, code: 'TARGET_LEADS' };
+    }
+    if (targetMembership) {
+        return { ok: false, code: 'TARGET_IN_SQUAD' };
+    }
+    if (!optIn) {
+        return { ok: false, code: 'OPTED_OUT' };
+    }
+    if (memberCount >= squadDb.MAX_SQUAD_MEMBERS - 1) {
+        return { ok: false, code: 'FULL' };
+    }
+    return { ok: true };
+}
 // Discord API error codes that all mean "the bot cannot deliver a DM to this user"
 // 50007: user has DMs disabled / blocked the bot
 // 50278: no mutual guilds (commonly the bot is blocked, even if they share a server)
 const UNDELIVERABLE_DM_CODES = new Set([50007, 50278]);
 
 module.exports = {
+    inviteGate,
     data: new SlashCommandBuilder()
         .setName('squad-invite')
         .setDescription('Invite a member to join your squad (Squad Leaders only).')
@@ -87,24 +106,10 @@ module.exports = {
             return;
         }
 
-        const sheets = await getSheetsClient();
-
         try {
-            const { getCachedValues } = require('../../utils/sheets_cache');
-            const results = await getCachedValues({
-                sheets,
-                spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['All Data!A:H', 'Squad Members!A:E', 'Squad Leaders!A:G', 'Applications!A:F'],
-                ttlMs: 30000,
-            });
-
-            const allData = (results.get('All Data!A:H') || []).slice(1);
-            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
-            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
-            const squadApplications = (results.get('Applications!A:F') || []).slice(1);
-
             const specifiedSquad = interaction.options.getString('squad');
-            const { squad: inviterLeaderRow, error: disambigError } = disambiguateSquad(squadLeaders, commandUserID, specifiedSquad);
+            const ownedSquads = await squadDb.fetchSquadsByOwner(commandUserID);
+            const { squad, error: disambigError } = squadDb.disambiguateOwnedSquad(ownedSquads, specifiedSquad);
             if (disambigError) {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
@@ -113,82 +118,33 @@ module.exports = {
                 });
                 return;
             }
-            const squadName = inviterLeaderRow[2]?.trim();
-            if (!squadName || squadName === 'N/A') {
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent('Could not determine your squad name. Please contact an admin.')],
-                    ephemeral: true
-                });
-                return;
-            }
-            const hasCompetitiveOwnerRole = Boolean(
-                interaction.member?.roles?.cache?.has(COMPETITIVE_SQUAD_OWNER_ROLE_ID)
-            );
-            const typeResolution = resolveSquadType(allData, commandUserID, squadName, {
-                applicationRows: squadApplications,
-                hasCompetitiveOwnerRole,
+            const squadName = squad.name;
+            const finalSquadType = squad.squad_type;
+
+            const gate = inviteGate({
+                inviter: commandUserID,
+                target: targetUserId,
+                targetIsBot: targetUser.bot,
+                targetInGuild: Boolean(targetGuildMember),
+                targetMembership: await squadDb.fetchMembership(targetUserId),
+                targetOwnedSquads: await squadDb.fetchSquadsByOwner(targetUserId),
+                optIn: await squadDb.getInvitesOptIn(targetUserId),
+                memberCount: (await squadDb.fetchSquadMembers(squad.id)).length,
             });
-            const finalSquadType = typeResolution.squadType;
-            if (!finalSquadType || finalSquadType === 'N/A') {
-                logger.warn(
-                    `[Squad Invite] Could not resolve type for owner ${commandUserID}, squad ${squadName} (${typeResolution.source}).`
-                );
+            if (!gate.ok) {
+                const copy = {
+                    SELF: 'You cannot invite yourself to your own squad.',
+                    BOT: 'You cannot invite bots to a squad.',
+                    NOT_IN_GUILD: 'That user is not currently in this server and cannot join a squad.',
+                    TARGET_LEADS: `<@${targetUserId}> is already a squad leader and cannot be invited.`,
+                    TARGET_IN_SQUAD: `<@${targetUserId}> is already in another squad.`,
+                    OPTED_OUT: `<@${targetUserId}> has opted out of receiving squad invitations.`,
+                    FULL: `Your squad **${squadName}** is full (${squadDb.MAX_SQUAD_MEMBERS}/${squadDb.MAX_SQUAD_MEMBERS}).`,
+                }[gate.code];
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent('Could not determine your squad type. Please contact an admin.')],
-                    ephemeral: true
-                });
-                return;
-            }
-
-            const memberIdsInSquad = new Set(squadMembers
-                .filter(row => row && row.length > 2 && isSameSquad(row[2], squadName))
-                .map(row => normalizeId(row[1]))
-                .filter(Boolean));
-            const currentMemberCount = memberIdsInSquad.size + 1;
-            if (currentMemberCount >= MAX_SQUAD_MEMBERS) {
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent(`Your squad **${squadName}** is full (${currentMemberCount}/${MAX_SQUAD_MEMBERS}).`)],
-                    ephemeral: true
-                });
-                return;
-            }
-
-            const inviteeIsLeader = squadLeaders.find(
-                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
-            );
-            if (inviteeIsLeader) {
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent(`<@${targetUserId}> is already a squad leader and cannot be invited.`)],
-                    ephemeral: true
-                });
-                return;
-            }
-
-            const inviteeInSquad = squadMembers.find(
-                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
-            );
-            if (inviteeInSquad) {
-                const existingSquad = inviteeInSquad[2] || 'another squad';
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent(`<@${targetUserId}> is already in **${existingSquad}**.`)],
-                    ephemeral: true
-                });
-                return;
-            }
-
-            const inviteeAllDataRow = allData.find(
-                row => row && row.length > 1 && normalizeId(row[1]) === targetUserId
-            );
-            if (inviteeAllDataRow && inviteeAllDataRow.length > 7 && inviteeAllDataRow[7] === 'FALSE') {
-                await interaction.editReply({
-                    flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent(`<@${targetUserId}> has opted out of receiving squad invitations.`)],
-                    ephemeral: true
+                    components: [new TextDisplayBuilder().setContent(copy)],
+                    ephemeral: true,
                 });
                 return;
             }
@@ -270,7 +226,8 @@ module.exports = {
                     postData.message_id,
                     postData.tracking_message_id,
                     postData.squad_type,
-                    expiresAt
+                    expiresAt,
+                    squad.id
                 );
             } catch (databaseError) {
                 const unavailableContainer = new ContainerBuilder()

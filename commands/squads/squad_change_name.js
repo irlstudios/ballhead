@@ -1,204 +1,154 @@
+'use strict';
+
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const { GYM_CLASS_GUILD_ID, LOGGING_CHANNEL_ID } = require('../../config/constants');
+const { buildTextBlock } = require('../../utils/ui');
+const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
+// Pure rename gate. nameHolders = squads already holding the new name; a
+// holder with a different owner blocks the rename (same-owner holders are the
+// caller's own pair, which renames together).
+function renameGate({ userId, newName, targetSquad, nameHolders }) {
+    if (!/^[A-Z0-9]{1,4}$/.test(newName)) {
+        return { ok: false, code: 'BAD_NAME' };
+    }
+    if (newName === targetSquad.name) {
+        return { ok: false, code: 'SAME_NAME' };
+    }
+    if (nameHolders.some((s) => String(s.owner_id) !== String(userId))) {
+        return { ok: false, code: 'NAME_TAKEN' };
+    }
+    return { ok: true };
+}
+
+function notice(title, lines) {
+    const container = new ContainerBuilder();
+    container.addTextDisplayComponents(
+        new TextDisplayBuilder().setContent(`## ${title}`),
+        new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
+    );
+    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+}
+
+// Shared by /squad rename and /squad force-name: rename every row holding the
+// old name (a Casual+Competitive pair renames together), then sweep member
+// and leader nicknames and DM members.
+async function renameSquadRows(client, guild, rows, newName, { notifyLines }) {
+    // One statement for the whole pair: a failure can never leave the Casual
+    // and Competitive rows under different names.
+    const renamed = await squadDb.renameSquads(rows.map((r) => r.id), newName);
+    if (renamed.length === 0) {
+        return null;
+    }
+
+    const oldName = rows[0].name;
+    const affectedIds = new Set([rows[0].owner_id]);
+    for (const row of rows) {
+        for (const m of await squadDb.fetchSquadMembers(row.id)) {
+            affectedIds.add(m.user_id);
+        }
+    }
+
+    for (const memberId of affectedIds) {
+        try {
+            const member = await guild.members.fetch(memberId);
+            if (memberId !== rows[0].owner_id) {
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({ title: 'Squad Renamed', subtitle: 'Squad Update', lines: notifyLines(oldName, newName) });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(() => {});
+            }
+            if (member.nickname && member.nickname.toUpperCase().startsWith(`[${oldName}]`)) {
+                await member.setNickname(`[${newName}] ${member.user.username}`).catch(nickError => {
+                    if (nickError.code !== 50013) logger.info(`Could not update nickname for ${member.user.tag}: ${nickError.message}`);
+                });
+            } else if (memberId === rows[0].owner_id) {
+                await member.setNickname(`[${newName}] ${member.user.username}`).catch(() => {});
+            }
+        } catch (fetchError) {
+            if (fetchError.code !== 10007) logger.info(`Could not fetch ${memberId} for rename cleanup: ${fetchError.message}`);
+        }
+    }
+    return renamed;
+}
+
 module.exports = {
+    renameGate,
+    renameSquadRows,
     data: new SlashCommandBuilder()
         .setName('squad-rename')
         .setDescription('Change the name of your squad if you are the squad leader.')
         .addStringOption(option =>
             option.setName('new-name')
                 .setDescription('The new name for your squad. (1-4 alphanumeric characters)')
-                .setRequired(true)),
+                .setRequired(true))
+        .addStringOption(option =>
+            option.setName('squad')
+                .setDescription('Current squad name (required if you own multiple)')
+                .setRequired(false)),
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.user.id;
+        const userTag = interaction.user.tag;
         const newSquadName = interaction.options.getString('new-name').toUpperCase();
         const guild = interaction.guild;
 
-        const squadNamePattern = /^[A-Z0-9]{1,4}$/;
-        if (!squadNamePattern.test(newSquadName)) {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Invalid Squad Name'),
-                new TextDisplayBuilder().setContent('The name must be between 1 and 4 alphanumeric characters.')
-            );
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
-        }
-
-        const sheets = await getSheetsClient();
-
         try {
-            const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:G'
-            });
-
-            const squadMembersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Members!A:E'
-            });
-
-            const allDataResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'All Data!A:H'
-            });
-
-            const squadLeaders = squadLeadersResponse.data.values || [];
-            const squadMembers = squadMembersResponse.data.values || [];
-            const allData = allDataResponse.data.values || [];
-
-            const leaderRowIndex = squadLeaders.findIndex(row => row && row.length > 1 && row[1] === userId);
-            if (leaderRowIndex === -1) {
-                const container = new ContainerBuilder();
-                container.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## No Squad Owned'),
-                    new TextDisplayBuilder().setContent('You do not own a squad, so you cannot change the squad name.')
-                );
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
-            }
-            const userSquadLeaderRow = squadLeaders[leaderRowIndex];
-            const currentSquadName = userSquadLeaderRow[2];
-
-            const isSquadNameTaken = squadLeaders.some((row, index) => row && row.length > 2 && row[2] === newSquadName && index !== leaderRowIndex);
-            if (isSquadNameTaken) {
-                const container = new ContainerBuilder();
-                container.addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent('## Name Already Used'),
-                    new TextDisplayBuilder().setContent(`The squad name ${newSquadName} is already in use.\nPlease choose a different name.`)
-                );
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, interaction.options.getString('squad'));
+            if (error) {
+                return interaction.editReply(notice('No Squad Owned', error));
             }
 
-            const updatedSquadLeaders = squadLeaders.map(row => {
-                if (!row || row.length < 3) return row;
-                if (row[1] === userId) {
-                    return [row[0], row[1], newSquadName, row[3], row[4], row[5]];
+            const nameHolders = await squadDb.fetchSquadsByName(newSquadName);
+            const gate = renameGate({ userId, newName: newSquadName, targetSquad: squad, nameHolders });
+            if (!gate.ok) {
+                const copy = {
+                    BAD_NAME: 'The name must be between 1 and 4 alphanumeric characters.',
+                    SAME_NAME: 'That is already your squad name.',
+                    NAME_TAKEN: `The squad name **${newSquadName}** is already taken.`,
+                }[gate.code];
+                return interaction.editReply(notice('Invalid Squad Name', copy));
+            }
+
+            const rowsToRename = ownedSquads.filter((s) => s.name === squad.name);
+            const oldName = squad.name;
+            let renamed;
+            try {
+                renamed = await renameSquadRows(interaction.client, guild, rowsToRename, newSquadName, {
+                    notifyLines: (from, to) => [`Your squad **${from}** has been renamed to **${to}** by the squad leader.`],
+                });
+            } catch (renameErr) {
+                if (renameErr.code === '23505') {
+                    return interaction.editReply(notice('Name Taken', `The squad name **${newSquadName}** was just taken. Pick another.`));
                 }
-                return row;
-            });
-
-            const updatedSquadMembers = squadMembers.map(row => {
-                if (!row || row.length < 3) return row;
-                if (row[2] === currentSquadName) {
-                    return [row[0], row[1], newSquadName, row[3], row[4]];
-                }
-                return row;
-            });
-
-            const updatedAllData = allData.map(row => {
-                if (!row || row.length < 3) return row;
-                if (row[2] === currentSquadName) {
-                    return [row[0], row[1], newSquadName, row[3], row[4], row[5], row[6], row[7]];
-                }
-                return row;
-            });
-
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:G',
-                valueInputOption: 'RAW',
-                resource: { values: updatedSquadLeaders }
-            });
-
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Members!A:E',
-                valueInputOption: 'RAW',
-                resource: { values: updatedSquadMembers }
-            });
-
-            await sheets.spreadsheets.values.update({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'All Data!A:H',
-                valueInputOption: 'RAW',
-                resource: { values: updatedAllData }
-            });
-
-            const squadMembersToNotify = squadMembers.filter(row => row && row.length > 2 && row[2] === currentSquadName);
-            for (const memberRow of squadMembersToNotify) {
-                if (!memberRow || memberRow.length < 2) continue;
-                const memberId = memberRow[1];
-                try {
-                    const member = await guild.members.fetch(memberId);
-                    if (member) {
-                        const dmContainer = new ContainerBuilder();
-                        dmContainer.addTextDisplayComponents(
-                            new TextDisplayBuilder().setContent('## Squad Name Changed'),
-                            new TextDisplayBuilder().setContent(`The squad name has been changed from **${currentSquadName}** to **${newSquadName}** by the squad leader.`)
-                        );
-                        await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] }).catch(err => logger.warn(`Failed to DM ${memberId}: ${err.message}`));
-
-                        try {
-                            await member.setNickname(`[${newSquadName}] ${member.user.username}`);
-                        } catch (error) {
-                            if (error.code !== 50013) {
-                                logger.warn(`Could not update nickname for ${member.user.tag} (${memberId}): ${error.message}`);
-                            }
-                        }
-                    }
-                } catch (error) {
-                    logger.warn(`Could not fetch member ${memberId} for notification: ${error.message}`);
-                }
+                throw renameErr;
+            }
+            if (!renamed) {
+                return interaction.editReply(notice('Rename Failed', 'Your squad could not be found. No changes were made.'));
             }
 
             try {
-                const leader = await guild.members.fetch(userId);
-                if (leader) {
-                    try {
-                        await leader.setNickname(`[${newSquadName}] ${leader.user.username}`);
-                    } catch (error) {
-                        if (error.code !== 50013) {
-                            logger.warn(`Could not update nickname for leader ${leader.user.tag} (${userId}): ${error.message}`);
-                        }
-                    }
-                }
-            } catch (error) {
-                logger.warn(`Could not fetch leader ${userId} for nickname update: ${error.message}`);
+                const loggingGuild = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID);
+                const loggingChannel = await loggingGuild.channels.fetch(LOGGING_CHANNEL_ID);
+                const logContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'Squad Renamed',
+                    subtitle: 'Squad Activity',
+                    lines: [`**${userTag}** (<@${userId}>) renamed squad **${oldName}** to **${newSquadName}**.`],
+                });
+                if (block) logContainer.addTextDisplayComponents(block);
+                await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
+            } catch (logError) {
+                logger.error('Failed to log squad rename:', logError);
             }
 
-
-            const loggingChannel = await interaction.client.guilds.fetch(GYM_CLASS_GUILD_ID)
-                .then(guild => guild.channels.fetch(LOGGING_CHANNEL_ID))
-                .catch(() => null);
-
-            if (loggingChannel) {
-                try {
-                    const logContainer = new ContainerBuilder();
-                    logContainer.addTextDisplayComponents(
-                        new TextDisplayBuilder().setContent('## Squad Name Changed'),
-                        new TextDisplayBuilder().setContent(`The squad **${currentSquadName}** has been renamed to **${newSquadName}** by **${interaction.user.tag}** (${interaction.user.id}).`)
-                    );
-                    await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
-                } catch (logError) {
-                    logger.error('Failed to send log message:', logError);
-                }
-            }
-
-            const successContainer = new ContainerBuilder();
-            successContainer.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Squad Name Changed'),
-                new TextDisplayBuilder().setContent(`Your squad name has been successfully changed from **${currentSquadName}** to **${newSquadName}**.\nAll members have been notified and nicknames updated (where possible).`)
-            );
-
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
-
+            return interaction.editReply(notice('Squad Renamed', `Your squad **${oldName}** is now **${newSquadName}**. Members were notified and nicknames updated where possible.`));
         } catch (error) {
-            logger.error('Error during the change-squad-name command execution:', error);
-            let errorMessage = 'An error occurred while changing the squad name. Please try again later.';
-            if (error.response && error.response.data && error.response.data.error) {
-                errorMessage += ` (Details: ${error.response.data.error.message})`;
-            } else if (error.message) {
-                errorMessage += ` (Details: ${error.message})`;
-            }
-            const errorContainer = new ContainerBuilder();
-            errorContainer.addTextDisplayComponents(
-                new TextDisplayBuilder().setContent('## Rename Failed'),
-                new TextDisplayBuilder().setContent(errorMessage)
-            );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            logger.error(`Error during /squad rename for ${userTag}:`, error);
+            return interaction.editReply(notice('Rename Failed', `An error occurred: ${error.message || 'Please try again later.'}`)).catch(err => logger.error('Failed to edit reply:', err));
         }
-    }
+    },
 };

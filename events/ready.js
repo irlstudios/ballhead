@@ -3,16 +3,14 @@ const { Routes } = require('discord-api-types/v10');
 const cron = require('node-cron');
 const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
-    ensureSquadStateTable, ensureTransferRequestsTable,
+    ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
     ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables,
     ensurePollTables, getPollPostCount } = require('../db');
 const { backfillAllForums } = require('../utils/poll_backfill');
-const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
-const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
-const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema } = require('../db');
+const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema, ensureSquadsSchema } = require('../db');
 const { runLeagueHealthCheck } = require('../jobs/league-health-check');
 const { runLeagueTierSync } = require('../jobs/league-tier-sync');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
@@ -159,7 +157,7 @@ module.exports = {
         // Ensure new DB tables. Each runs independently so a failure in one
         // does not prevent the others from being created.
         const migrations = [
-            ['squad_state', ensureSquadStateTable],
+            ['squads', ensureSquadsSchema],
             ['transfer_requests', ensureTransferRequestsTable],
             ['league_activity', ensureLeagueActivitySchema],
             ['league_officials', ensureLeagueOfficialsSchema],
@@ -203,9 +201,6 @@ module.exports = {
             logger.error('[Poll] Backfill check failed:', error);
         }
 
-        // Load top squad state from DB
-        await loadTopSquadFromDB();
-
         // Process expired transfer requests
         try {
             const expiredTransfers = await fetchExpiredPendingTransfers();
@@ -218,24 +213,6 @@ module.exports = {
         } catch (error) {
             logger.error('[Startup] Error processing expired transfers:', error);
         }
-
-        // Weekly: Top Comp Squad Announcement - Friday 4:00 PM Chicago
-        cron.schedule('0 16 * * 5', async () => {
-            try {
-                await syncTopSquad(client, true);
-            } catch (error) {
-                logger.error('[Cron] Top Squad Sync failed:', error);
-            }
-        }, { timezone: 'America/Chicago' });
-
-        // Daily: Level Role Sync - 11:45 PM Chicago
-        cron.schedule('45 23 * * *', async () => {
-            try {
-                await syncLevelRoles(client);
-            } catch (error) {
-                logger.error('[Cron] Level Role Sync failed:', error);
-            }
-        }, { timezone: 'America/Chicago' });
 
         // Daily: Reconcile squad membership and disband ownerless squads - 11:59 PM Chicago
         cron.schedule('59 23 * * *', async () => {
@@ -359,6 +336,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Top Squad (Fri 4PM CT), Level Sync (11:45PM CT), Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
+        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
     },
 };

@@ -4,9 +4,7 @@ const {
     SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
     MessageFlags, ContainerBuilder, TextDisplayBuilder,
 } = require('discord.js');
-const { getSheetsClient, getCachedValues } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, GYM_CLASS_GUILD_ID } = require('../../config/constants');
-const { disambiguateSquad, findMemberRow } = require('../../utils/squad_queries');
+const squadDb = require('../../utils/squad_db');
 const { insertTransferRequest } = require('../../db');
 const logger = require('../../utils/logger');
 
@@ -45,30 +43,18 @@ module.exports = {
                 return interaction.editReply({ content: 'You cannot transfer ownership to a bot.' });
             }
 
-            const sheets = await getSheetsClient();
-            const results = await getCachedValues({
-                sheets,
-                spreadsheetId: SPREADSHEET_SQUADS,
-                ranges: ['Squad Leaders!A:G', 'Squad Members!A:E', 'All Data!A:H'],
-                ttlMs: 30000,
-            });
-            const squadLeaders = (results.get('Squad Leaders!A:G') || []).slice(1);
-            const squadMembers = (results.get('Squad Members!A:E') || []).slice(1);
-            const allData = (results.get('All Data!A:H') || []).slice(1);
-
-            const { squad, error } = disambiguateSquad(squadLeaders, userId, specifiedSquad);
+            const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
+            const { squad, error } = squadDb.disambiguateOwnedSquad(ownedSquads, specifiedSquad);
             if (error) {
                 return interaction.editReply({ content: error });
             }
 
-            const squadName = squad[2];
-            // Squad type is in All Data col D (index 3), NOT Squad Leaders col D (which is Event Squad)
-            const allDataRow = allData.find(row => row && row.length > 3 && row[2]?.toUpperCase() === squadName.toUpperCase());
-            const squadType = allDataRow ? (allDataRow[3] || '') : '';
+            const squadName = squad.name;
+            const squadType = squad.squad_type;
 
             // Verify target is a member of this squad
-            const targetMemberRow = findMemberRow(squadMembers, targetUser.id, squadName);
-            if (!targetMemberRow) {
+            const targetMembership = await squadDb.fetchMembership(targetUser.id);
+            if (!targetMembership || targetMembership.squad.id !== squad.id) {
                 return interaction.editReply({
                     content: `**${targetUser.username}** is not a member of **${squadName}**.`,
                 });
@@ -115,6 +101,7 @@ module.exports = {
                 squadType,
                 messageId: dmMessage.id,
                 expiresAt,
+                squadId: squad.id,
             });
 
             await interaction.editReply({

@@ -85,11 +85,12 @@ const HIGHER_LEVEL_ROLES = [
 ];
 
 // Spreadsheet IDs
+// Frozen archive: squads moved to Postgres 2026-08. Read only by the one-time
+// import script (scripts/import_squads_from_sheets.js); the bot never touches it.
 const SPREADSHEET_SQUADS = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const SPREADSHEET_OFFICIALS = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
 const SPREADSHEET_CONTENT_CREATORS = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SPREADSHEET_RANKED_SESSIONS = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
-const SPREADSHEET_COMP_WINS = '1nO8wK4p27DgbOHQhuFrYfg1y78AvjYmw7yGYato1aus';
 const SPREADSHEET_LFO = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
 const SPREADSHEET_COMMUNITY_METRICS = '1cukQXP1_HKt-bwos3sd4-YR51EskJ6Fl_vgZR4hF0IQ';
 const SPREADSHEET_HOST_SESSIONS = '1BEypzniqiUb-fB7dfmV9AyODisSL3ZNIgPOCMBa6CQk';
@@ -207,11 +208,6 @@ const ITEMS_PER_PAGE = 10;
 // Squad constraints
 const MAX_SQUAD_MEMBERS = 10;
 
-// Role IDs - Top Squad
-const TOP_COMP_SQUAD_ROLE_ID = '1200889836844896316';
-
-// Channel IDs - Squad Announcements
-const TOP_SQUAD_ANNOUNCEMENT_CHANNEL_ID = '828618109794385970';
 
 // Sheet column indices
 const SL_SQUAD_NAME = 2;
@@ -265,7 +261,6 @@ module.exports = {
     SPREADSHEET_OFFICIALS,
     SPREADSHEET_CONTENT_CREATORS,
     SPREADSHEET_RANKED_SESSIONS,
-    SPREADSHEET_COMP_WINS,
     SPREADSHEET_LFO,
     SPREADSHEET_COMMUNITY_METRICS,
     SPREADSHEET_HOST_SESSIONS,
@@ -299,8 +294,6 @@ module.exports = {
     SL_SQUAD_NAME,
     SL_EVENT_SQUAD,
     SL_PARENT_SQUAD,
-    TOP_COMP_SQUAD_ROLE_ID,
-    TOP_SQUAD_ANNOUNCEMENT_CHANNEL_ID,
     AD_ID,
     AD_PREFERENCE,
 };
