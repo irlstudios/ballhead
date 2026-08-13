@@ -16,11 +16,33 @@ test('rejects bad names and duplicate types, requires shared name across types',
     assert.strictEqual(mismatch.expected, 'ABC');
 });
 
-test('second competitive squad is refused (B teams closed)', () => {
+test('second competitive squad becomes a B team linked to the A team', () => {
+    const aTeam = { ...own('ABC', 'Competitive'), id: 11, parent_squad_id: null };
+    const result = registrationGate({ ...base, squadName: 'NEW1', squadType: 'Competitive', ownedSquads: [aTeam] });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.bTeam, true);
+    assert.strictEqual(result.parent, aTeam);
+});
+
+test('a B team needs its own tag and only one B team is allowed', () => {
+    const aTeam = { ...own('ABC', 'Competitive'), id: 11, parent_squad_id: null };
+    const bTeam = { ...own('BBB', 'Competitive'), id: 12, parent_squad_id: 11 };
     assert.strictEqual(
-        registrationGate({ ...base, squadName: 'NEW1', squadType: 'Competitive', ownedSquads: [own('ABC', 'Competitive')] }).code,
-        'BTEAM_CLOSED'
+        registrationGate({ ...base, squadName: 'ABC', squadType: 'Competitive', ownedSquads: [aTeam], nameHolders: [aTeam] }).code,
+        'BTEAM_SAME_NAME'
     );
+    assert.strictEqual(
+        registrationGate({ ...base, squadName: 'NEW1', squadType: 'Competitive', ownedSquads: [aTeam, bTeam] }).code,
+        'HAS_BTEAM'
+    );
+});
+
+test('the casual shared-name rule does not apply to a B team', () => {
+    const aTeam = { ...own('ABC', 'Competitive'), id: 11, parent_squad_id: null };
+    const casual = own('ABC', 'Casual');
+    const result = registrationGate({ ...base, squadName: 'XYZ', squadType: 'Competitive', ownedSquads: [aTeam, casual] });
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.bTeam, true);
 });
 
 test('competitive must share the casual name', () => {
