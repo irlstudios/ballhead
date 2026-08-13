@@ -6,6 +6,21 @@ const { noticePayload } = require('../utils/ui');
 const { fetchTransferRequestByMessageId, updateTransferRequestStatus } = require('../db');
 const squadDb = require('../utils/squad_db');
 const { ownerRolesAfterDisband } = require('../commands/squads/squad_disband');
+const { finalizeApplicationCard } = require('./squad_discovery');
+
+async function notifyApplicant(client, userId, squadName) {
+    try {
+        const user = await client.users.fetch(String(userId));
+        const container = new ContainerBuilder();
+        container.addTextDisplayComponents(
+            new TextDisplayBuilder().setContent('## Application Closed'),
+            new TextDisplayBuilder().setContent(`**${squadName}** changed owners, so your pending application was closed. You can apply again anytime.`)
+        );
+        await user.send({ flags: MessageFlags.IsComponentsV2, components: [container] });
+    } catch (error) {
+        logger.error(`[Transfer] Failed to notify applicant ${userId}:`, error.message);
+    }
+}
 const {
     GYM_CLASS_GUILD_ID,
     SQUAD_LEADER_ROLE_ID,
@@ -121,6 +136,15 @@ const handleAccept = async (interaction, transfer) => {
                 logger.error(`[Transfer] Failed to remove role ${roleId} from ${leaderId}:`, e.message)
             );
         }
+    }
+
+    // Pending applications were addressed to the old owner (their DM holds
+    // the card); the new owner never sees them, so close them out.
+    for (const pending of await squadDb.fetchPendingApplicationsBySquad(squad.id)) {
+        const expired = await squadDb.claimApplication(pending.id, 'Expired', 'transfer');
+        if (!expired) continue;
+        await finalizeApplicationCard(interaction.client, expired, { ...squad, owner_id: leaderId }, '**Status:** Closed (squad changed owners)');
+        await notifyApplicant(interaction.client, expired.user_id, squadName);
     }
 
     await updateTransferRequestStatus(interaction.message.id, 'Accepted');

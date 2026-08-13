@@ -159,6 +159,9 @@ async function handleBrowseSelect(interaction) {
     if ((await squadDb.fetchSquadsByOwner(userId)).length > 0) {
         return editNotice(interaction, 'You are a squad leader and cannot join another squad.', 'Already a Leader');
     }
+    // ponytail: recruiting is checked just above, not inside the membership
+    // transaction; an owner flipping to Invite-only in that window admits one
+    // last member. Harmless, they can remove them.
     const result = await squadDb.addSquadMember(squad.id, userId, interaction.user.username);
     if (!result.ok && result.code === 'ALREADY_MEMBER') {
         return editNotice(interaction, 'You are already in a squad. Leave it first with `/squad leave`.', 'Already in a Squad');
@@ -201,6 +204,8 @@ async function handleApplicationModal(interaction) {
     }
 
     const message = (interaction.fields.getTextInputValue('message') || '').trim() || null;
+    // ponytail: the 3-pending cap is checked non-atomically; a concurrent
+    // burst to different squads can exceed it slightly. Courtesy cap only.
     const result = await squadDb.insertApplication({ squadId: squad.id, userId, username: interaction.user.username, message });
     if (!result.ok) {
         return editNotice(interaction, `You already have a pending application to **${squad.name}**.`, 'Already Applied');
@@ -228,6 +233,17 @@ async function handleApplicationModal(interaction) {
     const withdrawRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId(`squadapp:withdraw:${application.id}`).setLabel('Withdraw Application').setStyle(ButtonStyle.Secondary),
     );
+    // The DM carries the durable withdraw button (the ephemeral reply below
+    // disappears on client reload); DM failure is fine, the ephemeral works too.
+    await dmUser(interaction.client, userId, {
+        title: 'Application Sent',
+        subtitle: squad.name,
+        lines: [
+            `Your application to **${squad.name}** was sent to the squad owner.`,
+            'You will be DMed when they respond. Applications expire after 7 days.',
+        ],
+        components: [withdrawRow],
+    });
     const confirmation = noticePayload(
         [
             `Your application to **${squad.name}** was sent to the squad owner.`,
@@ -278,9 +294,19 @@ async function handleOwnerDecision(interaction, applicationId, action) {
         return editNotice(interaction, `Application #${applicationId} denied. The applicant was notified.`, 'Application Denied');
     }
 
+    // The applicant may have registered their own squad during the pending
+    // window; accepting them then would make them a leader AND a member.
+    if ((await squadDb.fetchSquadsByOwner(application.user_id)).length > 0) {
+        const denied = await squadDb.claimApplication(applicationId, 'Denied', 'system');
+        if (denied) {
+            await finalizeApplicationCard(interaction.client, denied, squad, '**Status:** Denied (applicant now leads a squad)');
+        }
+        return editNotice(interaction, 'The applicant now leads their own squad, so the application was closed.', 'Already Resolved');
+    }
+
     // Accept: membership write first (it is the contended resource), then the
-    // Pending-only claim; a lost claim (concurrent withdraw) compensates by
-    // removing the just-added member.
+    // Pending-only claim; a lost claim compensates by removing the just-added
+    // member, unless the application actually went Accepted concurrently.
     const result = await squadDb.addSquadMember(squad.id, application.user_id, application.username);
     if (!result.ok && result.code === 'FULL') {
         return editNotice(interaction, `Your squad **${squad.name}** is full. Free a slot and accept again; the application stays pending.`, 'Squad Full');
@@ -302,9 +328,15 @@ async function handleOwnerDecision(interaction, applicationId, action) {
 
     const accepted = await squadDb.claimApplication(applicationId, 'Accepted', interaction.user.id);
     if (!accepted) {
-        // Withdrawn mid-click: undo the membership we just wrote.
-        await squadDb.removeSquadMember(squad.id, application.user_id);
-        return editNotice(interaction, 'The applicant withdrew this application just now. No changes were made.', 'Withdrawn');
+        // Lost the claim. Only undo the membership if the application did NOT
+        // land Accepted (a double-click interleaving can let the sibling click
+        // win the claim after this one wrote the membership).
+        const final = await squadDb.fetchApplicationById(applicationId);
+        if (final?.status !== 'Accepted') {
+            await squadDb.removeSquadMember(squad.id, application.user_id);
+            return editNotice(interaction, 'The applicant withdrew this application just now. No changes were made.', 'Withdrawn');
+        }
+        return editNotice(interaction, 'This application was already accepted.', 'Already Handled');
     }
 
     await applyJoinSideEffects(interaction.client, squad, accepted.user_id, { notifyOwner: false });

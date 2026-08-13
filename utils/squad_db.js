@@ -206,10 +206,17 @@ const disbandSquad = async (squadId, { ownerId = null } = {}) => {
             return null;
         }
         const members = await client.query('SELECT * FROM squad_members WHERE squad_id = $1', [squadId]);
+        // Capture live practice threads before the cascade deletes their rows,
+        // so the caller can delete the Discord threads too.
+        const practices = await client.query(
+            `SELECT * FROM squad_practices
+             WHERE squad_id = $1 AND thread_id IS NOT NULL AND status IN ('Scheduled', 'Started')`,
+            [squadId]
+        );
         await client.query('UPDATE squads SET parent_squad_id = NULL WHERE parent_squad_id = $1', [squadId]);
         await client.query('DELETE FROM squads WHERE id = $1', [squadId]);
         await client.query('COMMIT');
-        return { squad: guard.rows[0], members: members.rows };
+        return { squad: guard.rows[0], members: members.rows, practices: practices.rows };
     } catch (err) {
         await client.query('ROLLBACK');
         throw err;
@@ -390,6 +397,14 @@ const fetchApplicationById = async (id) => {
     return r.rows[0] || null;
 };
 
+const fetchPendingApplicationsBySquad = async (squadId) => {
+    const r = await executeQuery(
+        `SELECT * FROM squad_applications WHERE squad_id = $1 AND status = 'Pending'`,
+        [squadId]
+    );
+    return r.rows;
+};
+
 const setApplicationDmMessage = async (id, dmMessageId) => {
     await executeQuery('UPDATE squad_applications SET dm_message_id = $2 WHERE id = $1', [id, dmMessageId]);
 };
@@ -461,8 +476,32 @@ const setPracticeStatus = async (id, status) => {
     await executeQuery('UPDATE squad_practices SET status = $2 WHERE id = $1', [id, status]);
 };
 
-const markReminderSent = async (id) => {
-    await executeQuery('UPDATE squad_practices SET reminder_sent = TRUE WHERE id = $1', [id]);
+// Conditional claims so the sweep can never resurrect a cancelled practice
+// or double-fire across overlapping runs: each transition only applies from
+// its expected prior state.
+const claimPracticeStart = async (id) => {
+    const r = await executeQuery(
+        `UPDATE squad_practices SET status = 'Started' WHERE id = $1 AND status = 'Scheduled' RETURNING *`,
+        [id]
+    );
+    return r.rows[0] || null;
+};
+
+const claimPracticeCleanup = async (id) => {
+    const r = await executeQuery(
+        `UPDATE squad_practices SET status = 'Completed' WHERE id = $1 AND status = 'Started' RETURNING *`,
+        [id]
+    );
+    return r.rows[0] || null;
+};
+
+const claimPracticeReminder = async (id) => {
+    const r = await executeQuery(
+        `UPDATE squad_practices SET reminder_sent = TRUE
+         WHERE id = $1 AND reminder_sent = FALSE AND status = 'Scheduled' RETURNING *`,
+        [id]
+    );
+    return r.rows[0] || null;
 };
 
 const upsertRsvp = async (practiceId, userId, response) => {
@@ -517,6 +556,7 @@ module.exports = {
     fetchApplicationById,
     setApplicationDmMessage,
     claimApplication,
+    fetchPendingApplicationsBySquad,
     expireOldApplications,
     insertPractice,
     fetchNextScheduledPractice,
@@ -524,7 +564,9 @@ module.exports = {
     setPracticeThread,
     claimPracticeCancel,
     setPracticeStatus,
-    markReminderSent,
+    claimPracticeStart,
+    claimPracticeCleanup,
+    claimPracticeReminder,
     upsertRsvp,
     fetchRsvps,
     fetchDuePracticeReminders,

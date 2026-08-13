@@ -51,8 +51,13 @@ async function sweepApplications(client) {
 }
 
 async function sweepPractices(client) {
+    // Claim-then-act everywhere: each transition only applies from its
+    // expected prior state, so a cancel racing the sweep is never overwritten
+    // and overlapping runs cannot double-send.
     for (const practice of await squadDb.fetchDuePracticeReminders(REMINDER_MINUTES)) {
         try {
+            const claimed = await squadDb.claimPracticeReminder(practice.id);
+            if (!claimed) continue;
             const squad = await squadDb.fetchSquadById(practice.squad_id);
             const yes = await squadDb.fetchRsvps(practice.id, 'Yes');
             const ts = Math.floor(new Date(practice.scheduled_at).getTime() / 1000);
@@ -64,7 +69,6 @@ async function sweepPractices(client) {
                     lines: [`**${squad?.name || 'Your squad'}** practice starts <t:${ts}:R>. See you there!`],
                 });
             }
-            await squadDb.markReminderSent(practice.id);
             logger.info(`[Squad Sweep] Reminder sent for practice ${practice.id} (${recipients.length} recipients)`);
         } catch (error) {
             logger.error(`[Squad Sweep] Reminder failed for practice ${practice.id}:`, error.message);
@@ -73,7 +77,8 @@ async function sweepPractices(client) {
 
     for (const practice of await squadDb.fetchDuePracticeStarts()) {
         try {
-            await squadDb.setPracticeStatus(practice.id, 'Started');
+            const claimed = await squadDb.claimPracticeStart(practice.id);
+            if (!claimed) continue;
             if (practice.thread_id) {
                 const thread = await client.channels.fetch(practice.thread_id).catch(() => null);
                 if (thread) {
@@ -88,7 +93,8 @@ async function sweepPractices(client) {
 
     for (const practice of await squadDb.fetchDuePracticeCleanups(CLEANUP_HOURS)) {
         try {
-            await squadDb.setPracticeStatus(practice.id, 'Completed');
+            const claimed = await squadDb.claimPracticeCleanup(practice.id);
+            if (!claimed) continue;
             if (practice.thread_id) {
                 const thread = await client.channels.fetch(practice.thread_id).catch(() => null);
                 if (thread) {

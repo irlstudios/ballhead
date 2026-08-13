@@ -28,8 +28,9 @@ installMock('../utils/squad_db', {
     fetchDuePracticeStarts: async () => { calls.push(['fetchDuePracticeStarts']); return state.starts; },
     fetchDuePracticeCleanups: async (hours) => { calls.push(['fetchDuePracticeCleanups', hours]); return state.cleanups; },
     fetchRsvps: async () => state.rsvps,
-    markReminderSent: async (id) => { calls.push(['markReminderSent', id]); },
-    setPracticeStatus: async (id, status) => { calls.push(['setPracticeStatus', id, status]); },
+    claimPracticeReminder: async (id) => { calls.push(['claimPracticeReminder', id]); return { id }; },
+    claimPracticeStart: async (id) => { calls.push(['claimPracticeStart', id]); return { id }; },
+    claimPracticeCleanup: async (id) => { calls.push(['claimPracticeCleanup', id]); return { id }; },
 });
 
 installMock('../handlers/squad_discovery', {
@@ -65,8 +66,9 @@ test('sweep sends reminders to yes-rsvps plus the creator, then starts and clean
 
     const reminded = calls.filter((c) => c[0] === 'dmUser' && c[2] === 'Practice Reminder').map((c) => c[1]);
     assert.deepStrictEqual([...new Set(reminded)].sort(), ['owner-1', 'u2']);
-    assert.ok(calls.some((c) => c[0] === 'markReminderSent' && c[1] === 3));
-    assert.ok(calls.some((c) => c[0] === 'setPracticeStatus' && c[1] === 4 && c[2] === 'Started'));
-    assert.ok(calls.some((c) => c[0] === 'setPracticeStatus' && c[1] === 5 && c[2] === 'Completed'));
+    // Claim precedes the DMs, so overlapping sweeps cannot double-send.
+    assert.ok(calls.findIndex((c) => c[0] === 'claimPracticeReminder') < calls.findIndex((c) => c[0] === 'dmUser' && c[2] === 'Practice Reminder'));
+    assert.ok(calls.some((c) => c[0] === 'claimPracticeStart' && c[1] === 4));
+    assert.ok(calls.some((c) => c[0] === 'claimPracticeCleanup' && c[1] === 5));
     assert.ok(!calls.some((c) => c[0] === 'error'));
 });
