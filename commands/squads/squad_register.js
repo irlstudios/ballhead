@@ -14,24 +14,32 @@ const logger = require('../../utils/logger');
 // Pure registration gate over squad_db rows so every rule is unit-testable.
 // Rules preserved from the sheet era: one Casual + one Competitive per owner
 // and they must share a name; members must leave before creating; a name
-// held by a different owner is taken. New: B-team creation is retired (its
-// level-50 gate died with the wins scrap).
+// held by a different owner is taken. A second Competitive squad is a B team
+// (own tag, linked to the A team, one per owner) - reopened 2026-08 with no
+// gate now that the level-50 requirement died with the wins scrap.
 function registrationGate({ userId, squadName, squadType, ownedSquads, membership, nameHolders }) {
     if (!/^[A-Z0-9]{1,4}$/.test(squadName)) {
         return { ok: false, code: 'BAD_NAME' };
     }
     const ownsCasual = ownedSquads.find((s) => s.squad_type === 'Casual');
-    const ownsComp = ownedSquads.find((s) => s.squad_type === 'Competitive');
+    const ownsComp = ownedSquads.find((s) => s.squad_type === 'Competitive'
+        && (s.parent_squad_id === null || s.parent_squad_id === undefined));
     if (squadType === 'Casual' && ownsCasual) {
         return { ok: false, code: 'HAS_CASUAL' };
     }
     if (squadType === 'Casual' && ownsComp && ownsComp.name !== squadName) {
         return { ok: false, code: 'NAME_MISMATCH', expected: ownsComp.name };
     }
+    let bTeamParent = null;
     if (squadType === 'Competitive' && ownsComp) {
-        return { ok: false, code: 'BTEAM_CLOSED' };
-    }
-    if (squadType === 'Competitive' && ownsCasual && ownsCasual.name !== squadName) {
+        if (ownedSquads.some((s) => s.parent_squad_id !== null && s.parent_squad_id !== undefined)) {
+            return { ok: false, code: 'HAS_BTEAM' };
+        }
+        if (squadName === ownsComp.name) {
+            return { ok: false, code: 'BTEAM_SAME_NAME' };
+        }
+        bTeamParent = ownsComp;
+    } else if (squadType === 'Competitive' && ownsCasual && ownsCasual.name !== squadName) {
         return { ok: false, code: 'NAME_MISMATCH', expected: ownsCasual.name };
     }
     if (membership && ownedSquads.length === 0) {
@@ -40,7 +48,7 @@ function registrationGate({ userId, squadName, squadType, ownedSquads, membershi
     if (nameHolders.some((s) => String(s.owner_id) !== String(userId))) {
         return { ok: false, code: 'NAME_TAKEN' };
     }
-    return { ok: true };
+    return bTeamParent ? { ok: true, bTeam: true, parent: bTeamParent } : { ok: true };
 }
 
 function notice(title, lines) {
@@ -55,7 +63,8 @@ function notice(title, lines) {
 const GATE_COPY = {
     BAD_NAME: ['Invalid Squad Name', 'Squad names must be 1 to 4 letters (A-Z) or numbers (0-9).'],
     HAS_CASUAL: ['Already Own a Casual Squad', 'You already own a Casual squad.'],
-    BTEAM_CLOSED: ['B Teams Closed', 'You already own a Competitive squad. Creating a second one (B team) is currently closed.'],
+    HAS_BTEAM: ['Already Own a B Team', 'You already own an A team and a B team.'],
+    BTEAM_SAME_NAME: ['Pick a Different Tag', 'Your B team needs its own tag, different from your A team.'],
     IN_A_SQUAD: ['Leave Your Squad First', 'You must leave your current squad before creating one.'],
     NAME_TAKEN: ['Squad Tag Taken', 'That squad tag is already taken.'],
 };
@@ -119,7 +128,13 @@ module.exports = {
 
             let created;
             try {
-                created = await squadDb.createSquad({ name: squadName, squadType, ownerId: userId, ownerUsername: username });
+                created = await squadDb.createSquad({
+                    name: squadName,
+                    squadType,
+                    ownerId: userId,
+                    ownerUsername: username,
+                    parentSquadId: gate.bTeam ? gate.parent.id : null,
+                });
             } catch (err) {
                 // Unique-index backstop: lost a name race to a concurrent registration.
                 if (err.code === '23505') {
@@ -132,6 +147,16 @@ module.exports = {
             // registering the same name under the other type concurrently.
             // Re-check after insert and compensate, so a name never splits
             // across owners.
+            // The A team may have transferred away between the gate read and
+            // the insert; a cross-owner A/B link must never survive that race.
+            if (gate.bTeam) {
+                const parentNow = await squadDb.fetchSquadById(gate.parent.id);
+                if (!parentNow || String(parentNow.owner_id) !== String(userId)) {
+                    await squadDb.setParentSquad(created.id, null);
+                    gate.bTeam = false;
+                }
+            }
+
             const holdersAfter = await squadDb.fetchSquadsByName(squadName);
             if (holdersAfter.some((s) => String(s.owner_id) !== String(userId))) {
                 // Compensation must actually land: a swallowed failure here
@@ -161,11 +186,12 @@ module.exports = {
                 await interaction.followUp(notice('Nickname Update Failed', 'Squad created, but nickname could not be updated due to permissions.'));
             }
 
+            const bTeamSuffix = gate.bTeam ? ` This is a B team linked to **${gate.parent.name}** - move players between them with \`/squad promote\` and \`/squad demote\`.` : '';
             try {
                 const dmContainer = new ContainerBuilder();
                 dmContainer.addTextDisplayComponents(
                     new TextDisplayBuilder().setContent(`## Squad Registered\n${squadName}`),
-                    new TextDisplayBuilder().setContent(`Your squad **${squadName}** (${squadType}) has been registered.`)
+                    new TextDisplayBuilder().setContent(`Your squad **${squadName}** (${squadType}) has been registered.${bTeamSuffix}`)
                 );
                 await interaction.user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
             } catch (dmError) {
@@ -174,7 +200,7 @@ module.exports = {
 
             return interaction.editReply(notice(
                 `Squad Registered\n${squadName}`,
-                `Squad **${squadName}** (${squadType}) has been registered and configured.`
+                `Squad **${squadName}** (${squadType}) has been registered and configured.${bTeamSuffix}`
             ));
         } catch (error) {
             logger.error(`Error processing /squad register command for ${userTag} (${userId}):`, error);
