@@ -12,7 +12,7 @@ const { syncTopSquad, loadTopSquadFromDB } = require('../utils/top_squad_sync');
 const { syncLevelRoles } = require('../utils/squad_level_sync');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
-const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema } = require('../db');
+const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema, ensureSquadsSchema } = require('../db');
 const { runLeagueHealthCheck } = require('../jobs/league-health-check');
 const { runLeagueTierSync } = require('../jobs/league-tier-sync');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
@@ -160,6 +160,7 @@ module.exports = {
         // does not prevent the others from being created.
         const migrations = [
             ['squad_state', ensureSquadStateTable],
+            ['squads', ensureSquadsSchema],
             ['transfer_requests', ensureTransferRequestsTable],
             ['league_activity', ensureLeagueActivitySchema],
             ['league_officials', ensureLeagueOfficialsSchema],

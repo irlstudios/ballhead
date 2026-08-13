@@ -2019,9 +2019,50 @@ const fetchLeaguesForDirectory = async () => {
     return result.rows;
 };
 
+// ---------------------------------------------------------------------------
+// Squads (Postgres source of truth; replaced the Squads Google Sheet 2026-08)
+// ---------------------------------------------------------------------------
+
+const ensureSquadsSchema = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squads (
+            id              SERIAL PRIMARY KEY,
+            name            TEXT NOT NULL,
+            squad_type      TEXT NOT NULL,
+            owner_id        TEXT NOT NULL,
+            owner_username  TEXT,
+            event_squad     TEXT,
+            open_squad      BOOLEAN NOT NULL DEFAULT FALSE,
+            parent_squad_id INTEGER REFERENCES squads(id),
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE (name, squad_type)
+        )
+    `);
+    await executeQuery('CREATE INDEX IF NOT EXISTS idx_squads_owner ON squads (owner_id)')
+        .catch((err) => logger.error('[DB] idx_squads_owner:', err.message));
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS squad_members (
+            squad_id  INTEGER NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+            user_id   TEXT NOT NULL UNIQUE,
+            username  TEXT,
+            joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (squad_id, user_id)
+        )
+    `);
+
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS user_squad_prefs (
+            user_id        TEXT PRIMARY KEY,
+            invites_opt_in BOOLEAN NOT NULL DEFAULT TRUE
+        )
+    `);
+};
+
 module.exports = {
     executeQuery,
     removeRep,
+    ensureSquadsSchema,
     fetchTopUsersByReputation,
     insertCommandUsage,
     insertSquadApplication,
