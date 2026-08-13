@@ -321,10 +321,214 @@ const moveMemberBetweenSquads = async (fromSquadId, toSquadId, userId) => {
     }
 };
 
+// --- discovery + recruiting (sub-project 2) ---------------------------------
+
+// Profile fields apply to the whole name pair (Casual+Competitive share one
+// identity); COALESCE keeps unset fields.
+const updateSquadProfile = async (name, ownerId, { description = null, playstyle = null, region = null, recruiting = null } = {}) => {
+    const r = await executeQuery(
+        `UPDATE squads SET
+            description = COALESCE($3, description),
+            playstyle   = COALESCE($4, playstyle),
+            region      = COALESCE($5, region),
+            recruiting  = COALESCE($6, recruiting)
+         WHERE name = $1 AND owner_id = $2 RETURNING *`,
+        [normalizeSquadName(name), ownerId, description, playstyle, region, recruiting]
+    );
+    return r.rows;
+};
+
+// Browse feed: recruiting squads (Open, then Apply) first, each with a member
+// count; the Casual half of a pair is excluded like the join pool.
+const fetchBrowseSquads = async () => {
+    const r = await executeQuery(
+        `SELECT s.*, COUNT(m.user_id)::int AS member_count
+         FROM squads s LEFT JOIN squad_members m ON m.squad_id = s.id
+         WHERE NOT EXISTS (
+             SELECT 1 FROM squads c
+             WHERE c.name = s.name AND c.owner_id = s.owner_id
+               AND c.squad_type = 'Competitive' AND c.id <> s.id
+         )
+         GROUP BY s.id
+         ORDER BY CASE s.recruiting WHEN 'Open' THEN 0 WHEN 'Apply' THEN 1 ELSE 2 END,
+                  COUNT(m.user_id) DESC, s.name`
+    );
+    return r.rows;
+};
+
+// --- applications ------------------------------------------------------------
+
+const countPendingApplicationsByUser = async (userId) => {
+    const r = await executeQuery(
+        `SELECT COUNT(*)::int AS n FROM squad_applications WHERE user_id = $1 AND status = 'Pending'`,
+        [userId]
+    );
+    return r.rows[0]?.n ?? 0;
+};
+
+// The partial unique index (squad_id, user_id) WHERE Pending turns a repeat
+// application into DUPLICATE.
+const insertApplication = async ({ squadId, userId, username, message }) => {
+    try {
+        const r = await executeQuery(
+            `INSERT INTO squad_applications (squad_id, user_id, username, message)
+             VALUES ($1, $2, $3, $4) RETURNING *`,
+            [squadId, userId, username, message]
+        );
+        return { ok: true, application: r.rows[0] };
+    } catch (err) {
+        if (err.code === '23505') {
+            return { ok: false, code: 'DUPLICATE' };
+        }
+        throw err;
+    }
+};
+
+const fetchApplicationById = async (id) => {
+    const r = await executeQuery('SELECT * FROM squad_applications WHERE id = $1', [id]);
+    return r.rows[0] || null;
+};
+
+const setApplicationDmMessage = async (id, dmMessageId) => {
+    await executeQuery('UPDATE squad_applications SET dm_message_id = $2 WHERE id = $1', [id, dmMessageId]);
+};
+
+// Atomic Pending-only transition (Accepted/Denied/Withdrawn/Expired).
+const claimApplication = async (id, status, resolvedBy) => {
+    const r = await executeQuery(
+        `UPDATE squad_applications SET status = $2, resolved_by = $3, resolved_at = NOW()
+         WHERE id = $1 AND status = 'Pending' RETURNING *`,
+        [id, status, resolvedBy]
+    );
+    return r.rows[0] || null;
+};
+
+const expireOldApplications = async (days) => {
+    const r = await executeQuery(
+        `UPDATE squad_applications SET status = 'Expired', resolved_at = NOW()
+         WHERE status = 'Pending' AND created_at < NOW() - ($1 || ' days')::interval
+         RETURNING *`,
+        [String(days)]
+    );
+    return r.rows;
+};
+
+// --- practices ---------------------------------------------------------------
+
+const insertPractice = async ({ squadId, scheduledAt, createdBy }) => {
+    const r = await executeQuery(
+        `INSERT INTO squad_practices (squad_id, scheduled_at, created_by)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [squadId, scheduledAt, createdBy]
+    );
+    return r.rows[0];
+};
+
+const fetchNextScheduledPractice = async (squadId) => {
+    const r = await executeQuery(
+        `SELECT * FROM squad_practices
+         WHERE squad_id = $1 AND status = 'Scheduled'
+         ORDER BY scheduled_at ASC LIMIT 1`,
+        [squadId]
+    );
+    return r.rows[0] || null;
+};
+
+const fetchPracticeById = async (id) => {
+    const r = await executeQuery('SELECT * FROM squad_practices WHERE id = $1', [id]);
+    return r.rows[0] || null;
+};
+
+const setPracticeThread = async (id, threadId, rsvpMessageId) => {
+    await executeQuery(
+        'UPDATE squad_practices SET thread_id = $2, rsvp_message_id = $3 WHERE id = $1',
+        [id, threadId, rsvpMessageId]
+    );
+};
+
+// Atomic Scheduled-only cancel (the sweep may start it concurrently).
+const claimPracticeCancel = async (id) => {
+    const r = await executeQuery(
+        `UPDATE squad_practices SET status = 'Cancelled'
+         WHERE id = $1 AND status = 'Scheduled' RETURNING *`,
+        [id]
+    );
+    return r.rows[0] || null;
+};
+
+const setPracticeStatus = async (id, status) => {
+    await executeQuery('UPDATE squad_practices SET status = $2 WHERE id = $1', [id, status]);
+};
+
+const markReminderSent = async (id) => {
+    await executeQuery('UPDATE squad_practices SET reminder_sent = TRUE WHERE id = $1', [id]);
+};
+
+const upsertRsvp = async (practiceId, userId, response) => {
+    await executeQuery(
+        `INSERT INTO squad_practice_rsvps (practice_id, user_id, response) VALUES ($1, $2, $3)
+         ON CONFLICT (practice_id, user_id) DO UPDATE SET response = EXCLUDED.response`,
+        [practiceId, userId, response]
+    );
+};
+
+const fetchRsvps = async (practiceId, response = null) => {
+    const r = response
+        ? await executeQuery('SELECT * FROM squad_practice_rsvps WHERE practice_id = $1 AND response = $2', [practiceId, response])
+        : await executeQuery('SELECT * FROM squad_practice_rsvps WHERE practice_id = $1', [practiceId]);
+    return r.rows;
+};
+
+const fetchDuePracticeReminders = async (minutesBefore) => {
+    const r = await executeQuery(
+        `SELECT * FROM squad_practices
+         WHERE status = 'Scheduled' AND reminder_sent = FALSE
+           AND scheduled_at <= NOW() + ($1 || ' minutes')::interval`,
+        [String(minutesBefore)]
+    );
+    return r.rows;
+};
+
+const fetchDuePracticeStarts = async () => {
+    const r = await executeQuery(
+        `SELECT * FROM squad_practices WHERE status = 'Scheduled' AND scheduled_at <= NOW()`
+    );
+    return r.rows;
+};
+
+const fetchDuePracticeCleanups = async (hoursAfter) => {
+    const r = await executeQuery(
+        `SELECT * FROM squad_practices
+         WHERE status = 'Started' AND scheduled_at <= NOW() - ($1 || ' hours')::interval`,
+        [String(hoursAfter)]
+    );
+    return r.rows;
+};
+
 module.exports = {
     MAX_SQUAD_MEMBERS,
     normalizeSquadName,
     disambiguateOwnedSquad,
+    updateSquadProfile,
+    fetchBrowseSquads,
+    countPendingApplicationsByUser,
+    insertApplication,
+    fetchApplicationById,
+    setApplicationDmMessage,
+    claimApplication,
+    expireOldApplications,
+    insertPractice,
+    fetchNextScheduledPractice,
+    fetchPracticeById,
+    setPracticeThread,
+    claimPracticeCancel,
+    setPracticeStatus,
+    markReminderSent,
+    upsertRsvp,
+    fetchRsvps,
+    fetchDuePracticeReminders,
+    fetchDuePracticeStarts,
+    fetchDuePracticeCleanups,
     fetchSquadsByOwner,
     fetchSquadByNameAndType,
     fetchSquadsByName,
