@@ -1,7 +1,7 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { MessageFlags, ContainerBuilder, ChannelType, TextDisplayBuilder } = require('discord.js');
-const { getSheetsClient } = require('../../utils/sheets_cache');
-const { SPREADSHEET_SQUADS, SQUAD_PRACTICE_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const { SQUAD_PRACTICE_CHANNEL_ID, BOT_BUGS_CHANNEL_ID } = require('../../config/constants');
+const squadDb = require('../../utils/squad_db');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -38,35 +38,21 @@ module.exports = {
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
 
-        const sheets = await getSheetsClient();
-
         let thread;
 
         try {
-            const squadLeadersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Leaders!A:G'
-            });
+            const ownedSquads = await squadDb.fetchSquadsByOwner(userId);
+            const { squad } = squadDb.disambiguateOwnedSquad(ownedSquads, null);
+            const ownedSquad = squad || ownedSquads[0] || null;
 
-            const squadLeadersData = squadLeadersResponse.data.values || [];
-            const squadLeaders = squadLeadersData.slice(1);
-
-            const userIsLeaderRow = squadLeaders.find(row => row && row.length > 1 && row[1] === userId);
-
-            if (!userIsLeaderRow) {
+            if (!ownedSquad) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Not a Squad Leader', subtitle: 'Practice Session', lines: ['You cannot start a practice session because you do not own a squad.'] });
                 if (block) errorContainer.addTextDisplayComponents(block);
                 return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
             }
 
-            const squadName = userIsLeaderRow[2]?.trim();
-            if (!squadName || squadName === 'N/A') {
-                const errorContainer = new ContainerBuilder();
-                const block = buildTextBlock({ title: 'Squad Name Missing', subtitle: 'Practice Session', lines: ['Could not determine your squad name from the sheet.', 'Please contact an admin.'] });
-                if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
-            }
+            const squadName = ownedSquad.name;
 
             const channel = await interaction.client.channels.fetch(CHANNEL_ID);
             if (!channel || channel.type !== ChannelType.GuildText) {
@@ -97,18 +83,9 @@ module.exports = {
             if (threadBlock) threadContainer.addTextDisplayComponents(threadBlock);
             await thread.send({ flags: MessageFlags.IsComponentsV2, components: [threadContainer] });
 
-            const squadMembersResponse = await sheets.spreadsheets.values.get({
-                spreadsheetId: SPREADSHEET_SQUADS,
-                range: 'Squad Members!A:E'
-            });
-
-            const squadMembersData = squadMembersResponse.data.values || [];
-            const squadMembers = squadMembersData.slice(1);
-
-            const squadMemberIds = squadMembers
-                .filter(row => row && row.length > 2 && row[2]?.trim() === squadName)
-                .map(row => row[1]?.trim())
-                .filter(id => id);
+            const squadMemberIds = (await squadDb.fetchSquadMembers(ownedSquad.id))
+                .map((m) => String(m.user_id))
+                .filter(Boolean);
 
             const allParticipantIds = [...new Set([userId, ...squadMemberIds])];
 

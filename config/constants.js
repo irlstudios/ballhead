@@ -85,6 +85,8 @@ const HIGHER_LEVEL_ROLES = [
 ];
 
 // Spreadsheet IDs
+// Frozen archive: squads moved to Postgres 2026-08. Read only by the one-time
+// import script (scripts/import_squads_from_sheets.js); the bot never touches it.
 const SPREADSHEET_SQUADS = '1DHoimKtUof3eGqScBKDwfqIUf9Zr6BEuRLxY-Cwma7k';
 const SPREADSHEET_OFFICIALS = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
 const SPREADSHEET_CONTENT_CREATORS = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
