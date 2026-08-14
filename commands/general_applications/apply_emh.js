@@ -8,7 +8,7 @@ const SUBTITLE = 'EMH Application';
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('apply-emh')
-        .setDescription('Submit an application to become an EMH (Event Mini-Game Host)'),
+        .setDescription('Submit an application to become an EMH (Extra Modes Host)'),
     async execute(interaction) {
         const member = await interaction.guild.members.fetch(interaction.user.id);
 
