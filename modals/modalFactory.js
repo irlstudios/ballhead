@@ -24,6 +24,10 @@ function createModal(type) {
             textInput.setPlaceholder(field.placeholder);
         }
 
+        if (field.maxLength) {
+            textInput.setMaxLength(field.maxLength);
+        }
+
         const actionRow = new ActionRowBuilder().addComponents(textInput);
         modal.addComponents(actionRow);
     });

@@ -15,6 +15,8 @@ const {
     FF_OFFICIAL_ROLE_ID,
     OFFICIAL_SENIOR_ROLE_ID,
     FF_APPLICATION_MANAGERS,
+    FF_APPLICATIONS_PAUSED,
+    FF_APPLICATIONS_PAUSE_MESSAGE,
 } = require('../config/constants');
 
 const resolveCurrentRole = (member) => {
@@ -26,6 +28,17 @@ const resolveCurrentRole = (member) => {
 
 const handleFfOfficialApplicationSubmission = async (interaction) => {
     try {
+        if (FF_APPLICATIONS_PAUSED) {
+            await interaction.reply({
+                ...noticePayload(
+                    FF_APPLICATIONS_PAUSE_MESSAGE,
+                    { title: 'Applications Paused', subtitle: 'FF Official Application' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
+
         const discordId = interaction.user.id;
 
         await ensureFfOfficialApplicationsTable();

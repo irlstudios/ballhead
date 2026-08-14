@@ -163,6 +163,56 @@ const deleteBugSquasherApplication = async (discordId) => {
     );
 };
 
+const ensureEmhApplicationsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS emh_applications (
+            discord_id TEXT PRIMARY KEY,
+            discord_username TEXT NOT NULL,
+            ingame_name TEXT NOT NULL,
+            hosting_duration TEXT NOT NULL,
+            rules_read BOOLEAN NOT NULL,
+            motivation TEXT NOT NULL,
+            youtube_link TEXT NOT NULL,
+            application_url TEXT NOT NULL,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const findEmhApplication = async (discordId) => {
+    const result = await executeQuery(
+        'SELECT * FROM emh_applications WHERE discord_id = $1',
+        [discordId]
+    );
+    return result.rows;
+};
+
+const insertEmhApplication = async (params) => {
+    const {
+        discordId,
+        username,
+        ingameName,
+        hostingDuration,
+        rulesRead,
+        motivation,
+        youtubeLink,
+        applicationUrl,
+    } = params;
+    await executeQuery(
+        `INSERT INTO emh_applications
+         (discord_id, discord_username, ingame_name, hosting_duration, rules_read, motivation, youtube_link, application_url, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [discordId, username, ingameName, hostingDuration, rulesRead, motivation, youtubeLink, applicationUrl]
+    );
+};
+
+const deleteEmhApplication = async (discordId) => {
+    await executeQuery(
+        'DELETE FROM emh_applications WHERE discord_id = $1',
+        [discordId]
+    );
+};
+
 // Game ideas metrics (durable tracking of forum threads + thread messages)
 const ensureGameIdeasTables = async () => {
     await executeQuery(`
@@ -2135,6 +2185,10 @@ module.exports = {
     findBugSquasherApplication,
     insertBugSquasherApplication,
     deleteBugSquasherApplication,
+    ensureEmhApplicationsTable,
+    findEmhApplication,
+    insertEmhApplication,
+    deleteEmhApplication,
     ensureGameIdeasTables,
     insertGameIdeasThread,
     insertGameIdeasMessage,

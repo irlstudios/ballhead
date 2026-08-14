@@ -13,6 +13,7 @@ const { handleBugReport, handleSnackModal, handleRankedSessionModal, handleGener
 const { handleOfficialsApplicationSubmission, handleOfficialsApplicationApprove, handleOfficialsApplicationReject, handleQnAInteraction, handleNextStepsInteraction } = require('./handlers/officials');
 const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprove, handleFfOfficialApplicationReject } = require('./handlers/ff_officials');
 const { handleBugSquasherApplicationSubmission, handleBugSquasherApplicationApprove, handleBugSquasherApplicationReject } = require('./handlers/bug_squasher');
+const { handleEmhApplicationSubmission, handleEmhApplicationApprove, handleEmhApplicationReject } = require('./handlers/emh_applications');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
 const { handleUpdateLeagueInviteModal } = require('./handlers/league-invite-update');
@@ -249,6 +250,7 @@ const handleModalSubmit = async (interaction) => {
         'officialApplicationModal': () => handleOfficialsApplicationSubmission(interaction),
         'ffOfficialApplicationModal': () => handleFfOfficialApplicationSubmission(interaction),
         'bugSquasherApplicationModal': () => handleBugSquasherApplicationSubmission(interaction),
+        'emhApplicationModal': () => handleEmhApplicationSubmission(interaction),
         'generateTemplateModal_kotc': () => handleGenerateTemplateModal(interaction),
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
@@ -335,6 +337,8 @@ const handleButton = async (interaction, client) => {
             'ffReject': () => handleFfOfficialApplicationReject(interaction, client),
             'cbsApprove': () => handleBugSquasherApplicationApprove(interaction, client),
             'cbsReject': () => handleBugSquasherApplicationReject(interaction, client),
+            'emhApprove': () => handleEmhApplicationApprove(interaction, client),
+            'emhReject': () => handleEmhApplicationReject(interaction, client),
             'officialsQna': () => handleQnAInteraction(interaction),
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),
             'approveLeague': () => handleApproveLeague(interaction),

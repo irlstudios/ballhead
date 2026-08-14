@@ -1,13 +1,24 @@
 const { SlashCommandBuilder } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
 const { noticePayload } = require('../../utils/ui');
-const { FF_OFFICIAL_ELIGIBLE_ROLE_IDS, FF_OFFICIAL_ROLE_ID } = require('../../config/constants');
+const { FF_OFFICIAL_ELIGIBLE_ROLE_IDS, FF_OFFICIAL_ROLE_ID, FF_APPLICATIONS_PAUSED, FF_APPLICATIONS_PAUSE_MESSAGE } = require('../../config/constants');
 
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('apply-ff-official')
         .setDescription('Submit an application to become an FF Official'),
     async execute(interaction) {
+        if (FF_APPLICATIONS_PAUSED) {
+            await interaction.reply({
+                ...noticePayload(
+                    FF_APPLICATIONS_PAUSE_MESSAGE,
+                    { title: 'Applications Paused', subtitle: 'FF Official Application' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
+
         const member = await interaction.guild.members.fetch(interaction.user.id);
 
         if (member.roles.cache.has(FF_OFFICIAL_ROLE_ID)) {

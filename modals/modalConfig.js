@@ -300,6 +300,51 @@ const modalConfig = {
             },
         ],
     },
+    'emhApplicationModal': {
+        title: 'EMH Application',
+        fields: [
+            {
+                id: 'emhIgn',
+                label: 'What\'s your in-game name?',
+                placeholder: 'Your Gym Class in-game name',
+                style: 'Short',
+                required: true,
+                maxLength: 50,
+            },
+            {
+                id: 'emhHostingDuration',
+                label: 'How long have you been hosting Mini-Games?',
+                placeholder: 'e.g. 6 months',
+                style: 'Short',
+                required: true,
+                maxLength: 100,
+            },
+            {
+                id: 'emhRulesRead',
+                label: 'Have you read/understand the EMH rules?',
+                placeholder: 'Yes/No',
+                style: 'Short',
+                required: true,
+                maxLength: 10,
+            },
+            {
+                id: 'emhMotivation',
+                label: 'Why do you want to become an EMH?',
+                placeholder: 'Share your motivation',
+                style: 'Paragraph',
+                required: true,
+                maxLength: 900,
+            },
+            {
+                id: 'emhYoutubeLink',
+                label: 'YouTube link to your last hosted Mini-Game',
+                placeholder: 'https://youtube.com/... of your most recently hosted Mini-Game',
+                style: 'Short',
+                required: true,
+                maxLength: 200,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;
