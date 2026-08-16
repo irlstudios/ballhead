@@ -213,6 +213,203 @@ const deleteEmhApplication = async (discordId) => {
     );
 };
 
+const ensureCdtApplicationsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS cdt_applications (
+            discord_id TEXT PRIMARY KEY,
+            discord_username TEXT NOT NULL,
+            ingame_name TEXT NOT NULL,
+            challenge_history TEXT NOT NULL,
+            no_ai BOOLEAN NOT NULL,
+            motivation TEXT NOT NULL,
+            portfolio_link TEXT NOT NULL,
+            application_url TEXT NOT NULL,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const findCdtApplication = async (discordId) => {
+    const result = await executeQuery(
+        'SELECT * FROM cdt_applications WHERE discord_id = $1',
+        [discordId]
+    );
+    return result.rows;
+};
+
+const insertCdtApplication = async (params) => {
+    const {
+        discordId,
+        username,
+        ingameName,
+        challengeHistory,
+        noAi,
+        motivation,
+        portfolioLink,
+        applicationUrl,
+    } = params;
+    await executeQuery(
+        `INSERT INTO cdt_applications
+         (discord_id, discord_username, ingame_name, challenge_history, no_ai, motivation, portfolio_link, application_url, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+        [discordId, username, ingameName, challengeHistory, noAi, motivation, portfolioLink, applicationUrl]
+    );
+};
+
+const deleteCdtApplication = async (discordId) => {
+    await executeQuery(
+        'DELETE FROM cdt_applications WHERE discord_id = $1',
+        [discordId]
+    );
+};
+
+// CDT published designs. Files live in S3 under cdt-designs/<id>/v<version>/
+// so leads can swap them without touching the public forum post; downloads are
+// tracked one row per unique user per design.
+const ensureCdtDesignTables = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS cdt_designs (
+            design_id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL,
+            description TEXT NOT NULL,
+            designer_id TEXT NOT NULL,
+            credit_name TEXT NOT NULL,
+            file_version INTEGER NOT NULL DEFAULT 1,
+            forum_thread_id TEXT NOT NULL DEFAULT '',
+            approved_by TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS cdt_design_downloads (
+            design_id INTEGER NOT NULL REFERENCES cdt_designs(design_id) ON DELETE CASCADE,
+            discord_id TEXT NOT NULL,
+            downloaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (design_id, discord_id)
+        )
+    `);
+};
+
+const insertCdtDesign = async (params) => {
+    const {
+        title,
+        category,
+        description,
+        designerId,
+        creditName,
+        approvedBy,
+    } = params;
+    const result = await executeQuery(
+        `INSERT INTO cdt_designs
+         (title, category, description, designer_id, credit_name, approved_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING design_id`,
+        [title, category, description, designerId, creditName, approvedBy]
+    );
+    return result.rows[0].design_id;
+};
+
+const getCdtDesign = async (designId) => {
+    const result = await executeQuery(
+        'SELECT * FROM cdt_designs WHERE design_id = $1',
+        [designId]
+    );
+    return result.rows[0] || null;
+};
+
+const updateCdtDesign = async (designId, fields) => {
+    const columns = {
+        title: 'title',
+        description: 'description',
+        creditName: 'credit_name',
+        fileVersion: 'file_version',
+        forumThreadId: 'forum_thread_id',
+    };
+    const sets = [];
+    const values = [];
+    for (const [key, column] of Object.entries(columns)) {
+        if (fields[key] !== undefined) {
+            values.push(fields[key]);
+            sets.push(`${column} = $${values.length}`);
+        }
+    }
+    if (sets.length === 0) {
+        return;
+    }
+    values.push(designId);
+    await executeQuery(
+        `UPDATE cdt_designs SET ${sets.join(', ')}, updated_at = NOW() WHERE design_id = $${values.length}`,
+        values
+    );
+};
+
+// Compare-and-set so two leads updating the same design's files concurrently
+// cannot both commit; the loser cleans up its uploaded prefix.
+const commitCdtFileVersion = async (designId, fromVersion, toVersion) => {
+    const result = await executeQuery(
+        `UPDATE cdt_designs SET file_version = $3, updated_at = NOW()
+         WHERE design_id = $1 AND file_version = $2`,
+        [designId, fromVersion, toVersion]
+    );
+    return result.rowCount > 0;
+};
+
+const deleteCdtDesign = async (designId) => {
+    await executeQuery(
+        'DELETE FROM cdt_designs WHERE design_id = $1',
+        [designId]
+    );
+};
+
+const searchCdtDesigns = async (query) => {
+    const result = await executeQuery(
+        `SELECT design_id, title, category FROM cdt_designs
+         WHERE title ILIKE $1
+         ORDER BY created_at DESC
+         LIMIT 25`,
+        [`%${query}%`]
+    );
+    return result.rows;
+};
+
+const recordCdtDownload = async (designId, discordId) => {
+    await executeQuery(
+        `INSERT INTO cdt_design_downloads (design_id, discord_id)
+         VALUES ($1, $2)
+         ON CONFLICT (design_id, discord_id) DO NOTHING`,
+        [designId, discordId]
+    );
+};
+
+// Every published design with its thread and unique-download count, ordered so
+// the first row is the Most Downloaded candidate (ties go to the older design).
+const cdtTagStats = async () => {
+    const result = await executeQuery(
+        `SELECT d.design_id, d.forum_thread_id, COUNT(dl.discord_id)::int AS downloads
+         FROM cdt_designs d
+         LEFT JOIN cdt_design_downloads dl ON dl.design_id = d.design_id
+         WHERE d.forum_thread_id <> ''
+         GROUP BY d.design_id
+         ORDER BY downloads DESC, d.created_at ASC`
+    );
+    return result.rows;
+};
+
+const cdtDownloadStats = async () => {
+    const result = await executeQuery(
+        `SELECT d.design_id, d.title, d.category, d.credit_name,
+                COUNT(dl.discord_id)::int AS downloads
+         FROM cdt_designs d
+         LEFT JOIN cdt_design_downloads dl ON dl.design_id = d.design_id
+         GROUP BY d.design_id
+         ORDER BY downloads DESC, d.created_at DESC
+         LIMIT 20`
+    );
+    return result.rows;
+};
+
 // Game ideas metrics (durable tracking of forum threads + thread messages)
 const ensureGameIdeasTables = async () => {
     await executeQuery(`
@@ -2189,6 +2386,20 @@ module.exports = {
     findEmhApplication,
     insertEmhApplication,
     deleteEmhApplication,
+    ensureCdtApplicationsTable,
+    findCdtApplication,
+    insertCdtApplication,
+    deleteCdtApplication,
+    ensureCdtDesignTables,
+    insertCdtDesign,
+    getCdtDesign,
+    updateCdtDesign,
+    commitCdtFileVersion,
+    deleteCdtDesign,
+    searchCdtDesigns,
+    recordCdtDownload,
+    cdtDownloadStats,
+    cdtTagStats,
     ensureGameIdeasTables,
     insertGameIdeasThread,
     insertGameIdeasMessage,

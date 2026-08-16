@@ -300,6 +300,51 @@ const modalConfig = {
             },
         ],
     },
+    'communityDesignerApplicationModal': {
+        title: 'Community Design Team Application',
+        fields: [
+            {
+                id: 'cdtIgn',
+                label: 'What\'s your in-game name?',
+                placeholder: 'Your Gym Class in-game name',
+                style: 'Short',
+                required: true,
+                maxLength: 50,
+            },
+            {
+                id: 'cdtChallengeHistory',
+                label: 'Design Challenge wins or placements?',
+                placeholder: 'e.g. Winner of the July Design Challenge, or None',
+                style: 'Short',
+                required: true,
+                maxLength: 150,
+            },
+            {
+                id: 'cdtNoAi',
+                label: 'Is your work made without AI tools?',
+                placeholder: 'Yes/No',
+                style: 'Short',
+                required: true,
+                maxLength: 10,
+            },
+            {
+                id: 'cdtMotivation',
+                label: 'Why do you want to join the team?',
+                placeholder: 'Share your motivation',
+                style: 'Paragraph',
+                required: true,
+                maxLength: 900,
+            },
+            {
+                id: 'cdtPortfolioLink',
+                label: 'Link to examples of your designs',
+                placeholder: 'https://... link to your best court, backboard, or card designs',
+                style: 'Short',
+                required: true,
+                maxLength: 200,
+            },
+        ],
+    },
     'emhApplicationModal': {
         title: 'EMH Application',
         fields: [

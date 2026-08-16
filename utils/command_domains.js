@@ -10,6 +10,7 @@ const COMMAND_DOMAINS = Object.freeze({
     squad: 'Squad commands: register, invite, roster, and more',
     league: 'League program commands for owners, staff, and players',
     apply: 'Apply for community programs and leagues',
+    cdt: 'Community Design Team commands',
     cc: 'Content creator program commands',
     ff: 'Friendly Fire commands',
     'ranked-session': 'Ranked session coaching commands',

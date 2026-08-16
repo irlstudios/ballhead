@@ -79,6 +79,30 @@ const LEAGUE_CO_OWNER_ROLE_ID = '1378080039580471387';
 // is what lets staff Assign/Deny official request cards.
 const GC_CD_ROLE_ID = process.env.GC_CD_ROLE_ID || '805833778064130104';
 
+// Community Design Team. Anyone may apply; reviewed in a private channel.
+// Accept grants the Makes Cool Things role.
+const MAKES_COOL_THINGS_ROLE_ID = '1294025778845188207';
+const CDT_APPLICATIONS_CHANNEL_ID = '1538415190314582127';
+// Team leads run /cdt approve|update|remove|stats. Design files live in S3
+// (CDT_S3_BUCKET) so the public forum post never exposes them directly; the
+// Get Files button serves them as attachments and tracks unique downloads.
+const CDT_LEAD_ROLE_ID = '1538417700228038706';
+const CDT_DESIGNS_FORUM_CHANNEL_ID = '1538409950135717919';
+const CDT_S3_BUCKET = process.env.CDT_S3_BUCKET || '';
+// Forum tags in the designs forum. The content tags double as the /cdt approve
+// category choices; Popular and Most Downloaded are reconciled from download
+// stats after every download and removal.
+const CDT_FORUM_TAGS = {
+    'Court Design': '1538410400922738688',
+    'Backboard Design': '1538410448301330452',
+    'Court and Backboard': '1538410556023906365',
+    'Tournament Card': '1538411225522634822',
+};
+const CDT_POPULAR_TAG_ID = '1538410729080750140';
+const CDT_MOST_DOWNLOADED_TAG_ID = '1538410779836026910';
+// Unique downloads needed for the Popular tag.
+const CDT_POPULAR_THRESHOLD = 10;
+
 const LEVEL_5_ROLE_ID = '924522770057031740';
 const HIGHER_LEVEL_ROLES = [
     '924522921370714152',
@@ -258,6 +282,15 @@ module.exports = {
     COMMUNITY_BUG_SQUASHER_ROLE_ID,
     CBS_APPLICATIONS_CHANNEL_ID,
     EMH_APPLICATIONS_CHANNEL_ID,
+    MAKES_COOL_THINGS_ROLE_ID,
+    CDT_APPLICATIONS_CHANNEL_ID,
+    CDT_LEAD_ROLE_ID,
+    CDT_DESIGNS_FORUM_CHANNEL_ID,
+    CDT_S3_BUCKET,
+    CDT_FORUM_TAGS,
+    CDT_POPULAR_TAG_ID,
+    CDT_MOST_DOWNLOADED_TAG_ID,
+    CDT_POPULAR_THRESHOLD,
     BASE_LEAGUE_ROLE_ID,
     ACTIVE_LEAGUE_ROLE_ID,
     SPONSORED_LEAGUE_ROLE_ID,
