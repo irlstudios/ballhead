@@ -355,7 +355,7 @@ module.exports = {
 
             ctx.font = 'bold 18px "Anton SC", "Bebas Neue", sans-serif';
             ctx.fillStyle = '#14B8A6';
-            ctx.fillText('PASS A SESSION (5/10) = 1 POINT   •   TOP PERFORMER = +1 BONUS', canvas.width / 2, footerY + 32);
+            ctx.fillText('PASS A SESSION (5/10) = 1 POINT   |   TOP PERFORMER = +1 BONUS', canvas.width / 2, footerY + 32);
 
             ctx.font = 'bold 20px "Anton SC", "Bebas Neue", sans-serif';
             ctx.fillStyle = '#FFFFFF';

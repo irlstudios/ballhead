@@ -852,7 +852,7 @@ module.exports = {
                     lines: ['No managed rooms found.']
                 });
             }
-            const list = channels.map(ch => `• ${ch.name} (<#${ch.id}>)`).join('\n');
+            const list = channels.map(ch => `- ${ch.name} (<#${ch.id}>)`).join('\n');
             return replyRoomNotice(interaction, {
                 title: 'Managed Rooms',
                 subtitle: `Total: ${channels.length}`,

@@ -163,7 +163,7 @@ module.exports = {
                     new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small)
                 )
                 .addTextDisplayComponents(
-                    new TextDisplayBuilder().setContent(`**${squadName}** • ${finalSquadType}`),
+                    new TextDisplayBuilder().setContent(`**${squadName}** | ${finalSquadType}`),
                     new TextDisplayBuilder().setContent(`<@${commandUserID}> wants you to join their squad.`)
                 )
                 .addSeparatorComponents(

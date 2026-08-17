@@ -175,7 +175,7 @@ const buildDesignPostPayload = ({ designId, title, category, description, design
     const container = new ContainerBuilder();
     const block = buildTextBlock({
         title,
-        subtitle: `${category} • designed by ${creditName}`,
+        subtitle: `${category} | designed by ${creditName}`,
         lines: [
             description,
             '',

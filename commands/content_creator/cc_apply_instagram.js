@@ -553,8 +553,8 @@ module.exports = {
                             `✅ We verified your Instagram: ${instagramUrl}`,
                             '',
                             'Stay on top of your progress:',
-                            '• `/cc check-progress` shows your current requirement status',
-                            '• `/cc quality-score` lists the posts we are tracking this season',
+                            '- `/cc check-progress` shows your current requirement status',
+                            '- `/cc quality-score` lists the posts we are tracking this season',
                             '',
                             'Thanks for applying! Keep posting so we can keep your data fresh.'
                         ].join('\n')

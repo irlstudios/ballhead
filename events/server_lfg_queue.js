@@ -36,7 +36,7 @@ function buildButtons(key) {
 }
 
 function buildContainer(queue, members, imageName) {
-    const list = members.size ? [...members].map(id => `<@${id}>`).join(' • ') : 'No one yet';
+    const list = members.size ? [...members].map(id => `<@${id}>`).join(', ') : 'No one yet';
     const isFull = members.size >= queue.size;
     const container = new ContainerBuilder()
         .setAccentColor(isFull ? 0x2ECC71 : 0x14B8A6);
