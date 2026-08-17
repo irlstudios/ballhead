@@ -26,6 +26,13 @@ const requireBucket = () => {
     }
 };
 
+// File names become S3 keys and attachment:// references, so anything outside
+// a safe character set is replaced.
+const sanitizeName = (name) => {
+    const safe = (name || '').replace(/[^\w.-]/g, '_');
+    return safe.replace(/^\.+$/, '') || 'file';
+};
+
 // Duplicate attachment names within one design get an index suffix so they do
 // not overwrite each other as S3 keys; suffixed candidates are re-checked so a
 // literal "court-2.json" in the input cannot collide either.
@@ -47,7 +54,7 @@ const dedupeNames = (names) => {
 // files: [{ attachment: <discord CDN url>, name }] from toFilePayloads.
 const putDesignFiles = async (designId, version, files) => {
     requireBucket();
-    const names = dedupeNames(files.map((file) => file.name));
+    const names = dedupeNames(files.map((file) => sanitizeName(file.name)));
     await Promise.all(files.map(async (file, i) => {
         const response = await fetch(file.attachment);
         if (!response.ok) {
@@ -108,6 +115,7 @@ const deleteDesignFiles = async (designId, version = null) => {
 
 module.exports = {
     designPrefix,
+    sanitizeName,
     dedupeNames,
     putDesignFiles,
     getDesignFiles,

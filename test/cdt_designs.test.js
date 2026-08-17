@@ -19,7 +19,7 @@ const {
     CDT_POPULAR_THRESHOLD,
 } = require('../config/constants');
 
-const { dedupeNames, designPrefix } = require('../utils/cdt_storage');
+const { dedupeNames, designPrefix, sanitizeName } = require('../utils/cdt_storage');
 const approveCommand = require('../commands/cdt/cdt_approve');
 const updateCommand = require('../commands/cdt/cdt_update');
 const removeCommand = require('../commands/cdt/cdt_remove');
@@ -92,6 +92,14 @@ test('dedupeNames suffixes duplicate file names so S3 keys never collide', () =>
         dedupeNames(['court.json', 'court.json', 'court-2.json']),
         ['court.json', 'court-2.json', 'court-2-2.json']
     );
+});
+
+test('sanitizeName keeps attachment references and S3 keys valid', () => {
+    assert.strictEqual(sanitizeName('my court file.json'), 'my_court_file.json');
+    assert.strictEqual(sanitizeName('court(v2)!.png'), 'court_v2__.png');
+    assert.strictEqual(sanitizeName('plain-name_ok.json'), 'plain-name_ok.json');
+    assert.strictEqual(sanitizeName(''), 'file');
+    assert.strictEqual(sanitizeName('...'), 'file');
 });
 
 test('the four lead commands fold into a single /cdt domain command', () => {

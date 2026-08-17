@@ -1,7 +1,8 @@
 'use strict';
 
+const { ContainerBuilder, FileBuilder, MessageFlags } = require('discord.js');
 const logger = require('../utils/logger');
-const { noticePayload } = require('../utils/ui');
+const { buildTextBlock, noticePayload } = require('../utils/ui');
 const { getCdtDesign, recordCdtDownload } = require('../db');
 const { SUBTITLE, CC_LINE, reconcileCdtTags } = require('../utils/cdt_designs');
 const { getDesignFiles } = require('../utils/cdt_storage');
@@ -43,8 +44,21 @@ const handleCdtDownloadButton = async (interaction) => {
             return;
         }
 
+        // File components render as raw downloadable attachments instead of
+        // inline image previews.
+        const container = new ContainerBuilder();
+        const block = buildTextBlock({
+            title: design.title,
+            subtitle: `by ${design.credit_name}`,
+            lines: [CC_LINE],
+        });
+        if (block) container.addTextDisplayComponents(block);
+        for (const file of files) {
+            container.addFileComponents(new FileBuilder().setURL(`attachment://${file.name}`));
+        }
         await interaction.editReply({
-            content: `**${design.title}** by ${design.credit_name}\n${CC_LINE}`,
+            flags: MessageFlags.IsComponentsV2,
+            components: [container],
             files,
         });
 
