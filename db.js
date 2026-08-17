@@ -60,6 +60,32 @@ const deleteOfficialApplication = async (discordId) => {
     );
 };
 
+// Analytics events: local mirror of everything sent to Mixpanel, so metrics
+// can be queried directly without Mixpanel read access.
+const ensureAnalyticsEventsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS analytics_events (
+            id BIGSERIAL PRIMARY KEY,
+            event_name TEXT NOT NULL,
+            user_id TEXT NOT NULL,
+            properties JSONB NOT NULL DEFAULT '{}',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+    await executeQuery(`
+        CREATE INDEX IF NOT EXISTS idx_analytics_events_name_time
+        ON analytics_events (event_name, created_at)
+    `);
+};
+
+const insertAnalyticsEvent = async (eventName, userId, properties = {}) => {
+    await executeQuery(
+        `INSERT INTO analytics_events (event_name, user_id, properties)
+         VALUES ($1, $2, $3)`,
+        [eventName, String(userId), JSON.stringify(properties)]
+    );
+};
+
 // FF Official application queries
 const ensureFfOfficialApplicationsTable = async () => {
     await executeQuery(`
@@ -2374,6 +2400,8 @@ module.exports = {
     findOfficialApplication,
     insertOfficialApplication,
     deleteOfficialApplication,
+    ensureAnalyticsEventsTable,
+    insertAnalyticsEvent,
     ensureFfOfficialApplicationsTable,
     findFfOfficialApplication,
     insertFfOfficialApplication,

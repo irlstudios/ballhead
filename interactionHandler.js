@@ -2,7 +2,7 @@
 
 require('dotenv').config({ path: './resources/.env' });
 const { Collection, MessageFlags, ContainerBuilder } = require('discord.js');
-const logCommandUsage = require('./API/command-data');
+const { logCommandUsage } = require('./API/command-data');
 const { createModal } = require('./modals/modalFactory');
 const logger = require('./utils/logger');
 const { buildTextBlock, noticePayload } = require('./utils/ui');

@@ -122,7 +122,7 @@ if (!token) {
 }
 
 const { startCacheWarmer } = require('./utils/cache_warmer');
-const { ensureLfgTable, ensureProgramRoleSnapshotTable } = require('./db');
+const { ensureLfgTable, ensureProgramRoleSnapshotTable, ensureAnalyticsEventsTable } = require('./db');
 const { ensurePlayerReportsSchema } = require('./utils/reports_queries');
 const { startWorkers, stopWorkers } = require('./utils/voice_moderation/worker_pool');
 
@@ -148,6 +148,13 @@ client.login(token).then(async () => {
         logger.info('[DB] Program role snapshot table ensured.');
     } catch (error) {
         logger.error('[DB] Failed to ensure program role snapshot table:', error);
+    }
+
+    try {
+        await ensureAnalyticsEventsTable();
+        logger.info('[DB] Analytics events table ensured.');
+    } catch (error) {
+        logger.error('[DB] Failed to ensure analytics events table:', error);
     }
 
     try {
