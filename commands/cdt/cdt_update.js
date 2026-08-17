@@ -7,8 +7,7 @@ const { updateCdtDesign, commitCdtFileVersion } = require('../../db');
 const {
     SUBTITLE,
     rejectNonLead,
-    fetchLinkedMessage,
-    toFilePayloads,
+    resolveFilesInput,
     toPreviewPayloads,
     buildDesignPostPayload,
     fetchDesignThread,
@@ -40,7 +39,7 @@ module.exports = {
             .setMaxLength(60))
         .addStringOption((option) => option
             .setName('files')
-            .setDescription('Message link with the new files (replaces all served files, previews stay)')),
+            .setDescription('Message link or attachment link(s) with the new files (replaces all served files)')),
     autocomplete: respondDesignAutocomplete,
     async execute(interaction) {
         await interaction.deferReply({ ephemeral: true });
@@ -73,17 +72,17 @@ module.exports = {
             const changed = [];
 
             if (filesLink) {
-                const { message, error } = await fetchLinkedMessage(interaction, filesLink);
-                if (error) {
+                const filesResult = await resolveFilesInput(interaction, filesLink);
+                if (filesResult.error) {
                     await interaction.editReply({
-                        ...noticePayload(error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
+                        ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
                         ephemeral: true,
                     });
                     return;
                 }
                 const newVersion = design.file_version + 1;
                 try {
-                    await putDesignFiles(design.design_id, newVersion, toFilePayloads(message));
+                    await putDesignFiles(design.design_id, newVersion, filesResult.files);
                 } catch (uploadError) {
                     await deleteDesignFiles(design.design_id, newVersion).catch(() => {});
                     throw uploadError;

@@ -10,6 +10,8 @@ const {
     isImageAttachment,
     toFilePayloads,
     toPreviewPayloads,
+    parseAttachmentUrl,
+    resolveFilesInput,
     desiredTags,
 } = require('../utils/cdt_designs');
 const {
@@ -92,6 +94,44 @@ test('dedupeNames suffixes duplicate file names so S3 keys never collide', () =>
         dedupeNames(['court.json', 'court.json', 'court-2.json']),
         ['court.json', 'court-2.json', 'court-2-2.json']
     );
+});
+
+test('parseAttachmentUrl normalizes media links to original-file CDN links', () => {
+    const pasted = 'https://media.discordapp.net/attachments/111/222/Program_Court_3.png?ex=6a84de68&is=6a838ce8&hm=cc85bd&=&format=webp&quality=lossless&width=1536&height=1536';
+    const parsed = parseAttachmentUrl(pasted);
+    assert.strictEqual(parsed.channelId, '111');
+    assert.strictEqual(parsed.attachmentId, '222');
+    assert.strictEqual(parsed.name, 'Program_Court_3.png');
+    const url = new URL(parsed.url);
+    assert.strictEqual(url.hostname, 'cdn.discordapp.com');
+    assert.strictEqual(url.searchParams.get('hm'), 'cc85bd');
+    assert.strictEqual(url.searchParams.get('format'), null, 'conversion params must be stripped');
+    assert.strictEqual(parseAttachmentUrl('https://discord.com/channels/1/2/3'), null);
+    assert.strictEqual(parseAttachmentUrl('https://evil.example/attachments/1/2/x.png'), null);
+    assert.strictEqual(parseAttachmentUrl('not a url'), null);
+});
+
+test('resolveFilesInput accepts multiple attachment links and reports their ids', async () => {
+    const result = await resolveFilesInput(null,
+        'https://cdn.discordapp.com/attachments/111/222/court.png?ex=1&is=2&hm=3 ' +
+        'https://media.discordapp.net/attachments/111/333/ring.png?format=webp'
+    );
+    assert.strictEqual(result.error, undefined);
+    assert.deepStrictEqual(result.files.map((f) => f.name), ['court.png', 'ring.png']);
+    assert.deepStrictEqual([...result.attachmentIds].sort(), ['222', '333']);
+    const rejected = await resolveFilesInput(null, 'https://cdn.discordapp.com/attachments/1/2/a.png junk');
+    assert.ok(rejected.error, 'mixed valid and invalid tokens must be rejected');
+});
+
+test('toPreviewPayloads excludes attachments used as design files', () => {
+    const message = {
+        attachments: new Map([
+            ['1', { id: '1', contentType: 'image/png', name: 'ingame.png', url: 'https://cdn/1' }],
+            ['2', { id: '2', contentType: 'image/png', name: 'court-file.png', url: 'https://cdn/2' }],
+        ]),
+    };
+    const previews = toPreviewPayloads(message, new Set(['2']));
+    assert.deepStrictEqual(previews, [{ attachment: 'https://cdn/1', name: 'preview-1.png' }]);
 });
 
 test('sanitizeName keeps attachment references and S3 keys valid', () => {

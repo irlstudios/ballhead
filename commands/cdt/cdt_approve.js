@@ -9,8 +9,8 @@ const {
     CATEGORY_CHOICES,
     rejectNonLead,
     fetchLinkedMessage,
-    toFilePayloads,
     toPreviewPayloads,
+    resolveFilesInput,
     buildDesignPostPayload,
     fetchDesignsForum,
 } = require('../../utils/cdt_designs');
@@ -27,7 +27,7 @@ module.exports = {
             .setRequired(true))
         .addStringOption((option) => option
             .setName('files')
-            .setDescription('Message link with the downloadable design files. Never shown on the post')
+            .setDescription('Message link or attachment link(s) with the design files. Never shown on the post')
             .setRequired(true))
         .addStringOption((option) => option
             .setName('title')
@@ -69,11 +69,34 @@ module.exports = {
                 return;
             }
 
-            const previews = toPreviewPayloads(message);
+            // Strict split: the submission link only supplies preview images,
+            // the files input only supplies the downloadables. Court files are
+            // images too, so any attachment used as a file is excluded from
+            // the public gallery.
+            const filesResult = await resolveFilesInput(interaction, interaction.options.getString('files'));
+            if (filesResult.error) {
+                await interaction.editReply({
+                    ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
+                    ephemeral: true,
+                });
+                return;
+            }
+            if (filesResult.messageId === message.id) {
+                await interaction.editReply({
+                    ...noticePayload(
+                        'The files link points at the whole submission message, which would publish the design file as a preview. Right click the design file itself and use Copy Link instead, or link a separate message.',
+                        { title: 'Separate The Files', subtitle: SUBTITLE }
+                    ),
+                    ephemeral: true,
+                });
+                return;
+            }
+
+            const previews = toPreviewPayloads(message, filesResult.attachmentIds);
             if (previews.length === 0) {
                 await interaction.editReply({
                     ...noticePayload(
-                        'The linked message has no image attachments to use as previews.',
+                        'The submission message has no image attachments to use as previews (attachments used as design files are excluded).',
                         { title: 'No Previews Found', subtitle: SUBTITLE }
                     ),
                     ephemeral: true,
@@ -87,30 +110,6 @@ module.exports = {
                     ...noticePayload(
                         'The designs forum channel is not configured or not reachable.',
                         { title: 'Forum Unavailable', subtitle: SUBTITLE }
-                    ),
-                    ephemeral: true,
-                });
-                return;
-            }
-
-            // Strict split: the submission link only supplies preview images,
-            // the files link only supplies the downloadables. Court files are
-            // images too, so the two must be different messages or the
-            // deliverable would be publicly saveable from the gallery.
-            const filesResult = await fetchLinkedMessage(interaction, interaction.options.getString('files'));
-            if (filesResult.error) {
-                await interaction.editReply({
-                    ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
-                    ephemeral: true,
-                });
-                return;
-            }
-            const filesMessage = filesResult.message;
-            if (filesMessage.id === message.id) {
-                await interaction.editReply({
-                    ...noticePayload(
-                        'The files link must be a different message than the submission link, otherwise the downloadable file would be shown as a public preview. Post the design file on its own (the review channel works well) and link that message.',
-                        { title: 'Separate The Files', subtitle: SUBTITLE }
                     ),
                     ephemeral: true,
                 });
@@ -133,7 +132,7 @@ module.exports = {
             });
 
             try {
-                await putDesignFiles(designId, 1, toFilePayloads(filesMessage));
+                await putDesignFiles(designId, 1, filesResult.files);
             } catch (uploadError) {
                 await deleteDesignFiles(designId).catch(() => {});
                 await deleteCdtDesign(designId).catch(() => {});

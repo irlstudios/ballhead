@@ -104,12 +104,72 @@ const toFilePayloads = (message) =>
     [...message.attachments.values()].map((a) => ({ attachment: a.url, name: a.name }));
 
 // Image attachments renamed deterministically so attachment:// references in
-// the media gallery are stable across posts and edits.
-const toPreviewPayloads = (message) =>
+// the media gallery are stable across posts and edits. Attachments serving as
+// downloadable design files are excluded so they never show publicly.
+const toPreviewPayloads = (message, excludeIds = new Set()) =>
     [...message.attachments.values()]
-        .filter(isImageAttachment)
+        .filter((a) => isImageAttachment(a) && !excludeIds.has(a.id))
         .slice(0, MAX_PREVIEWS)
         .map((a, i) => ({ attachment: a.url, name: `preview-${i + 1}.${fileExtension(a.name)}` }));
+
+// Direct Discord attachment link (right click an attachment, copy link).
+// Normalized to cdn.discordapp.com with only the signature params kept, since
+// media.discordapp.net serves converted images (webp, resized) and the design
+// file must be stored byte for byte.
+const parseAttachmentUrl = (value) => {
+    let url;
+    try {
+        url = new URL((value || '').trim());
+    } catch {
+        return null;
+    }
+    if (url.hostname !== 'cdn.discordapp.com' && url.hostname !== 'media.discordapp.net') {
+        return null;
+    }
+    const match = /^\/attachments\/(\d+)\/(\d+)\/([^/]+)$/.exec(url.pathname);
+    if (!match) {
+        return null;
+    }
+    const normalized = new URL(`https://cdn.discordapp.com${url.pathname}`);
+    for (const key of ['ex', 'is', 'hm']) {
+        const param = url.searchParams.get(key);
+        if (param) {
+            normalized.searchParams.set(key, param);
+        }
+    }
+    return {
+        channelId: match[1],
+        attachmentId: match[2],
+        name: decodeURIComponent(match[3]),
+        url: normalized.toString(),
+    };
+};
+
+// The files option accepts either one message link (all its attachments) or
+// one or more attachment links separated by spaces. Returns { files,
+// attachmentIds, messageId? } or { error }.
+const resolveFilesInput = async (interaction, value) => {
+    const tokens = (value || '').trim().split(/\s+/).filter(Boolean);
+    const parsed = tokens.map(parseAttachmentUrl);
+    if (tokens.length > 0 && parsed.every(Boolean)) {
+        return {
+            files: parsed.map((a) => ({ attachment: a.url, name: a.name })),
+            attachmentIds: new Set(parsed.map((a) => a.attachmentId)),
+        };
+    }
+    if (tokens.length === 1) {
+        const { message, error } = await fetchLinkedMessage(interaction, tokens[0]);
+        if (error) {
+            return { error };
+        }
+        return {
+            files: toFilePayloads(message),
+            attachmentIds: new Set(message.attachments.keys()),
+            messageId: message.id,
+        };
+    }
+    return { error: 'The files option must be one message link, or one or more attachment links (right click the file, Copy Link) separated by spaces.' };
+};
 
 const buildDesignPostPayload = ({ designId, title, category, description, designerId, creditName, previewNames }) => {
     const container = new ContainerBuilder();
@@ -250,6 +310,8 @@ module.exports = {
     isImageAttachment,
     toFilePayloads,
     toPreviewPayloads,
+    parseAttachmentUrl,
+    resolveFilesInput,
     buildDesignPostPayload,
     fetchDesignsForum,
     fetchDesignThread,
