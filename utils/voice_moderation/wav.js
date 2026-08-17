@@ -12,7 +12,10 @@ const mixToMonoPcm = ({ packetsByUser, windowStartMs, windowEndMs, decode }) => 
     const mix = new Int32Array(totalSamples);
     for (const entries of packetsByUser.values()) {
         for (const { at, packet } of entries) {
+            // decode returns null for a packet it cannot decode; the clip ships
+            // without that packet rather than aborting the whole mix.
             const pcm = decode(packet);
+            if (!pcm) continue;
             const startSample = Math.floor((at - windowStartMs) * SAMPLES_PER_MS);
             const frames = Math.floor(pcm.length / 4);
             for (let i = 0; i < frames; i += 1) {

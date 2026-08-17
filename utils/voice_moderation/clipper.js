@@ -4,15 +4,30 @@
 // so tests exercise the windowing and mixing without touching libopus.
 
 const { OpusEncoder } = require('@discordjs/opus');
+const logger = require('../logger');
 const { packetsBetween } = require('./buffers');
 const { mixToMonoPcm, pcmToWav } = require('./wav');
 const { getCaptureState } = require('./capture');
+
+// Buffered packets are occasionally not valid opus (seen in prod during a
+// DAVE-era session: opus_decode rejects them outright). One bad packet must
+// cost that packet, never the whole incident clip, so decode failures are
+// recorded and skipped.
+const guardedDecode = (decode, userId, skipped) => (packet) => {
+    try {
+        return decode(packet);
+    } catch {
+        skipped.push({ userId, length: packet.length, headHex: packet.subarray(0, 4).toString('hex') });
+        return null;
+    }
+};
 
 const buildClip = ({ store, decodeForUser, durationSeconds, now }) => {
     const windowEndMs = now;
     const windowStartMs = windowEndMs - durationSeconds * 1000;
     const packetsByUser = packetsBetween(store, windowStartMs, windowEndMs);
     if (packetsByUser.size === 0) return null;
+    const skippedPackets = [];
 
     // Mix user-by-user so each user's decoder keeps its own opus stream state.
     // Per-user WAVs ride along for speaker-attributed transcription; they are
@@ -24,7 +39,8 @@ const buildClip = ({ store, decodeForUser, durationSeconds, now }) => {
     for (const [userId, entries] of packetsByUser) {
         const single = new Map([[userId, entries]]);
         const userPcm = mixToMonoPcm({
-            packetsByUser: single, windowStartMs, windowEndMs, decode: decodeForUser(userId),
+            packetsByUser: single, windowStartMs, windowEndMs,
+            decode: guardedDecode(decodeForUser(userId), userId, skippedPackets),
         });
         userWavs.set(userId, pcmToWav(userPcm, { sampleRate: 48000, channels: 1 }));
         if (!mixed) {
@@ -42,6 +58,7 @@ const buildClip = ({ store, decodeForUser, durationSeconds, now }) => {
         windowEndMs,
         participantIds: [...packetsByUser.keys()],
         userWavs,
+        skippedPackets,
     };
 };
 
@@ -50,7 +67,7 @@ const buildClip = ({ store, decodeForUser, durationSeconds, now }) => {
 const clipFromCapture = ({ channelId, durationSeconds }) => {
     const state = getCaptureState(channelId);
     if (!state) return null;
-    return buildClip({
+    const clip = buildClip({
         store: state.store,
         decodeForUser: () => {
             const decoder = new OpusEncoder(48000, 2);
@@ -59,6 +76,11 @@ const clipFromCapture = ({ channelId, durationSeconds }) => {
         durationSeconds,
         now: Date.now(),
     });
+    if (clip && clip.skippedPackets.length > 0) {
+        const sample = clip.skippedPackets[0];
+        logger.warn(`[Voice Mod] Clip in ${channelId} skipped ${clip.skippedPackets.length} undecodable packet(s); first: user ${sample.userId}, ${sample.length} bytes, head ${sample.headHex}.`);
+    }
+    return clip;
 };
 
 module.exports = { buildClip, clipFromCapture };

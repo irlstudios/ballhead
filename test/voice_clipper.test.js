@@ -32,6 +32,41 @@ test('buildClip reports the participants whose packets are in the window', () =>
     assert.strictEqual(clip.wav.length, 44 + 60000 * 48 * 2);
 });
 
+test('buildClip skips packets the decoder rejects instead of aborting', () => {
+    const store = createStore({ windowMs: 300000 });
+    const now = 1000000;
+    recordPacket(store, 'u1', Buffer.from([1]), now - 5000);
+    recordPacket(store, 'u1', Buffer.from([0xde, 0xad]), now - 4000);
+    recordPacket(store, 'u1', Buffer.from([3]), now - 3000);
+    const clip = buildClip({
+        store,
+        decodeForUser: () => (packet) => {
+            if (packet[0] === 0xde) throw new Error('The compressed data passed is corrupted');
+            return stereoSilence;
+        },
+        durationSeconds: 60,
+        now,
+    });
+    assert.deepStrictEqual(clip.participantIds, ['u1']);
+    assert.strictEqual(clip.wav.toString('ascii', 0, 4), 'RIFF');
+    assert.deepStrictEqual(clip.skippedPackets, [{ userId: 'u1', length: 2, headHex: 'dead' }]);
+});
+
+test('buildClip still returns a clip when every packet fails to decode', () => {
+    const store = createStore({ windowMs: 300000 });
+    const now = 1000000;
+    recordPacket(store, 'u1', Buffer.from([0xde, 0xad]), now - 5000);
+    const clip = buildClip({
+        store,
+        decodeForUser: () => () => { throw new Error('The compressed data passed is corrupted'); },
+        durationSeconds: 60,
+        now,
+    });
+    assert.deepStrictEqual(clip.participantIds, ['u1']);
+    assert.strictEqual(clip.skippedPackets.length, 1);
+    assert.strictEqual(clip.wav.toString('ascii', 0, 4), 'RIFF');
+});
+
 test('the session host may clip, a stranger may not', () => {
     const session = { hostId: 'host1' };
     assert.strictEqual(canUseClip({ callerId: 'host1', callerRoleIds: [], session }), true);

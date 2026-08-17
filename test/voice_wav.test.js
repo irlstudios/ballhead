@@ -26,6 +26,16 @@ test('a packet lands at its time offset and gaps stay silent', () => {
     assert.strictEqual(pcm.readInt16LE((offset + 48) * 2), 0);
 });
 
+test('a packet whose decode returns null is skipped, not mixed', () => {
+    const packetsByUser = new Map([['u1', [{ at: 0, packet: 'bad' }, { at: 10, packet: 'good' }]]]);
+    const pcm = mixToMonoPcm({
+        packetsByUser, windowStartMs: 0, windowEndMs: 20,
+        decode: (p) => (p === 'bad' ? null : stereo(1000, 48)),
+    });
+    assert.strictEqual(pcm.readInt16LE(0), 0);
+    assert.strictEqual(pcm.readInt16LE(10 * 48 * 2), 1000);
+});
+
 test('stereo is downmixed by averaging the two channels', () => {
     const packet = Buffer.alloc(4);
     packet.writeInt16LE(2000, 0);
