@@ -174,7 +174,10 @@ module.exports = {
             logger.error('Error approving CDT design:', error);
             await interaction.editReply({
                 ...noticePayload(
-                    'There was an error publishing the design. Check the file sizes and try again.',
+                    [
+                        'There was an error publishing the design. Nothing was published.',
+                        `Reason: ${error.message || 'unknown'}`,
+                    ],
                     { title: 'Publish Failed', subtitle: SUBTITLE }
                 ),
                 ephemeral: true,
