@@ -43,7 +43,7 @@ module.exports = {
                 } catch (error) {
                     // Keep the row so the lead can retry instead of orphaning
                     // a live forum post with a dead button.
-                    logger.error('Failed to delete CDT forum thread:', error.message);
+                    logger.error('Failed to delete CDT forum thread:', error);
                     await interaction.editReply({
                         ...noticePayload(
                             'I could not delete the forum post, so nothing was removed. Please try again.',
@@ -55,7 +55,7 @@ module.exports = {
                 }
             }
             await deleteDesignFiles(design.design_id)
-                .catch((cleanupError) => logger.error('Failed to delete CDT design files from S3:', cleanupError.message));
+                .catch((cleanupError) => logger.error('Failed to delete CDT design files from S3:', cleanupError));
             await deleteCdtDesign(design.design_id);
             await reconcileCdtTags(interaction.client);
 

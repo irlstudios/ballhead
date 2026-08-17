@@ -8,7 +8,7 @@ const {
     SUBTITLE,
     rejectNonLead,
     resolveFilesInput,
-    toPreviewPayloads,
+    extractGalleryPayloads,
     buildDesignPostPayload,
     fetchDesignThread,
     respondDesignAutocomplete,
@@ -100,7 +100,7 @@ module.exports = {
                     return;
                 }
                 await deleteDesignFiles(design.design_id, design.file_version)
-                    .catch((cleanupError) => logger.error('Failed to delete old CDT design files:', cleanupError.message));
+                    .catch((cleanupError) => logger.error('Failed to delete old CDT design files:', cleanupError));
                 changed.push('files');
             }
 
@@ -109,9 +109,9 @@ module.exports = {
                 // Edit the public post first so the database never claims text
                 // the forum does not show.
                 const thread = await fetchDesignThread(interaction.client, design);
-                if (thread) {
-                    const starter = await thread.fetchStarterMessage();
-                    const previews = toPreviewPayloads(starter);
+                const starter = thread ? await thread.fetchStarterMessage() : null;
+                const previews = starter ? extractGalleryPayloads(starter.components) : [];
+                if (starter && previews.length > 0) {
                     await starter.edit({
                         ...buildDesignPostPayload({
                             designId: design.design_id,
@@ -129,6 +129,7 @@ module.exports = {
                         await thread.setName(title.slice(0, 100));
                     }
                 } else {
+                    // Never rebuild a post whose previews cannot be recovered.
                     postUpdated = false;
                 }
                 await updateCdtDesign(design.design_id, {

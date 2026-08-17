@@ -31,7 +31,7 @@ const handleCdtDownloadButton = async (interaction) => {
         try {
             files = await getDesignFiles(design.design_id, design.file_version);
         } catch (error) {
-            logger.error(`Failed to fetch CDT design files from S3 for design ${design.design_id}:`, error.message);
+            logger.error(`Failed to fetch CDT design files from S3 for design ${design.design_id}:`, error);
         }
         if (files.length === 0) {
             await interaction.editReply({

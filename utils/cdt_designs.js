@@ -5,6 +5,7 @@ const {
     ButtonBuilder,
     ButtonStyle,
     ChannelType,
+    ComponentType,
     ContainerBuilder,
     MediaGalleryBuilder,
     MediaGalleryItemBuilder,
@@ -79,7 +80,7 @@ const fetchLinkedMessage = async (interaction, link) => {
             message = await channel.messages.fetch(parsed.messageId);
         }
     } catch (error) {
-        logger.error('Failed to fetch linked CDT message:', error.message);
+        logger.error('Failed to fetch linked CDT message:', error);
     }
     if (!message) {
         return { error: 'I could not read that message. Check the link and that I can see the channel.' };
@@ -143,6 +144,27 @@ const parseAttachmentUrl = (value) => {
         name: decodeURIComponent(match[3]),
         url: normalized.toString(),
     };
+};
+
+// Preview sources of an already-published post. Fetched ComponentsV2 messages
+// expose gallery uploads only inside the component tree, never in
+// message.attachments (verified against the live API), so rebuilding a post
+// must read the media gallery items.
+const extractGalleryPayloads = (components) => {
+    const payloads = [];
+    for (const component of components || []) {
+        const json = typeof component.toJSON === 'function' ? component.toJSON() : component;
+        if (json.type === ComponentType.MediaGallery) {
+            for (const item of json.items || []) {
+                const parsed = item.media?.url ? parseAttachmentUrl(item.media.url) : null;
+                if (parsed) {
+                    payloads.push({ attachment: parsed.url, name: parsed.name });
+                }
+            }
+        }
+        payloads.push(...extractGalleryPayloads(json.components));
+    }
+    return payloads;
 };
 
 // The files option accepts either one message link (all its attachments) or
@@ -209,7 +231,7 @@ const fetchDesignsForum = async (client) => {
         const channel = await client.channels.fetch(CDT_DESIGNS_FORUM_CHANNEL_ID);
         return channel?.type === ChannelType.GuildForum ? channel : null;
     } catch (error) {
-        logger.error('Failed to fetch CDT designs forum channel:', error.message);
+        logger.error('Failed to fetch CDT designs forum channel:', error);
         return null;
     }
 };
@@ -219,7 +241,7 @@ const fetchDesignThread = async (client, design) => {
         const thread = await client.channels.fetch(design.forum_thread_id);
         return thread?.isThread() ? thread : null;
     } catch (error) {
-        logger.error(`Failed to fetch CDT forum thread for design ${design.design_id}:`, error.message);
+        logger.error(`Failed to fetch CDT forum thread for design ${design.design_id}:`, error);
         return null;
     }
 };
@@ -259,7 +281,7 @@ const reconcileCdtTags = async (client) => {
             }
         }
     } catch (error) {
-        logger.error('Failed to reconcile CDT forum tags:', error.message);
+        logger.error('Failed to reconcile CDT forum tags:', error);
     }
 };
 
@@ -275,7 +297,7 @@ const respondDesignAutocomplete = async (interaction) => {
             }))
         );
     } catch (error) {
-        logger.error('CDT design autocomplete error:', error.message);
+        logger.error('CDT design autocomplete error:', error);
     }
 };
 
@@ -312,6 +334,7 @@ module.exports = {
     toPreviewPayloads,
     parseAttachmentUrl,
     resolveFilesInput,
+    extractGalleryPayloads,
     buildDesignPostPayload,
     fetchDesignsForum,
     fetchDesignThread,

@@ -12,6 +12,7 @@ const {
     toPreviewPayloads,
     parseAttachmentUrl,
     resolveFilesInput,
+    extractGalleryPayloads,
     desiredTags,
 } = require('../utils/cdt_designs');
 const {
@@ -121,6 +122,27 @@ test('resolveFilesInput accepts multiple attachment links and reports their ids'
     assert.deepStrictEqual([...result.attachmentIds].sort(), ['222', '333']);
     const rejected = await resolveFilesInput(null, 'https://cdn.discordapp.com/attachments/1/2/a.png junk');
     assert.ok(rejected.error, 'mixed valid and invalid tokens must be rejected');
+});
+
+test('extractGalleryPayloads recovers previews from a fetched CV2 component tree', () => {
+    // Shape of a fetched forum post: container holding text, gallery, buttons.
+    // Fetched messages expose gallery uploads here, never in attachments.
+    const components = [{
+        type: 17,
+        components: [
+            { type: 10, content: 'text' },
+            { type: 12, items: [
+                { media: { url: 'https://cdn.discordapp.com/attachments/1/2/preview-1.png?ex=a&is=b&hm=c' } },
+                { media: { url: 'https://media.discordapp.net/attachments/1/3/preview-2.jpg?format=webp' } },
+            ] },
+            { type: 1, components: [{ type: 2, custom_id: 'cdtDownload_1' }] },
+        ],
+    }];
+    const previews = extractGalleryPayloads(components);
+    assert.deepStrictEqual(previews.map((p) => p.name), ['preview-1.png', 'preview-2.jpg']);
+    assert.ok(previews.every((p) => p.attachment.startsWith('https://cdn.discordapp.com/attachments/')));
+    assert.deepStrictEqual(extractGalleryPayloads([]), []);
+    assert.deepStrictEqual(extractGalleryPayloads(undefined), []);
 });
 
 test('toPreviewPayloads excludes attachments used as design files', () => {
