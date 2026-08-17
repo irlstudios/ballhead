@@ -23,7 +23,11 @@ module.exports = {
         .setDescription('Approve a design submission and publish it to the designs forum (team leads)')
         .addStringOption((option) => option
             .setName('submission')
-            .setDescription('Message link to the submission post with previews and files')
+            .setDescription('Message link with the in-game preview images shown on the public post')
+            .setRequired(true))
+        .addStringOption((option) => option
+            .setName('files')
+            .setDescription('Message link with the downloadable design files. Never shown on the post')
             .setRequired(true))
         .addStringOption((option) => option
             .setName('title')
@@ -42,10 +46,7 @@ module.exports = {
             .setRequired(true))
         .addUserOption((option) => option
             .setName('designer')
-            .setDescription('Who gets credit (defaults to the author of the linked message)'))
-        .addStringOption((option) => option
-            .setName('files')
-            .setDescription('Message link with the deliverable files, if different from the submission attachments'))
+            .setDescription('Who gets credit (defaults to the author of the submission message)'))
         .addStringOption((option) => option
             .setName('credit')
             .setDescription('Credit name shown on the post (defaults to the designer\'s display name)')
@@ -92,21 +93,28 @@ module.exports = {
                 return;
             }
 
-            // Previews always come from the submission post; the served files
-            // default to it too, but a separate files link lets a lead vault a
-            // deliverable that should not be publicly visible as a preview.
-            let filesMessage = message;
-            const filesLink = interaction.options.getString('files');
-            if (filesLink) {
-                const filesResult = await fetchLinkedMessage(interaction, filesLink);
-                if (filesResult.error) {
-                    await interaction.editReply({
-                        ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
-                        ephemeral: true,
-                    });
-                    return;
-                }
-                filesMessage = filesResult.message;
+            // Strict split: the submission link only supplies preview images,
+            // the files link only supplies the downloadables. Court files are
+            // images too, so the two must be different messages or the
+            // deliverable would be publicly saveable from the gallery.
+            const filesResult = await fetchLinkedMessage(interaction, interaction.options.getString('files'));
+            if (filesResult.error) {
+                await interaction.editReply({
+                    ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
+                    ephemeral: true,
+                });
+                return;
+            }
+            const filesMessage = filesResult.message;
+            if (filesMessage.id === message.id) {
+                await interaction.editReply({
+                    ...noticePayload(
+                        'The files link must be a different message than the submission link, otherwise the downloadable file would be shown as a public preview. Post the design file on its own (the review channel works well) and link that message.',
+                        { title: 'Separate The Files', subtitle: SUBTITLE }
+                    ),
+                    ephemeral: true,
+                });
+                return;
             }
 
             const title = interaction.options.getString('title');

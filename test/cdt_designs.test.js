@@ -142,6 +142,18 @@ test('desiredTags manages only Popular and Most Downloaded', () => {
     assert.strictEqual(desiredTags(['1', '2', '3', '4', '5'], 100, true).length, 5);
 });
 
+test('approve requires separate submission and files links', () => {
+    const json = approveCommand.data.toJSON();
+    const files = json.options.find((o) => o.name === 'files');
+    assert.ok(files.required, 'files link must be required so deliverables never leak into previews');
+    const required = json.options.map((o) => Boolean(o.required));
+    const firstOptional = required.indexOf(false);
+    assert.ok(
+        firstOptional === -1 || required.slice(firstOptional).every((r) => !r),
+        'Discord rejects required options after optional ones'
+    );
+});
+
 test('update and remove use autocomplete on the design option', () => {
     for (const command of [updateCommand, removeCommand]) {
         const json = command.data.toJSON();
