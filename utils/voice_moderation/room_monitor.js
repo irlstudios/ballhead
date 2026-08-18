@@ -33,7 +33,11 @@ const runCycle = async ({ store, decodeForUser, sinceMs, nowMs, transcribe, scan
         const result = await transcribe(wav);
         if (!result.ok) {
             failed += 1;
+            logger.warn(`[Voice Mod] Chunk transcription failed for ${userId}: ${result.reason}`);
             continue;
+        }
+        if (process.env.VOICE_DEBUG_TRANSCRIPTS === '1') {
+            logger.info(`[Voice Mod] Transcript ${userId}: "${result.text}"`);
         }
         if (!result.text) continue;
         const matches = scan(result.text);
@@ -120,7 +124,10 @@ const startRoomMonitor = ({ client, channelId, hostId, onCycleOutcome }) => {
                 scan: scanTranscript,
                 onFlag: (flag) => postFlagAlert({ client, channelId, hostId, ...flag }),
             });
-            if (outcome.attempted > 0) onCycleOutcome(outcome.failed < outcome.attempted);
+            if (outcome.attempted > 0) {
+                logger.info(`[Voice Mod] Cycle for ${channelId}: ${outcome.attempted} chunk(s), ${outcome.failed} failed, ${outcome.flags} flag(s).`);
+                onCycleOutcome(outcome.failed < outcome.attempted);
+            }
         } catch (error) {
             logger.error(`[Voice Mod] Cycle failed for ${channelId}:`, error);
             onCycleOutcome(false);
