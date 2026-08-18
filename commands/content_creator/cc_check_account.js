@@ -41,10 +41,10 @@ function buildAccountUrl(platform, username, platformId) {
     const user = normalize(username);
 
     switch (platform) {
-        case 'reels': // Instagram Reels
-            return user ? `https://www.instagram.com/${user}/` : null;
-        default:
-            return null;
+    case 'reels': // Instagram Reels
+        return user ? `https://www.instagram.com/${user}/` : null;
+    default:
+        return null;
     }
 }
 
@@ -90,24 +90,12 @@ function getPlatformData(platform, discordId, valuesByRange) {
             }
         }
 
-        if (!appRow) return null;
-
-        const username = appRow[1]?.trim();
-        if (!username) return null;
-
-        const platformId = appRow[4]?.trim();
-        const userPosts = dataRows.filter(row => {
-            if (!row || row.length < 15) return false;
-            const postUsername = row[0]?.trim();
-            const postPlatformId = row[1]?.trim();
-            return (postUsername?.toLowerCase() === username.toLowerCase()) ||
-                   (platformId && postPlatformId === platformId);
-        });
-
         let creatorRow = null;
         let creatorStatus = null;
+        // length > 3: Sheets omits trailing blank cells, so a creator with a
+        // blank P ID (col E) arrives as a 4-cell row.
         for (const row of creatorRows) {
-            if (row && row.length > 4) {
+            if (row && row.length > 3) {
                 const rowPlatform = row[0]?.trim();
                 const rowDiscordId = row[3]?.trim();
                 if (rowPlatform?.toLowerCase() === config.platformKey.toLowerCase() &&
@@ -119,11 +107,28 @@ function getPlatformData(platform, discordId, valuesByRange) {
             }
         }
 
+        // Promoted creators have their application row deleted, so roster
+        // membership alone must be enough to show progress.
+        if (!appRow && !creatorRow) return null;
+
+        const username = (appRow ? appRow[1] : creatorRow[2])?.trim() || null;
+        if (appRow && !username) return null;
+
+        const platformId = (appRow ? appRow[4] : creatorRow[4])?.trim();
+        const userPosts = dataRows.filter(row => {
+            if (!row || row.length < 15) return false;
+            const postUsername = row[0]?.trim();
+            const postPlatformId = row[1]?.trim();
+            return (username && postUsername?.toLowerCase() === username.toLowerCase()) ||
+                   (platformId && postPlatformId === platformId);
+        });
+
         return {
             appRow,
             userPosts,
             creatorRow,
             creatorStatus,
+            username,
             platformId,
             config
         };
@@ -328,24 +333,85 @@ function analyzeWeeklyProgress(userPosts, config) {
     };
 }
 
-function formatPlatformEmbed(platform, platformData) {
-    const { appRow, userPosts, creatorRow, creatorStatus, config } = platformData;
+// Aggregate a user's posts into the last 3 completed calendar weeks,
+// oldest first: [3 weeks ago, 2 weeks ago, last week].
+function computeCalendarWeekStats(userPosts) {
+    const calendarWeeks = [];
+    for (let weeksAgo = 1; weeksAgo <= 3; weeksAgo++) {
+        calendarWeeks.push({
+            weeksAgo,
+            weekStart: moment().subtract(weeksAgo, 'weeks').startOf('week'),
+            weekEnd: moment().subtract(weeksAgo, 'weeks').endOf('week')
+        });
+    }
 
-    const username = appRow?.[1]?.trim();
+    const stats = calendarWeeks.map(calWeek => {
+        let totalPoints = 0;
+        let validPosts = 0;
+        let totalPosts = 0;
+        let qualitySum = 0;
+
+        for (const post of userPosts || []) {
+            const postMoment = parseSpreadsheetDate(post[4]);
+            if (!postMoment) continue;
+
+            if (postMoment.isBetween(calWeek.weekStart, calWeek.weekEnd, null, '[]')) {
+                const pointsEarned = parseFloat(post[12]) || 0;
+                const isValid = post[13]?.trim()?.toLowerCase() === 'true' || post[13]?.trim() === 'TRUE';
+                const qualityScore = parseFloat(post[11]) || 0;
+
+                totalPosts++;
+                if (isValid) {
+                    totalPoints += pointsEarned;
+                    validPosts++;
+                    qualitySum += qualityScore;
+                }
+            }
+        }
+
+        return {
+            weeksAgo: calWeek.weeksAgo,
+            totalPoints,
+            validPosts,
+            totalPosts,
+            avgQuality: validPosts > 0 ? (qualitySum / validPosts).toFixed(2) : '0.00',
+            timestamp: calWeek.weekStart.valueOf(),
+            weekStart: calWeek.weekStart,
+            weekEnd: calWeek.weekEnd
+        };
+    });
+
+    return stats.reverse();
+}
+
+function formatWeekLines(calendarWeekStats, weeklyPointsReq) {
+    return calendarWeekStats.map(weekStat => {
+        const status = weekStat.totalPoints >= weeklyPointsReq ? '✅' : '❌';
+        const relativeLabel = describeRelativeWeek(weekStat.timestamp);
+        const dateLabel = moment(weekStat.weekStart).format('MMM D, YYYY');
+        return `**${relativeLabel} · ${dateLabel}:** ${status}\n` +
+               `Points: \`${weekStat.totalPoints.toFixed(1)}\` | Valid Posts: \`${weekStat.validPosts}\` | Avg Quality: \`${weekStat.avgQuality}\``;
+    });
+}
+
+function formatPlatformEmbed(platform, platformData) {
+    const { appRow, userPosts, creatorRow, creatorStatus, username, config } = platformData;
+
     const platformId = platformData.platformId;
     const accountUrl = buildAccountUrl(platform, username, platformId);
     const accountLine = accountUrl ? `**Account:** ${accountUrl}\n` : '';
 
-    const normalizedStatus = creatorStatus ? creatorStatus.toLowerCase() : '';
     if (creatorRow) {
-        const ccType = normalizedStatus.includes('paid')
-            ? 'Paid'
-            : (normalizedStatus.includes('active') ? 'Active' : 'Current');
+        const req = config.requirements;
+        const weekStats = computeCalendarWeekStats(userPosts);
+        const weekLines = formatWeekLines(weekStats, req.weeklyPoints);
         return {
             name: `${config.emoji} ${config.name}`,
             value: accountLine +
-                   '😄 You\'re already a ' + ccType + ' Content Creator for ' + config.name + ', silly!\n\n' +
-                   'Keep posting great content and check out `/cc quality-score` to see your tracked posts.',
+                   `**Status:** ${creatorStatus || 'Current'} Content Creator\n` +
+                   `**Weekly Activity** (${req.weeklyPoints}+ points/week keeps you Active):\n\n` +
+                   weekLines.join('\n\n') + '\n\n' +
+                   'Use `/cc quality-score` to see your tracked posts.',
             inline: false
         };
     }
@@ -384,8 +450,6 @@ function formatPlatformEmbed(platform, platformData) {
     const req = config.requirements;
     const followerLabel = 'Followers';
 
-    let statusLines = [];
-
     if (Object.keys(progress.weeklyStats).length === 0) {
         return {
             name: `${config.emoji} ${config.name}`,
@@ -394,80 +458,8 @@ function formatPlatformEmbed(platform, platformData) {
         };
     }
 
-    // Build calendar-based weeks: Last week, 2 weeks ago, 3 weeks ago
-    // These are ALWAYS based on the current date, not user data
-    const now = moment();
-    const calendarWeeks = [];
-
-    for (let weeksAgo = 1; weeksAgo <= 3; weeksAgo++) {
-        const weekStart = moment().subtract(weeksAgo, 'weeks').startOf('week');
-        const weekEnd = moment().subtract(weeksAgo, 'weeks').endOf('week');
-
-        calendarWeeks.push({
-            weeksAgo,
-            weekStart,
-            weekEnd,
-            timestamp: weekStart.valueOf()
-        });
-    }
-
-    // For each calendar week, aggregate the user's posts that fall in that time range
-    const calendarWeekStats = calendarWeeks.map(calWeek => {
-        let totalPoints = 0;
-        let validPosts = 0;
-        let totalPosts = 0;
-        let qualitySum = 0;
-
-        // Go through all user posts and find ones that fall in this calendar week
-        for (const post of userPosts) {
-            const postMoment = parseSpreadsheetDate(post[4]);
-            if (!postMoment) continue;
-
-            // Check if post falls within this calendar week
-            if (postMoment.isBetween(calWeek.weekStart, calWeek.weekEnd, null, '[]')) {
-                const pointsEarned = parseFloat(post[12]) || 0;
-                const isValid = post[13]?.trim()?.toLowerCase() === 'true' || post[13]?.trim() === 'TRUE';
-                const qualityScore = parseFloat(post[11]) || 0;
-
-                totalPosts++;
-                if (isValid) {
-                    totalPoints += pointsEarned;
-                    validPosts++;
-                    qualitySum += qualityScore;
-                }
-            }
-        }
-
-        const avgQuality = validPosts > 0 ? (qualitySum / validPosts).toFixed(2) : '0.00';
-
-        return {
-            weeksAgo: calWeek.weeksAgo,
-            totalPoints,
-            validPosts,
-            totalPosts,
-            avgQuality,
-            timestamp: calWeek.timestamp,
-            weekStart: calWeek.weekStart,
-            weekEnd: calWeek.weekEnd
-        };
-    });
-
-    // Reverse so oldest week is first (3 weeks ago, 2 weeks ago, last week)
-    calendarWeekStats.reverse();
-
-    for (const weekStat of calendarWeekStats) {
-        const metRequirement = weekStat.totalPoints >= req.weeklyPoints;
-        const status = metRequirement ? '✅' : '❌';
-
-        const relativeLabel = describeRelativeWeek(weekStat.timestamp);
-        const dateLabel = moment(weekStat.weekStart).format('MMM D, YYYY');
-        const heading = `${relativeLabel} · ${dateLabel}`;
-
-        statusLines.push(
-            `**${heading}:** ${status}\n` +
-            `Points: \`${weekStat.totalPoints.toFixed(1)}\` | Valid Posts: \`${weekStat.validPosts}\` | Avg Quality: \`${weekStat.avgQuality}\``
-        );
-    }
+    const calendarWeekStats = computeCalendarWeekStats(userPosts);
+    const statusLines = formatWeekLines(calendarWeekStats, req.weeklyPoints);
 
     // Calculate consecutive weeks from the calendar-based stats
     let consecutiveWeeksFromEnd = 0;
@@ -515,7 +507,11 @@ function canCheckOthers(member) {
 }
 
 module.exports = {
+    PLATFORMS,
     getLatestFollowerCount,
+    getPlatformData,
+    computeCalendarWeekStats,
+    formatPlatformEmbed,
     data: new SlashCommandBuilder()
         .setName('cc-check-progress')
         .setDescription('Check your Content Creator application status and requirements progress across all platforms')
@@ -552,8 +548,9 @@ module.exports = {
             const targetUser = interaction.options.getUser('user');
             const isModerator = canCheckOthers(interaction.member);
 
-            // If they're trying to check someone else but aren't a moderator, deny
-            if (targetUser && !isModerator) {
+            // If they're trying to check someone else but aren't a moderator, deny.
+            // Users habitually @ themselves in the option, so self-selection is allowed.
+            if (targetUser && targetUser.id !== interaction.user.id && !isModerator) {
                 const container = new ContainerBuilder()
                     .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have permission to check other users\' progress.\nYou can only check your own progress.'));
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
@@ -564,37 +561,25 @@ module.exports = {
             const userId = targetUser ? targetUser.id : interaction.user.id;
             const isCheckingOther = targetUser && targetUser.id !== interaction.user.id;
             const platformResults = {};
-            const existingCCPlatforms = [];
 
-            for (const [key, config] of Object.entries(PLATFORMS)) {
+            for (const key of Object.keys(PLATFORMS)) {
                 const data = getPlatformData(key, userId, valuesByRange);
-                if (data && data.appRow) {
+                if (data) {
                     platformResults[key] = data;
-                } else if (data && data.creatorRow) {
-                    existingCCPlatforms.push(config.name);
                 }
             }
 
             if (Object.keys(platformResults).length === 0) {
-                if (existingCCPlatforms.length > 0) {
-                    const pronoun = isCheckingOther ? 'They\'re' : 'You\'re';
-                    const container = new ContainerBuilder()
-                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                            `## Already a Content Creator\n${isCheckingOther ? `<@${userId}> is` : 'Looks like you\'re'} already a CC!\n${pronoun} a Content Creator for: **${existingCCPlatforms.join(', ')}**\n${pronoun} also don't have any open applications to other platforms.`
-                        ));
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-                } else {
-                    const container = new ContainerBuilder()
-                        .addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                            `## No Applications Found\n${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n${isCheckingOther ? 'They need to use' : 'Use'} \`/cc apply-instagram\` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use \`/cc check-progress\` for updates.`
-                        ));
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
-                }
+                const container = new ContainerBuilder()
+                    .addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                        `## No Applications Found\n${isCheckingOther ? `<@${userId}> hasn't` : 'You haven\'t'} applied for any CC programs yet.\n${isCheckingOther ? 'They need to use' : 'Use'} \`/cc apply-instagram\` to get started.\nTikTok and YouTube applications happen in the GC mobile app. Use \`/cc check-progress\` for updates.`
+                    ));
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 return;
             }
 
             const titleText = `${isCheckingOther ? `${targetUser.username}'s` : 'Your'} Content Creator Progress`;
-            const introText = `${isCheckingOther ? `Here's <@${userId}>'s` : 'Here\'s your'} current status across all platforms ${isCheckingOther ? 'they\'ve' : 'you\'ve'} applied to:`;
+            const introText = `${isCheckingOther ? `Here's <@${userId}>'s` : 'Here\'s your'} current status:`;
 
             let platformContent = '';
             for (const [platform, data] of Object.entries(platformResults)) {
