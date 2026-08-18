@@ -41,7 +41,7 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor(0xff0000)
-                .setTitle('⚠️ Rep Removed')
+                .setTitle('\u26A0\uFE0F Rep Removed')
                 .setDescription(`${user.tag} has lost ${amount} Rep.`)
                 .addFields(
                     {name: 'Rep Removed by', value: interaction.user.tag}

@@ -17,20 +17,20 @@ const buildStatusLines = (entries) => {
     if (entries.length === 0) {
         return [
             'You have no applications waiting for review.',
-            'If you applied before, a decision has been made — check your DMs, or ask a lead if you never got one.',
+            'If you applied before, a decision has been made - check your DMs, or ask a lead if you never got one.',
             'Browse the programs under **/apply** to get started.',
         ];
     }
     const lines = entries.map((entry) => {
         if (entry.state === 'unavailable') {
-            return `**${entry.name}**: could not be checked right now — try again in a bit`;
+            return `**${entry.name}**: could not be checked right now - try again in a bit`;
         }
         const timestamp = entry.submittedAt
-            ? ` — submitted <t:${Math.floor(entry.submittedAt.getTime() / 1000)}:R>`
+            ? ` - submitted <t:${Math.floor(entry.submittedAt.getTime() / 1000)}:R>`
             : '';
         return `**${entry.name}**: pending review${timestamp}`;
     });
-    return [...lines, '', 'Decisions are sent by DM once a lead reviews — keep your DMs open.'];
+    return [...lines, '', 'Decisions are sent by DM once a lead reviews - keep your DMs open.'];
 };
 
 module.exports = {

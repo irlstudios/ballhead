@@ -5,7 +5,7 @@ module.exports = {
     name: 'messageReactionAdd',
     async execute(reaction, user, client) {
         if (user.bot) return;
-        if (reaction.emoji.name !== '➕') return;
+        if (reaction.emoji.name !== '\u2795') return;
         if (reaction.partial) {
             try {
                 await reaction.fetch();
@@ -47,8 +47,8 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
-                .setTitle('🌟 Rep Given!')
-                .setDescription(`${user.tag} has received Rep for their message! 🎉`)
+                .setTitle('\u{1F31F} Rep Given!')
+                .setDescription(`${user.tag} has received Rep for their message! \u{1F389}`)
                 .addFields(
                     { name: 'Message Content', value: message.content || '*No content*' },
                     { name: 'Given by', value: interaction.user.tag }

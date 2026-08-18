@@ -11,7 +11,7 @@ test('buildStatusLines lists each pending application with relative time', () =>
         { name: 'Community Design Team', state: 'pending', submittedAt },
         { name: 'Official', state: 'pending', submittedAt: null },
     ]);
-    assert.strictEqual(lines[0], `**Community Design Team**: pending review — submitted <t:${Math.floor(submittedAt.getTime() / 1000)}:R>`);
+    assert.strictEqual(lines[0], `**Community Design Team**: pending review - submitted <t:${Math.floor(submittedAt.getTime() / 1000)}:R>`);
     assert.strictEqual(lines[1], '**Official**: pending review');
     assert.ok(lines[lines.length - 1].includes('DM'));
 });

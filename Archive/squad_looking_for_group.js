@@ -156,7 +156,7 @@ const handleLfgSystem2Create = async (interaction) => {
 
     const squadName = squad[2];
 
-    let description = `Hello all 👋, <@${interaction.user.id}> is looking for members to join their squad **${squadName}**! \n\n**Here are their requirements:**\n${requirements}`;
+    let description = `Hello all \u{1F44B}, <@${interaction.user.id}> is looking for members to join their squad **${squadName}**! \n\n**Here are their requirements:**\n${requirements}`;
 
     if (rules) {
         description += `\n\n**Here are the rules in the squad:**\n${rules}`;

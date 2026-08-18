@@ -325,7 +325,7 @@ module.exports = {
                     ctx.save();
                     ctx.font = '18px "Bebas Neue"';
                     ctx.fillStyle = '#ffd700';
-                    ctx.fillText('🔥', hrX + 50, hrY - 10);
+                    ctx.fillText('\u{1F525}', hrX + 50, hrY - 10);
                     ctx.restore();
                 }
             });

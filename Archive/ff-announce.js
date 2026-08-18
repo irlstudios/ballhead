@@ -63,7 +63,7 @@ module.exports = {
 
         const embed = new EmbedBuilder()
             .setColor(0x0099FF)
-            .setTitle(`Hey all 👋 ${hostRole} ${interaction.user.username} is now hosting!`)
+            .setTitle(`Hey all \u{1F44B} ${hostRole} ${interaction.user.username} is now hosting!`)
             .setDescription(`They are hosting games for the Official FF Tournament!\n\n**Ruleset:**\n${rulesText}`)
             .setTimestamp();
 

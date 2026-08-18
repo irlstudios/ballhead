@@ -96,8 +96,8 @@ test('formats overview rows with hashtag and weekly numbers', () => {
         { league_name: 'Dodge Kings', league_hashtag: null, games_7d: 0, players_7d: 0 },
     ]);
     assert.deepStrictEqual(lines, [
-        '- **Sky Ballers** (#gcskyballers) — 3 games, 12 unique players (last 7 days)',
-        '- **Dodge Kings** (no hashtag) — 0 games, 0 unique players (last 7 days)',
+        '- **Sky Ballers** (#gcskyballers) - 3 games, 12 unique players (last 7 days)',
+        '- **Dodge Kings** (no hashtag) - 0 games, 0 unique players (last 7 days)',
     ]);
 });
 

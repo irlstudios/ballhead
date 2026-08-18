@@ -227,9 +227,9 @@ function officialOptionDescription(rosterRow, trackRecord, now = Date.now()) {
     }
     const games = Number(trackRecord?.games) || 0;
     if (games === 0) {
-        return `Sport: ${sport} · no tracked games yet`.slice(0, 100);
+        return `Sport: ${sport} | no tracked games yet`.slice(0, 100);
     }
-    const description = `Sport: ${sport} · ${games} games · last ${shortAgo(trackRecord.last_active, now)}`;
+    const description = `Sport: ${sport} | ${games} games | last ${shortAgo(trackRecord.last_active, now)}`;
     return description.slice(0, 100);
 }
 

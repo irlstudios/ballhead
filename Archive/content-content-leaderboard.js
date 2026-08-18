@@ -123,7 +123,7 @@ module.exports = {
             const attachment = new AttachmentBuilder(leaderboardImage, { name: 'leaderboard.png' });
 
             const embed = new EmbedBuilder()
-                .setTitle('🎄 Christmas Contest Leaderboard 🎄')
+                .setTitle('\u{1F384} Christmas Contest Leaderboard \u{1F384}')
                 .setColor('#FF4500')
                 .setDescription('Here are the top videos using \n #gcwinterholiday24 with the most likes:')
                 .setImage('attachment://leaderboard.png')

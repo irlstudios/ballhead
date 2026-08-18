@@ -57,7 +57,7 @@ const OFFICIAL_ROLE_IDS = [OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFF
 // FF Official program
 // Paused between seasons; flip to false when the new season opens on 9/2/26.
 const FF_APPLICATIONS_PAUSED = true;
-const FF_APPLICATIONS_PAUSE_MESSAGE = 'The FF Official program is under maintenance. The new season starts on 9/2/26 — check back around then to apply.';
+const FF_APPLICATIONS_PAUSE_MESSAGE = 'The FF Official program is under maintenance. The new season starts on 9/2/26 - check back around then to apply.';
 const FF_OFFICIAL_ROLE_ID = '1125216796413263892';
 // Roles eligible to apply for FF Official (Active Official, Senior Official)
 const FF_OFFICIAL_ELIGIBLE_ROLE_IDS = [OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_SENIOR_ROLE_ID];

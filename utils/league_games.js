@@ -83,7 +83,7 @@ function buildOverviewLines(rows) {
     }
     return rows.map((r) => {
         const tag = r.league_hashtag ? `#${r.league_hashtag}` : 'no hashtag';
-        return `- **${r.league_name}** (${tag}) — ${Number(r.games_7d) || 0} games, ${Number(r.players_7d) || 0} unique players (last 7 days)`;
+        return `- **${r.league_name}** (${tag}) - ${Number(r.games_7d) || 0} games, ${Number(r.players_7d) || 0} unique players (last 7 days)`;
     });
 }
 

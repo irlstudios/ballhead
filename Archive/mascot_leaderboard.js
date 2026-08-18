@@ -51,7 +51,7 @@ async function generateLeaderboardImage(data) {
     ctx.font = 'bold 48px "Bebas Neue", sans-serif';
     ctx.textAlign = 'center';
     ctx.shadowColor = '#000000'; ctx.shadowBlur = 7; ctx.shadowOffsetY = 2;
-    ctx.fillText('🏆 Playoffs Leaderboard 🏆', canvasWidth / 2, 95);
+    ctx.fillText('\u{1F3C6} Playoffs Leaderboard \u{1F3C6}', canvasWidth / 2, 95);
     ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
 
     const headerY = 180;

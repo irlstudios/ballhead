@@ -53,7 +53,7 @@ module.exports = {
             if (recent.length > 0) {
                 lines.push('', '**Recent games:**');
                 for (const g of recent) {
-                    lines.push(`- ${g.sport || 'Game'} — ${g.verification_status}`);
+                    lines.push(`- ${g.sport || 'Game'} - ${g.verification_status}`);
                 }
             }
 

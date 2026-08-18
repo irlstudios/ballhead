@@ -45,7 +45,7 @@ function buildAppealCardComponents(appeal, { leagueName, strikeReason } = {}) {
     const container = new ContainerBuilder();
     const lines = [
         `**League:** ${leagueName || `#${appeal.league_id}`}`,
-        `**Strike:** #${appeal.strike_id}${strikeReason ? ` — ${strikeReason}` : ''}`,
+        `**Strike:** #${appeal.strike_id}${strikeReason ? ` - ${strikeReason}` : ''}`,
         `**Submitted by:** <@${appeal.submitted_by}>`,
         `**Statement:** ${appeal.statement}`,
         `**Status:** ${appeal.status}`,

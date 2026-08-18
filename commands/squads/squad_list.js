@@ -14,7 +14,7 @@ module.exports = {
         async function getSquadList() {
             const rows = await squadDb.fetchAllSquadsWithCounts();
             return rows.map((s) =>
-                `- **${s.name}** (${s.squad_type}) — ${s.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS} members (Owner: <@${s.owner_id}>)`
+                `- **${s.name}** (${s.squad_type}) - ${s.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS} members (Owner: <@${s.owner_id}>)`
             );
         }
 

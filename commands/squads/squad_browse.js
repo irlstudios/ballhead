@@ -18,9 +18,9 @@ function buildBrowsePages(squads) {
         const capacity = `${squad.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS}`;
         const hasRoom = squad.member_count < squadDb.MAX_SQUAD_MEMBERS - 1;
         const joinable = (recruiting === 'Open' || recruiting === 'Apply') && hasRoom;
-        const tagBits = [squad.playstyle, squad.region].filter(Boolean).join(' · ');
+        const tagBits = [squad.playstyle, squad.region].filter(Boolean).join(' | ');
         const lines = [
-            `**${squad.name}** (${squad.squad_type}) — ${capacity} members · ${recruiting}${tagBits ? ` · ${tagBits}` : ''}`,
+            `**${squad.name}** (${squad.squad_type}) - ${capacity} members | ${recruiting}${tagBits ? ` | ${tagBits}` : ''}`,
         ];
         if (squad.description) {
             lines.push(`-# ${squad.description}`);
@@ -42,7 +42,7 @@ function renderBrowsePage(pages, pageIndex) {
     container.addTextDisplayComponents(
         new TextDisplayBuilder().setContent('## Squad Browser'),
         new TextDisplayBuilder().setContent(page.entries.flatMap((e) => e.lines).join('\n')),
-        new TextDisplayBuilder().setContent(`-# Page ${pageIndex + 1} of ${pages.length} · Open squads join instantly, Apply squads review your application`)
+        new TextDisplayBuilder().setContent(`-# Page ${pageIndex + 1} of ${pages.length} | Open squads join instantly, Apply squads review your application`)
     );
 
     const components = [container];
@@ -52,8 +52,8 @@ function renderBrowsePage(pages, pageIndex) {
             .setCustomId(`squadbrowse:pick:${pageIndex}`)
             .setPlaceholder('Join or apply to a squad on this page')
             .addOptions(joinable.map((e) => ({
-                label: `${e.squad.name} — ${e.recruiting === 'Open' ? 'Join now' : 'Apply'}`.slice(0, 100),
-                description: `${e.squad.squad_type} · ${e.squad.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS} members`.slice(0, 100),
+                label: `${e.squad.name} - ${e.recruiting === 'Open' ? 'Join now' : 'Apply'}`.slice(0, 100),
+                description: `${e.squad.squad_type} | ${e.squad.member_count + 1}/${squadDb.MAX_SQUAD_MEMBERS} members`.slice(0, 100),
                 value: String(e.squad.id),
             })));
         components.push(new ActionRowBuilder().addComponents(menu));

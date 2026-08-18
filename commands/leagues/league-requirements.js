@@ -10,7 +10,7 @@ const {
 } = require('../../utils/league_enforcement');
 
 const checklistLines = (checks) => checks.map(
-    (c) => `${c.ok ? '[Met]' : '[Not met]'} ${c.label} — ${c.detail}`
+    (c) => `${c.ok ? '[Met]' : '[Not met]'} ${c.label} - ${c.detail}`
 );
 
 module.exports = {
@@ -89,7 +89,7 @@ module.exports = {
                         ...checklistLines(requirements.checks),
                         '',
                         requirements.ok
-                            ? 'You meet everything — promotion lands within a day.'
+                            ? 'You meet everything - promotion lands within a day.'
                             : 'See **/league guide** for how each requirement works.',
                     ],
                     { title: 'Active League Requirements', subtitle: league.league_name }

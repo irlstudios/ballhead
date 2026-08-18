@@ -27,7 +27,7 @@ test('isValidHashtag requires a gc prefix', () => {
 
 test('isValidHashtag enforces charset and 3-30 length', () => {
     assert.strictEqual(isValidHashtag('gc has space'), false);
-    assert.strictEqual(isValidHashtag('gcemoji😀tag'), false);
+    assert.strictEqual(isValidHashtag('gcemoji\u{1F600}tag'), false);
     assert.strictEqual(isValidHashtag(`gc${'x'.repeat(28)}`), true);
     assert.strictEqual(isValidHashtag(`gc${'x'.repeat(29)}`), false);
 });

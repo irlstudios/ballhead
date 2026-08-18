@@ -2,7 +2,7 @@ module.exports = {
   name: 'messageReactionAdd',
   async execute(reaction, user, client) {
     try {
-      if (reaction.emoji.name !== '⭐') return;
+      if (reaction.emoji.name !== '\u2B50') return;
 
       if (!reaction.message || !reaction.message.author) {
         console.error('Reaction message or author is undefined.');

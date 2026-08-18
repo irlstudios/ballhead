@@ -16,7 +16,6 @@ const PLATFORMS = {
         platformKey: 'Reels',
         requirements: { followers: 50, weeklyPoints: 8, weeksRequired: 3 },
         color: '#E1306C',
-        emoji: '📸',
         weekColumnIndex: 14
     }
 };
@@ -386,10 +385,10 @@ function computeCalendarWeekStats(userPosts) {
 
 function formatWeekLines(calendarWeekStats, weeklyPointsReq) {
     return calendarWeekStats.map(weekStat => {
-        const status = weekStat.totalPoints >= weeklyPointsReq ? '✅' : '❌';
+        const status = weekStat.totalPoints >= weeklyPointsReq ? '[OK]' : '[X]';
         const relativeLabel = describeRelativeWeek(weekStat.timestamp);
         const dateLabel = moment(weekStat.weekStart).format('MMM D, YYYY');
-        return `**${relativeLabel} · ${dateLabel}:** ${status}\n` +
+        return `**${relativeLabel} | ${dateLabel}:** ${status}\n` +
                `Points: \`${weekStat.totalPoints.toFixed(1)}\` | Valid Posts: \`${weekStat.validPosts}\` | Avg Quality: \`${weekStat.avgQuality}\``;
     });
 }
@@ -406,7 +405,7 @@ function formatPlatformEmbed(platform, platformData) {
         const weekStats = computeCalendarWeekStats(userPosts);
         const weekLines = formatWeekLines(weekStats, req.weeklyPoints);
         return {
-            name: `${config.emoji} ${config.name}`,
+            name: `${config.name}`,
             value: accountLine +
                    `**Status:** ${creatorStatus || 'Current'} Content Creator\n` +
                    `**Weekly Activity** (${req.weeklyPoints}+ points/week keeps you Active):\n\n` +
@@ -419,8 +418,8 @@ function formatPlatformEmbed(platform, platformData) {
     const appDateStr = appRow[3];
     if (!appDateStr) {
         return {
-            name: `${config.emoji} ${config.name}`,
-            value: accountLine + '⚠️ Application found but date is missing. Contact support.',
+            name: `${config.name}`,
+            value: accountLine + 'Application found but date is missing. Contact support.',
             inline: false
         };
     }
@@ -431,8 +430,8 @@ function formatPlatformEmbed(platform, platformData) {
 
     if (!appDate.isValid()) {
         return {
-            name: `${config.emoji} ${config.name}`,
-            value: `⚠️ Application date format issue ('${trimmedDate}'). Data updates on Mondays.`,
+            name: `${config.name}`,
+            value: `Application date format issue ('${trimmedDate}'). Data updates on Mondays.`,
             inline: false
         };
     }
@@ -440,8 +439,8 @@ function formatPlatformEmbed(platform, platformData) {
     if (!userPosts || userPosts.length === 0) {
         const nextMonday = moment().day(8);
         return {
-            name: `${config.emoji} ${config.name}`,
-            value: accountLine + `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No posts tracked yet. Check back <t:${nextMonday.unix()}:R>`,
+            name: `${config.name}`,
+            value: accountLine + `Applied on ${appDate.format('MMM D, YYYY')}\nNo posts tracked yet. Check back <t:${nextMonday.unix()}:R>`,
             inline: false
         };
     }
@@ -452,8 +451,8 @@ function formatPlatformEmbed(platform, platformData) {
 
     if (Object.keys(progress.weeklyStats).length === 0) {
         return {
-            name: `${config.emoji} ${config.name}`,
-            value: accountLine + `✅ Applied on ${appDate.format('MMM D, YYYY')}\n⏳ No valid posts with week assignments yet.`,
+            name: `${config.name}`,
+            value: accountLine + `Applied on ${appDate.format('MMM D, YYYY')}\nNo valid posts with week assignments yet.`,
             inline: false
         };
     }
@@ -473,18 +472,18 @@ function formatPlatformEmbed(platform, platformData) {
 
     const followerCount = parseInt(progress.followers);
     const meetsFollowerReq = !isNaN(followerCount) && followerCount >= req.followers;
-    const followerStatus = meetsFollowerReq ? '✅' : '❌';
+    const followerStatus = meetsFollowerReq ? '[OK]' : '[X]';
 
     const meetsConsecutiveReq = consecutiveWeeksFromEnd >= req.weeksRequired;
-    const consecutiveStatus = meetsConsecutiveReq ? '✅' : '❌';
+    const consecutiveStatus = meetsConsecutiveReq ? '[OK]' : '[X]';
 
     let statusHeader = '';
     if (meetsFollowerReq && meetsConsecutiveReq) {
-        statusHeader = '🎉 **Eligible for Content Creator Role!**\n\n';
+        statusHeader = '**Eligible for Content Creator Role!**\n\n';
     }
 
     return {
-        name: `${config.emoji} ${config.name}`,
+        name: `${config.name}`,
         value: accountLine +
                statusHeader +
                `**${followerLabel}:** ${progress.followers} ${followerStatus} (need ${req.followers})\n` +

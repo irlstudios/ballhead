@@ -888,7 +888,7 @@ module.exports = {
                     deleted++;
                 } catch (err) {
                     if (err.code === 50001) {
-                        logger.warn(`[Rooms] Skipping channel ${ch.id} — missing access`);
+                        logger.warn(`[Rooms] Skipping channel ${ch.id} - missing access`);
                         continue;
                     }
                     throw err;

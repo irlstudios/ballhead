@@ -197,7 +197,7 @@ module.exports = {
                 }
 
                 const teamNames = await fetchTeamNames(league.server_id);
-                matchDetails = `${buildAutoDetails(game, teamNames)} — ${matchDetails}`;
+                matchDetails = `${buildAutoDetails(game, teamNames)} - ${matchDetails}`;
                 tournyLink = { tournyGuildId: league.server_id, tournySeasonId: seasonId, tournyGameId: gameId };
             }
 

@@ -179,8 +179,8 @@ const handleApplyBaseLeagueModal = async (interaction) => {
                 [
                     'Your Base League has been registered successfully!',
                     guideDelivered
-                        ? 'The League Owner Guide has been sent to your DMs — bring it back anytime with **/league guide**.'
-                        : 'We could not DM you the League Owner Guide (your DMs may be closed) — read it anytime with **/league guide**.',
+                        ? 'The League Owner Guide has been sent to your DMs - bring it back anytime with **/league guide**.'
+                        : 'We could not DM you the League Owner Guide (your DMs may be closed) - read it anytime with **/league guide**.',
                 ],
                 { title: 'Base League Registered', subtitle: leagueName }
             )

@@ -66,7 +66,7 @@ module.exports = {
                     const searchable = `${username} ${m.user_id} ${squad.name}`.toLowerCase();
                     if (focused && !searchable.includes(focused)) continue;
                     seen.add(m.user_id);
-                    choices.push({ name: `${username} — ${squad.name}`.slice(0, 100), value: m.user_id });
+                    choices.push({ name: `${username} - ${squad.name}`.slice(0, 100), value: m.user_id });
                     if (choices.length >= 25) break;
                 }
                 if (choices.length >= 25) break;

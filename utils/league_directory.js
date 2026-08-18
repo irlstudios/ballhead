@@ -15,7 +15,7 @@ function leagueLine(league) {
     }
     // Only surface a non-healthy status; "Healthy" is the silent default.
     if (league.health_status && league.health_status !== 'Healthy') {
-        parts.push(`— ${league.health_status}`);
+        parts.push(`- ${league.health_status}`);
     }
     return parts.join(' ');
 }

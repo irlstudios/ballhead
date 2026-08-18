@@ -78,7 +78,7 @@ module.exports = {
             }
             const appDate = moment(appDateStr.trim(), 'M/D/YYYY', true);
             if (!appDate.isValid()) {
-                await interaction.editReply({ content: `We found your application, but the date stored ('${appDateStr}'). Please note that we begin pulling new form data every Sunday, and platform check data is updated on Mondays. If you believe there’s an issue with your submission, please contact support.`, ephemeral: true });
+                await interaction.editReply({ content: `We found your application, but the date stored ('${appDateStr}'). Please note that we begin pulling new form data every Sunday, and platform check data is updated on Mondays. If you believe there\u2019s an issue with your submission, please contact support.`, ephemeral: true });
                 return;
             }
             if (!dataRow) {
@@ -117,17 +117,17 @@ module.exports = {
                 let m = `**${label}:**\nVideos: \`${w.posts}\` | Avg Views/Likes: \`${w.likes}\` | Avg Quality: \`${w.quality}\`\n`;
                 if (!w.metP || !w.metL) {
                     const miss = [];
-                    if (!w.metP) miss.push(`Need ≥ ${req.posts} videos`);
-                    if (!w.metL) miss.push(`Need ≥ ${req.likes} avg views/likes`);
+                    if (!w.metP) miss.push(`Need \u2265 ${req.posts} videos`);
+                    if (!w.metL) miss.push(`Need \u2265 ${req.likes} avg views/likes`);
                     m += '**Missing:** ' + miss.join('; ') + '\n';
                 } else {
-                    m += '**Requirements Met** ✅\n';
+                    m += '**Requirements Met** \u2705\n';
                 }
                 return m;
             };
 
             const embed = new EmbedBuilder()
-                .setTitle('📊 Your YouTube 3-Week Stats')
+                .setTitle('\u{1F4CA} Your YouTube 3-Week Stats')
                 .setColor('#FF0000')
                 .setDescription(
                     `**Subscribers:** ${followers}\n\n` +

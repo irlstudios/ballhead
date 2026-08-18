@@ -343,7 +343,7 @@ module.exports = {
             });
             await notifyUser(
                 [
-                    '⏳ We added your Instagram application to the queue.',
+                    'We added your Instagram application to the queue.',
                     'We will review and fetch your data this Sunday.',
                     `Link on file: ${instagramUrl}`,
                     '',
@@ -550,7 +550,7 @@ module.exports = {
                     }
                     await notifyUser(
                         [
-                            `✅ We verified your Instagram: ${instagramUrl}`,
+                            `We verified your Instagram: ${instagramUrl}`,
                             '',
                             'Stay on top of your progress:',
                             '- `/cc check-progress` shows your current requirement status',

@@ -241,15 +241,15 @@ test('blocks cancelling a missing request', () => {
 // --- officialOptionDescription ------------------------------------------------
 
 test('official with no track record shows no tracked games, not "new" (fetch succeeded, zero pipeline games)', () => {
-    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'Sport: Soccer · no tracked games yet');
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, undefined), 'Sport: Soccer | no tracked games yet');
 });
 
 test('official with zero games shows no tracked games even if a record row exists', () => {
-    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'Sport: Soccer · no tracked games yet');
+    assert.strictEqual(officialOptionDescription({ sport: 'Soccer' }, { games: 0 }), 'Sport: Soccer | no tracked games yet');
 });
 
 test('zero-game description still falls back to "Any" and honors the 100-char cap', () => {
-    assert.strictEqual(officialOptionDescription({}, { games: 0 }), 'Sport: Any · no tracked games yet');
+    assert.strictEqual(officialOptionDescription({}, { games: 0 }), 'Sport: Any | no tracked games yet');
     const longSport = 'Extremely Long Sport Name '.repeat(10);
     assert.strictEqual(officialOptionDescription({ sport: longSport }, { games: 0 }).length, 100);
 });
@@ -268,14 +268,14 @@ test('official with one game reports sport, count, and recency', () => {
     const now = Date.UTC(2026, 0, 10);
     const DAY = 24 * 60 * 60 * 1000;
     const desc = officialOptionDescription({ sport: 'Soccer' }, { games: 1, last_active: now - 3 * DAY }, now);
-    assert.strictEqual(desc, 'Sport: Soccer · 1 games · last 3d');
+    assert.strictEqual(desc, 'Sport: Soccer | 1 games | last 3d');
 });
 
 test('official with many games reports the total', () => {
     const now = Date.UTC(2026, 0, 10);
     const DAY = 24 * 60 * 60 * 1000;
     const desc = officialOptionDescription({ sport: 'Basketball' }, { games: 42, last_active: now - DAY / 2 }, now);
-    assert.strictEqual(desc, 'Sport: Basketball · 42 games · last today');
+    assert.strictEqual(desc, 'Sport: Basketball | 42 games | last today');
 });
 
 test('stale last-active reads in months, recent reads in days', () => {
@@ -290,7 +290,7 @@ test('stale last-active reads in months, recent reads in days', () => {
 test('falls back to "Any" when the roster row has no sport', () => {
     const now = Date.UTC(2026, 0, 10);
     const desc = officialOptionDescription({}, { games: 2, last_active: now }, now);
-    assert.ok(desc.startsWith('Sport: Any ·'), desc);
+    assert.ok(desc.startsWith('Sport: Any |'), desc);
 });
 
 test('description is truncated to Discord\'s 100-char option-description cap', () => {

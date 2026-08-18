@@ -19,7 +19,7 @@ module.exports = {
 
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
-                .setTitle('🏆 Reputation Leaderboard')
+                .setTitle('\u{1F3C6} Reputation Leaderboard')
                 .setDescription('Top 10 users with the highest Rep')
                 .setTimestamp();
 

@@ -227,14 +227,14 @@ test('truncateUtf8 leaves ASCII under the byte cap unchanged', () => {
 });
 
 test('truncateUtf8 trims a CJK string by bytes, not chars, with no partial character', () => {
-    // Each 'あ' is 3 UTF-8 bytes. 40 chars = 120 bytes, over a 100-byte cap,
+    // Each '\u3042' is 3 UTF-8 bytes. 40 chars = 120 bytes, over a 100-byte cap,
     // even though 40 chars would pass a naive char-length check.
-    const value = 'あ'.repeat(40);
+    const value = '\u3042'.repeat(40);
     const result = truncateUtf8(value, 100);
     assert.ok(Buffer.byteLength(result, 'utf8') <= 100);
     // Truncation stopped on a whole character: the result is itself made of
-    // only 'あ' chars, never a mangled partial one.
-    assert.strictEqual(result, 'あ'.repeat(Math.floor(100 / 3)));
+    // only '\u3042' chars, never a mangled partial one.
+    assert.strictEqual(result, '\u3042'.repeat(Math.floor(100 / 3)));
     assert.strictEqual(Buffer.byteLength(result, 'utf8'), 99);
 });
 
@@ -284,7 +284,7 @@ test('projectRoster truncates a multibyte name/sport by UTF-8 bytes, not chars',
     // 40 CJK chars would pass a 100-char slice untouched (40 < 100) but is
     // 120 UTF-8 bytes -- over tourny's byte-counted 100-byte limit, and
     // exactly the case that used to slip a 400 into the whole PUT.
-    const rows = [{ discord_id: '556', discord_name: 'あ'.repeat(40), sport: 'い'.repeat(30) }];
+    const rows = [{ discord_id: '556', discord_name: '\u3042'.repeat(40), sport: '\u3044'.repeat(30) }];
     const [projected] = projectRoster(rows);
     assert.ok(Buffer.byteLength(projected.name, 'utf8') <= 100);
     assert.ok(Buffer.byteLength(projected.sport, 'utf8') <= 60);
@@ -296,8 +296,8 @@ test('projectRoster mixed fixture: every projected name/sport stays within its U
     const rows = [
         { discord_id: '1', discord_name: 'Ref Bob', sport: 'Basketball' },
         { discord_id: '2', discord_name: '\u{1F600}'.repeat(30), sport: '\u{1F600}'.repeat(20) }, // emoji, surrogate pairs
-        { discord_id: '3', discord_name: 'Судья'.repeat(20), sport: 'Спорт'.repeat(15) }, // Cyrillic, 2 bytes/char
-        { discord_id: '4', discord_name: '日本語の名前'.repeat(20), sport: '日本語'.repeat(20) }, // CJK, 3 bytes/char
+        { discord_id: '3', discord_name: '\u0421\u0443\u0434\u044C\u044F'.repeat(20), sport: '\u0421\u043F\u043E\u0440\u0442'.repeat(15) }, // Cyrillic, 2 bytes/char
+        { discord_id: '4', discord_name: '\u65E5\u672C\u8A9E\u306E\u540D\u524D'.repeat(20), sport: '\u65E5\u672C\u8A9E'.repeat(20) }, // CJK, 3 bytes/char
     ];
     for (const projected of projectRoster(rows)) {
         assert.ok(Buffer.byteLength(projected.name, 'utf8') <= 100, `name for id ${projected.id} exceeds 100 bytes`);

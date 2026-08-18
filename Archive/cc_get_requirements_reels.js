@@ -57,7 +57,7 @@ function getNextMonday() {
 module.exports = {
     data: new SlashCommandBuilder()
         .setName('check-reels-account')
-        .setDescription('Checks your Instagram application status and 3‑week requirement data.'),
+        .setDescription('Checks your Instagram application status and 3\u2011week requirement data.'),
     async execute(interaction) {
         try {
             if (process.env.ALLOW_CC_REQUIREMENTS_REELS !== 'true') {
@@ -68,7 +68,7 @@ module.exports = {
             const userId = interaction.user.id;
             const userData = await getUserData(userId);
             if (!userData || !userData.userReelsRow) {
-                await interaction.editReply({ content: 'I couldn’t find an Instagram Reels CC application for you. If you’ve already applied, give us a little time to process it—or submit the form and try again.', ephemeral: true });
+                await interaction.editReply({ content: 'I couldn\u2019t find an Instagram Reels CC application for you. If you\u2019ve already applied, give us a little time to process it-or submit the form and try again.', ephemeral: true });
                 return;
             }
             const { userReelsRow, userIGDataRow } = userData;
@@ -85,7 +85,7 @@ module.exports = {
             }
             if (!userIGDataRow) {
                 const nextMonday = `<t:${getNextMonday().unix()}:F>`;
-                await interaction.editReply({ content: `Thanks for applying on **${applicationDate.format('MMMM Do, YYYY')}**! Your stats haven’t shown up in our dashboard yet. We refresh the data every Monday—check back around ${nextMonday}.`, ephemeral: true });
+                await interaction.editReply({ content: `Thanks for applying on **${applicationDate.format('MMMM Do, YYYY')}**! Your stats haven\u2019t shown up in our dashboard yet. We refresh the data every Monday-check back around ${nextMonday}.`, ephemeral: true });
                 return;
             }
 
@@ -113,17 +113,17 @@ module.exports = {
                 let msg = `**${label}:**\nPosts: \`${data.posts}\` | Avg Likes: \`${data.likes}\` | Avg Quality: \`${data.quality}\`\n`;
                 if (!data.metPosts || !data.metLikes) {
                     const missing = [];
-                    if (!data.metPosts) missing.push(`Need ≥ ${requirements.posts} posts`);
-                    if (!data.metLikes) missing.push(`Need ≥ ${requirements.likes} avg likes`);
+                    if (!data.metPosts) missing.push(`Need \u2265 ${requirements.posts} posts`);
+                    if (!data.metLikes) missing.push(`Need \u2265 ${requirements.likes} avg likes`);
                     msg += '**Missing:** ' + missing.join('; ') + '\n';
                 } else {
-                    msg += '**Requirements Met** ✅\n';
+                    msg += '**Requirements Met** \u2705\n';
                 }
                 return msg;
             };
 
             const embed = new EmbedBuilder()
-                .setTitle('📊 Your Instagram 3‑Week Stats')
+                .setTitle('\u{1F4CA} Your Instagram 3\u2011Week Stats')
                 .setColor('#E1306C')
                 .setDescription(
                     `**Followers:** ${followersStr}\n\n` +

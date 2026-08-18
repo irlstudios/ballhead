@@ -136,17 +136,17 @@ module.exports = {
                 let message = `**${weekLabel}:**\nPosts: \`${data.posts}\` | Avg Likes: \`${data.likes}\` | Avg Quality: \`${data.quality}\`\n`;
                 if (!data.metPosts || !data.metLikes) {
                     const missing = [];
-                    if (!data.metPosts) missing.push(`Need ≥ ${requirements.posts} posts`);
-                    if (!data.metLikes) missing.push(`Need ≥ ${requirements.likes} avg likes`);
+                    if (!data.metPosts) missing.push(`Need \u2265 ${requirements.posts} posts`);
+                    if (!data.metLikes) missing.push(`Need \u2265 ${requirements.likes} avg likes`);
                     message += '**Missing:** ' + missing.join('; ') + '\n';
                 } else {
-                    message += '**Requirements Met** ✅\n';
+                    message += '**Requirements Met** \u2705\n';
                 }
                 return message;
             };
 
             const embed = new EmbedBuilder()
-                .setTitle('📊 Your TikTok 3‑Week Stats')
+                .setTitle('\u{1F4CA} Your TikTok 3\u2011Week Stats')
                 .setColor('#0099ff')
                 .setDescription(
                     `**Followers:** ${followersStr}\n\n` +

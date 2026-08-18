@@ -67,7 +67,7 @@ module.exports = {
             if (officials.length === 0) {
                 return interaction.editReply(noticePayload('The officials roster is empty. Add one with `/league official-roster add`.', { title: 'Roster Empty', subtitle: SUB }));
             }
-            const lines = officials.map((o) => `- <@${o.discord_id}> — ${o.sport || 'Any'}`);
+            const lines = officials.map((o) => `- <@${o.discord_id}> - ${o.sport || 'Any'}`);
             return interaction.editReply(noticePayload(lines, { title: `Officials Roster (${officials.length})`, subtitle: SUB }));
         } catch (error) {
             logger.error('[Officials] official-roster failed:', error);

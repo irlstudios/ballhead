@@ -48,12 +48,12 @@ const ccQuestionPhrases = [
 ];
 
 const ccQuestionPatterns = [
-    /why[\s'’.,!?]*didn['’]?t[\s'’.,!?]*i[\s'’.,!?]*(?:get|receive)[\s'’.,!?]*(?:cc|content[\s'’.,!?]*creator)/i,
-    /how[\s'’.,!?]*do[\s'’.,!?]*i[\s'’.,!?]*(?:get|unlock)[\s'’.,!?]*(?:cc|content[\s'’.,!?]*creator)/i,
-    /when[\s'’.,!?]*(?:can|will|do)[\s'’.,!?]*i[\s'’.,!?]*get[\s'’.,!?]*(?:cc|content[\s'’.,!?]*creator)/i,
-    /do[\s'’.,!?]*i[\s'’.,!?]*(?:qualify|meet)[\s'’.,!?]*for[\s'’.,!?]*(?:cc|content[\s'’.,!?]*creator)/i,
-    /content[\s'’.,!?]*creator[\s'’.,!?]*(?:requirements|progress|status)/i,
-    /cc[\s'’.,!?]*progress/i
+    /why[\s'\u2019.,!?]*didn['\u2019]?t[\s'\u2019.,!?]*i[\s'\u2019.,!?]*(?:get|receive)[\s'\u2019.,!?]*(?:cc|content[\s'\u2019.,!?]*creator)/i,
+    /how[\s'\u2019.,!?]*do[\s'\u2019.,!?]*i[\s'\u2019.,!?]*(?:get|unlock)[\s'\u2019.,!?]*(?:cc|content[\s'\u2019.,!?]*creator)/i,
+    /when[\s'\u2019.,!?]*(?:can|will|do)[\s'\u2019.,!?]*i[\s'\u2019.,!?]*get[\s'\u2019.,!?]*(?:cc|content[\s'\u2019.,!?]*creator)/i,
+    /do[\s'\u2019.,!?]*i[\s'\u2019.,!?]*(?:qualify|meet)[\s'\u2019.,!?]*for[\s'\u2019.,!?]*(?:cc|content[\s'\u2019.,!?]*creator)/i,
+    /content[\s'\u2019.,!?]*creator[\s'\u2019.,!?]*(?:requirements|progress|status)/i,
+    /cc[\s'\u2019.,!?]*progress/i
 ];
 
 module.exports = {
@@ -66,7 +66,7 @@ module.exports = {
         const rawContent = message.content;
         const normalizedContent = rawContent.toLowerCase();
         const sanitizedContent = normalizedContent
-            .replace(/['’]/g, '')
+            .replace(/['\u2019]/g, '')
             .replace(/[^a-z0-9\s]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();

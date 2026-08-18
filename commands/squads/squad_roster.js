@@ -23,7 +23,7 @@ function buildRosterLines(squad, members) {
         lines.push('No members yet (just the owner).');
     } else {
         for (const m of members) {
-            lines.push(`- ${m.username || `<@${m.user_id}>`} — joined ${isoDate(m.joined_at)}`);
+            lines.push(`- ${m.username || `<@${m.user_id}>`} - joined ${isoDate(m.joined_at)}`);
         }
     }
     return lines;

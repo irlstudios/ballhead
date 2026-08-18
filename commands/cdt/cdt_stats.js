@@ -23,7 +23,7 @@ module.exports = {
             const lines = rows.length === 0
                 ? ['No designs have been published yet.']
                 : rows.map((row) =>
-                    `**#${row.design_id} ${row.title.slice(0, 40)}** (${row.category}) by ${row.credit_name.slice(0, 20)} — ` +
+                    `**#${row.design_id} ${row.title.slice(0, 40)}** (${row.category}) by ${row.credit_name.slice(0, 20)} - ` +
                     `${row.downloads} unique ${row.downloads === 1 ? 'download' : 'downloads'}`
                 );
 

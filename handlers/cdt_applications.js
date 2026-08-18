@@ -201,7 +201,7 @@ const handleCdtApplicationApprove = async (interaction) => {
                     '',
                     'The essentials to keep your role:',
                     '- Post designs, drafts, and ideas in #community-designers. One post per design, with previews and files. Unfinished work is welcome.',
-                    '- Share at least one draft, idea, or design every two weeks. If you need time off, message a team lead before the two weeks are up — notice pauses the clock.',
+                    '- Share at least one draft, idea, or design every two weeks. If you need time off, message a team lead before the two weeks are up - notice pauses the clock.',
                     '- Everything you submit must be your own original work, made without AI generative tools.',
                     '- Your published work is released under CC BY-NC: you are always credited, and no one may use it commercially.',
                     '',

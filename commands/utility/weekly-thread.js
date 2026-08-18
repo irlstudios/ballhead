@@ -42,8 +42,8 @@ module.exports = {
             await interaction.reply({content: 'The weekly discussion thread has been created.', ephemeral: true});
 
             const announcementEmbed = new EmbedBuilder()
-                .setTitle('Hey Gym Class! 🏋️‍♂️')
-                .setDescription(`Exciting news for our weekly discussion this week – we're diving into **${topic}** 🌟 Don't miss out on the fun! Jump into the thread below and share your thoughts on the topic! 🗣️💬 Let's make this discussion the most vibrant one yet! 💪😄`);
+                .setTitle('Hey Gym Class!')
+                .setDescription(`Exciting news for our weekly discussion this week - we're diving into **${topic}**. Don't miss out on the fun! Jump into the thread below and share your thoughts on the topic! Let's make this discussion the most vibrant one yet!`);
             const announcementButton = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()

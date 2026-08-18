@@ -397,11 +397,11 @@ async function scheduledTask(client) {
 
         const announcementMessage = `<@&1218468103382499400>
 
-**📈 Weekly Squad Performance Update 📈**
+**\u{1F4C8} Weekly Squad Performance Update \u{1F4C8}**
 
-🎉 **Congratulations to the squads who secured 1st place in both Competitive and Content categories!**
+\u{1F389} **Congratulations to the squads who secured 1st place in both Competitive and Content categories!**
 
-🔔 **Stay tuned in #announcements later today** to find out who the top squads of the week are and who is earning Squad Weekly Rewards!`;
+\u{1F514} **Stay tuned in #announcements later today** to find out who the top squads of the week are and who is earning Squad Weekly Rewards!`;
 
         await channel.send({
             content: announcementMessage,

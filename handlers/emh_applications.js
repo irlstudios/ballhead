@@ -202,7 +202,7 @@ const handleEmhApplicationApprove = async (interaction) => {
                 lines: [
                     'Congratulations! Your EMH application has been accepted.',
                     '',
-                    'Start here — this guide explains everything you need to know as an EMH, including what to do and how to do it:',
+                    'Start here - this guide explains everything you need to know as an EMH, including what to do and how to do it:',
                     'https://docs.google.com/document/d/15flVB_aLv-Lb1z-1Nb_ZlhGSRzGkzotwW1ZXWo9zyuA/edit?tab=t.0',
                 ],
             });

@@ -24,7 +24,7 @@ const matchesCourtQuestion = (content) => {
     return clauses.some((clause) => {
         const sanitized = clause
             .toLowerCase()
-            .replace(/['’]/g, '')
+            .replace(/['\u2019]/g, '')
             .replace(/[^a-z0-9\s]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
@@ -48,7 +48,7 @@ module.exports = {
             container.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Custom Courts'));
             container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
                 `Hey <@${message.author.id}>! Looking for a custom court?`,
-                `Check out <#${CDT_DESIGNS_FORUM_CHANNEL_ID}> — it's full of community-made courts and backboards.`,
+                `Check out <#${CDT_DESIGNS_FORUM_CHANNEL_ID}> - it's full of community-made courts and backboards.`,
                 'Every post has a **Get Files** button so you can download the design and use it in game.',
             ].join('\n')));
             await message.reply({ flags: MessageFlags.IsComponentsV2, components: [container] });

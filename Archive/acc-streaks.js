@@ -104,14 +104,14 @@ async function sendStreakMessages(client, streaks) {
                         await guildMember.roles.add(assignedRole);
                     }
 
-                    const messageContent = `🎉 **Congratulations, ${username}!** 🎉\n\nYou’ve reached a ${streak}-week CC Streak and earned the **${roleName}** role! Keep up the amazing work! 💪\n\nStay consistent and aim for your next milestone! 🌟`;
+                    const messageContent = `\u{1F389} **Congratulations, ${username}!** \u{1F389}\n\nYou\u2019ve reached a ${streak}-week CC Streak and earned the **${roleName}** role! Keep up the amazing work! \u{1F4AA}\n\nStay consistent and aim for your next milestone! \u{1F31F}`;
                     await user.send(messageContent);
                 } else {
-                    const messageContent = `👏 **Great job, ${username}!** 👏\n\nYou successfully met your CC requirements last week, bringing your ACC Streak to **${streak} weeks**! Keep it going!\n\nStay on track, and let's see how far you can go! 🚀`;
+                    const messageContent = `\u{1F44F} **Great job, ${username}!** \u{1F44F}\n\nYou successfully met your CC requirements last week, bringing your ACC Streak to **${streak} weeks**! Keep it going!\n\nStay on track, and let's see how far you can go! \u{1F680}`;
                     await user.send(messageContent);
                 }
             } else {
-                const messageContent = `😔 **Sorry, ${username}** 😔\n\nIt looks like your ACC Streak has been broken.\n\nDon't give up! You can start building your streak again! 💪`;
+                const messageContent = `\u{1F614} **Sorry, ${username}** \u{1F614}\n\nIt looks like your ACC Streak has been broken.\n\nDon't give up! You can start building your streak again! \u{1F4AA}`;
                 await user.send(messageContent);
 
                 const guildMember = await client.guilds.cache.get(process.env.Guild_ID).members.fetch(discordId);

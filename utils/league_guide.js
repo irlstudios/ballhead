@@ -19,16 +19,16 @@ const LEAGUE_GUIDE_SECTIONS = Object.freeze([
     Object.freeze({
         title: 'Getting Started',
         lines: Object.freeze([
-            '- **/league settings** — set your primary sport and your content hashtag so players know what you run',
-            '- **/league update-invite** — keep your invite link current; our health checks use it',
-            '- **/league add-co-owner** — share the work with up to 2 co-owners',
-            '- **/league directory** — where the community browses every registered league, including yours',
+            '- **/league settings** - set your primary sport and your content hashtag so players know what you run',
+            '- **/league update-invite** - keep your invite link current; our health checks use it',
+            '- **/league add-co-owner** - share the work with up to 2 co-owners',
+            '- **/league directory** - where the community browses every registered league, including yours',
         ]),
     }),
     Object.freeze({
         title: 'Stay in Good Standing',
         lines: Object.freeze([
-            '- **/league checkin** — submit your monthly activity check-in. This is required; missed check-ins put your league at risk and block tier upgrades',
+            '- **/league checkin** - submit your monthly activity check-in. This is required; missed check-ins put your league at risk and block tier upgrades',
             '- Keep your invite valid and your server active; automated health checks run regularly',
             '- Strikes can be issued for rule violations. Appeal an active strike with **/league appeal**',
         ]),
@@ -36,10 +36,10 @@ const LEAGUE_GUIDE_SECTIONS = Object.freeze([
     Object.freeze({
         title: 'Track Your Games and Content',
         lines: Object.freeze([
-            '- **/league submit-game** — record each completed league game by tagging the players. A game history builds your league\'s track record',
-            '- **/league request-official** — Active and Sponsored leagues can request a certified official for a game',
-            '- Register a content hashtag with **/league settings** — it must start with #gc (for example #gcskyballers). Every post using it is tracked and credited to your league',
-            '- **/league content** — see your hashtag and content totals anytime',
+            '- **/league submit-game** - record each completed league game by tagging the players. A game history builds your league\'s track record',
+            '- **/league request-official** - Active and Sponsored leagues can request a certified official for a game',
+            '- Register a content hashtag with **/league settings** - it must start with #gc (for example #gcskyballers). Every post using it is tracked and credited to your league',
+            '- **/league content** - see your hashtag and content totals anytime',
         ]),
     }),
     Object.freeze({
@@ -52,7 +52,7 @@ const LEAGUE_GUIDE_SECTIONS = Object.freeze([
             '- No active strikes and a Healthy league status',
             '',
             'Check where you stand anytime with **/league requirements**.',
-            `To stay Active: keep checking in monthly, hold ${KEEP.MIN_MEMBERS}+ members, and avoid strikes — leagues below the bar move back to Base.`,
+            `To stay Active: keep checking in monthly, hold ${KEEP.MIN_MEMBERS}+ members, and avoid strikes - leagues below the bar move back to Base.`,
             'Sponsored leagues (**/apply sponsored-league**) also unlock rewards via **/league request-reward**.',
         ]),
     }),

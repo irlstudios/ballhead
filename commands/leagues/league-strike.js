@@ -98,8 +98,8 @@ module.exports = {
                 if (strikes.length === 0) {
                     return interaction.editReply(noticePayload('No active strikes.', { title: league.league_name, subtitle: SUB }));
                 }
-                const lines = strikes.map((s) => `- **#${s.id}** — ${s.reason}`);
-                return interaction.editReply(noticePayload(lines, { title: `${league.league_name} — active strikes`, subtitle: SUB }));
+                const lines = strikes.map((s) => `- **#${s.id}** - ${s.reason}`);
+                return interaction.editReply(noticePayload(lines, { title: `${league.league_name} - active strikes`, subtitle: SUB }));
             }
 
             // resolve
