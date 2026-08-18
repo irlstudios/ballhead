@@ -1,16 +1,65 @@
 'use strict';
 
 // Keyword lists for public room voice flagging. Tier 1 fires an immediate
-// mod alert with an evidence clip; tier 2 is counted in logs only.
-// Staff curate these lists; keep entries lowercase.
+// mod alert with an evidence clip; tier 2 is counted in logs only so alert
+// precision can be judged before promoting a term. Staff own these lists.
+//
+// Curation rules:
+// - Entries are lowercase; matching is case-insensitive on word boundaries.
+// - Tier 1 is reserved for terms that are alert-worthy in nearly any context
+//   in this community: severe slurs, credible threat phrases, self-harm
+//   incitement, and grooming-pattern phrases (the player base skews young).
+// - Terms with heavy benign overlap or high banter volume start in tier 2;
+//   promote only after shadow data shows acceptable precision.
 
 const TIER1 = [
+    // Severe slurs
+    'nigger',
+    'chink',
+    'spic',
+    'wetback',
+    'beaner',
+    'gook',
+    'kike',
+    'towelhead',
+    'porch monkey',
+    'faggot',
+    'tranny',
+    // Self-harm incitement
     'kill yourself',
+    'kill your self',
     'kys',
+    'neck yourself',
+    'hang yourself',
+    'shoot yourself',
+    'slit your wrists',
+    // Threats and doxxing
+    'i know where you live',
+    'rape you',
+    // Grooming patterns
+    'send nudes',
+    'dont tell your parents',
+    'do not tell your parents',
+    'are you home alone',
+    'whats your address',
+    'what is your address',
 ];
 
 const TIER2 = [
-    'trash talk',
+    'nigga',
+    'fag',
+    'dyke',
+    'coon',
+    'retard',
+    'retarded',
+    'pedo',
+    'pedophile',
+    'groomer',
+    'molest',
+    'i will kill you',
+    'ill kill you',
+    'swat you',
+    'home alone',
 ];
 
 module.exports = { TIER1, TIER2 };

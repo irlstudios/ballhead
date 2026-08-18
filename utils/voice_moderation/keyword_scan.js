@@ -7,9 +7,14 @@ const { TIER1, TIER2 } = require('../../config/voice_keywords');
 
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+// Whisper writes contractions with straight or curly apostrophes; the lists
+// are apostrophe-free, so both sides are matched with apostrophes stripped.
+const stripApostrophes = (s) => s.replace(/['’]/g, '');
+
 const matchList = (text, list) => {
+    const normalized = stripApostrophes(text);
     const found = list.filter((keyword) =>
-        new RegExp(`\\b${escapeRegex(keyword)}\\b`, 'i').test(text));
+        new RegExp(`\\b${escapeRegex(stripApostrophes(keyword))}\\b`, 'i').test(normalized));
     return [...new Set(found.map((keyword) => keyword.toLowerCase()))];
 };
 
