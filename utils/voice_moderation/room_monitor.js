@@ -1,8 +1,11 @@
 'use strict';
 
-// Per-room transcription cycle for public rooms. Every cycle drains each
-// speaker's speech since the last cycle, sends it to the PC whisper server,
-// scans the text, and alerts on tier 1 hits. Registry of active monitors
+// Per-room transcription for public rooms, utterance-driven for speed: the
+// capture layer signals when a speaker goes silent and that speaker's audio
+// since their last drain is transcribed and scanned immediately, so a tier 1
+// alert lands seconds after the sentence ends. A slow periodic sweep catches
+// anything the utterance path missed (very long continuous talkers, missed
+// end events) and keeps health facts flowing. Registry of active monitors
 // follows the capture.js module-Map precedent.
 
 const { OpusEncoder } = require('@discordjs/opus');
@@ -12,7 +15,7 @@ const { buildTextBlock } = require('../ui');
 const { drainUserChunks } = require('./chunker');
 const { transcribeWav } = require('./whisper_client');
 const { scanTranscript } = require('./keyword_scan');
-const { getCaptureState } = require('./capture');
+const { getCaptureState, setUtteranceHook, clearUtteranceHook } = require('./capture');
 const { clipFromCapture } = require('./clipper');
 const { insertIncident } = require('./incidents');
 const {
@@ -20,36 +23,47 @@ const {
     VOICE_CLIP_DEFAULT_SECONDS,
 } = require('../../config/constants');
 
-// channelId -> { timer, lastCycleEndMs, hostId }
+// channelId -> { timer, hostId, startedMs, lastDrain: Map<userId, ms>,
+//                inFlight: Set<userId>, client, onCycleOutcome }
 const monitors = new Map();
 
 const activeMonitorCount = () => monitors.size;
 
-const runCycle = async ({ store, decodeForUser, sinceMs, nowMs, transcribe, scan, onFlag }) => {
-    const chunks = drainUserChunks({ store, decodeForUser, sinceMs, nowMs });
-    let attempted = 0; let failed = 0; let flags = 0;
-    for (const [userId, wav] of chunks) {
-        attempted += 1;
-        const result = await transcribe(wav);
-        if (!result.ok) {
-            failed += 1;
-            logger.warn(`[Voice Mod] Chunk transcription failed for ${userId}: ${result.reason}`);
-            continue;
+const freshDecoderFor = () => {
+    const decoder = new OpusEncoder(48000, 2);
+    return (packet) => {
+        try {
+            return decoder.decode(packet);
+        } catch {
+            return null;
         }
-        if (process.env.VOICE_DEBUG_TRANSCRIPTS === '1') {
-            logger.info(`[Voice Mod] Transcript ${userId}: "${result.text}"`);
-        }
-        if (!result.text) continue;
-        const matches = scan(result.text);
-        if (matches.tier2.length > 0) {
-            logger.info(`[Voice Mod] Tier2 watch words from ${userId}: ${matches.tier2.join(', ')}`);
-        }
-        if (matches.tier1.length > 0) {
-            flags += 1;
-            await onFlag({ userId, matches: matches.tier1, text: result.text });
-        }
+    };
+};
+
+// Core per-speaker drain: pull this user's speech in [sinceMs, nowMs],
+// transcribe, scan, and flag. Fully injected for tests.
+const drainUser = async ({ store, decodeForUser, userId, sinceMs, nowMs, transcribe, scan, onFlag }) => {
+    const chunks = drainUserChunks({ store, decodeForUser, sinceMs, nowMs, users: [userId] });
+    const wav = chunks.get(userId);
+    if (!wav) return { drained: false, ok: true, flagged: false };
+    const result = await transcribe(wav);
+    if (!result.ok) {
+        logger.warn(`[Voice Mod] Chunk transcription failed for ${userId}: ${result.reason}`);
+        return { drained: true, ok: false, flagged: false };
     }
-    return { attempted, failed, flags };
+    if (process.env.VOICE_DEBUG_TRANSCRIPTS === '1') {
+        logger.info(`[Voice Mod] Transcript ${userId}: "${result.text}"`);
+    }
+    if (!result.text) return { drained: true, ok: true, flagged: false };
+    const matches = scan(result.text);
+    if (matches.tier2.length > 0) {
+        logger.info(`[Voice Mod] Tier2 watch words from ${userId}: ${matches.tier2.join(', ')}`);
+    }
+    if (matches.tier1.length > 0) {
+        await onFlag({ userId, matches: matches.tier1, text: result.text });
+        return { drained: true, ok: true, flagged: true };
+    }
+    return { drained: true, ok: true, flagged: false };
 };
 
 const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text }) => {
@@ -93,44 +107,69 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
     }
 };
 
+// Drain one speaker now, with per-user window bookkeeping and an in-flight
+// guard so an utterance drain and the sweep never scan the same audio twice.
+// The window only advances when audio was actually drained; sub-threshold
+// fragments wait for the next utterance or sweep.
+const drainSpeakerNow = async (channelId, userId) => {
+    const monitor = monitors.get(channelId);
+    if (!monitor) return;
+    const state = getCaptureState(channelId);
+    if (!state) {
+        stopRoomMonitor(channelId);
+        return;
+    }
+    if (monitor.inFlight.has(userId)) return;
+    monitor.inFlight.add(userId);
+    try {
+        const nowMs = Date.now();
+        const sinceMs = monitor.lastDrain.get(userId) || monitor.startedMs;
+        const outcome = await drainUser({
+            store: state.store,
+            decodeForUser: freshDecoderFor,
+            userId, sinceMs, nowMs,
+            transcribe: transcribeWav,
+            scan: scanTranscript,
+            onFlag: (flag) => postFlagAlert({
+                client: monitor.client, channelId, hostId: monitor.hostId, ...flag,
+            }),
+        });
+        if (outcome.drained) {
+            monitor.lastDrain.set(userId, nowMs);
+            monitor.onCycleOutcome(outcome.ok);
+            if (outcome.flagged) {
+                logger.info(`[Voice Mod] Tier1 flag for ${userId} in ${channelId}.`);
+            }
+        }
+    } catch (error) {
+        logger.error(`[Voice Mod] Drain failed for ${userId} in ${channelId}:`, error);
+        monitor.onCycleOutcome(false);
+    } finally {
+        monitor.inFlight.delete(userId);
+    }
+};
+
 const startRoomMonitor = ({ client, channelId, hostId, onCycleOutcome }) => {
     if (monitors.has(channelId)) return;
-    const monitor = { timer: null, lastCycleEndMs: Date.now(), hostId };
+    const monitor = {
+        timer: null, hostId, startedMs: Date.now(), lastDrain: new Map(),
+        inFlight: new Set(), client, onCycleOutcome,
+    };
     monitors.set(channelId, monitor);
-    monitor.timer = setInterval(async () => {
+
+    // Fast path: the capture layer fires this the second a speaker goes
+    // quiet, so the alert lands while the conversation is still happening.
+    setUtteranceHook(channelId, (userId) => { void drainSpeakerNow(channelId, userId); });
+
+    // Slow sweep: long continuous talkers and missed end events.
+    monitor.timer = setInterval(() => {
         const state = getCaptureState(channelId);
         if (!state) {
             stopRoomMonitor(channelId);
             return;
         }
-        const nowMs = Date.now();
-        const sinceMs = monitor.lastCycleEndMs;
-        monitor.lastCycleEndMs = nowMs;
-        try {
-            const outcome = await runCycle({
-                store: state.store,
-                decodeForUser: () => {
-                    const decoder = new OpusEncoder(48000, 2);
-                    return (packet) => {
-                        try {
-                            return decoder.decode(packet);
-                        } catch {
-                            return null;
-                        }
-                    };
-                },
-                sinceMs, nowMs,
-                transcribe: transcribeWav,
-                scan: scanTranscript,
-                onFlag: (flag) => postFlagAlert({ client, channelId, hostId, ...flag }),
-            });
-            if (outcome.attempted > 0) {
-                logger.info(`[Voice Mod] Cycle for ${channelId}: ${outcome.attempted} chunk(s), ${outcome.failed} failed, ${outcome.flags} flag(s).`);
-                onCycleOutcome(outcome.failed < outcome.attempted);
-            }
-        } catch (error) {
-            logger.error(`[Voice Mod] Cycle failed for ${channelId}:`, error);
-            onCycleOutcome(false);
+        for (const userId of state.store.users.keys()) {
+            void drainSpeakerNow(channelId, userId);
         }
     }, VOICE_CHUNK_CYCLE_SECONDS * 1000);
     if (typeof monitor.timer.unref === 'function') monitor.timer.unref();
@@ -141,8 +180,9 @@ const stopRoomMonitor = (channelId) => {
     const monitor = monitors.get(channelId);
     if (!monitor) return;
     monitors.delete(channelId);
+    clearUtteranceHook(channelId);
     clearInterval(monitor.timer);
     logger.info(`[Voice Mod] Room monitor stopped for ${channelId}.`);
 };
 
-module.exports = { runCycle, startRoomMonitor, stopRoomMonitor, activeMonitorCount, postFlagAlert };
+module.exports = { drainUser, startRoomMonitor, stopRoomMonitor, activeMonitorCount, postFlagAlert };

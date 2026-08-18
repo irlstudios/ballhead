@@ -82,4 +82,27 @@ const onRoomGone = (channelId) => {
     capture.leaveSession(channelId);
 };
 
-module.exports = { initRoomModeration, monitoringMode, gateNewRoom, gateUnlock, onRoomGone };
+// Restart recovery: captures live in memory, so a bot restart orphans every
+// monitored room. Re-capture rooms that still exist, are public, and have
+// humans in them. Rooms the gate would now refuse are left alone rather
+// than locked: they predate the restart and die on their own.
+const resumeRoomCaptures = async ({ client, pool, onCycleOutcome }) => {
+    if (monitoringMode() === 'off') return;
+    const { rows } = await pool.query('SELECT channel_id, host_id FROM vc_hosts');
+    for (const row of rows) {
+        const channel = client.channels.cache.get(row.channel_id);
+        if (!channel || capture.getCaptureState(channel.id)) continue;
+        const humans = channel.members?.filter((member) => !member.user.bot).size || 0;
+        if (humans === 0) continue;
+        try {
+            const started = await beginRoomCapture({
+                channel, hostId: row.host_id, client, onCycleOutcome,
+            });
+            if (started) logger.info(`[Voice Mod] Resumed capture for room ${channel.id} after restart.`);
+        } catch (error) {
+            logger.error(`[Voice Mod] Could not resume capture for ${channel.id}:`, error);
+        }
+    }
+};
+
+module.exports = { initRoomModeration, monitoringMode, gateNewRoom, gateUnlock, onRoomGone, resumeRoomCaptures };

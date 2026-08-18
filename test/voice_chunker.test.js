@@ -43,6 +43,17 @@ test('only packets since sinceMs are included', () => {
     assert.ok(recent.get('talker').length < all.get('talker').length);
 });
 
+test('users filter drains only the requested speaker', () => {
+    const store = createStore({ windowMs: 300000 });
+    fillStore(store, 'talker', 1000, 50);
+    fillStore(store, 'other', 1000, 50);
+    const chunks = drainUserChunks({
+        store, decodeForUser: fakeDecodeForUser, sinceMs: 0, nowMs: 3000, minPackets: 25,
+        users: ['talker'],
+    });
+    assert.deepStrictEqual([...chunks.keys()], ['talker']);
+});
+
 test('returns an empty map when nobody spoke', () => {
     const store = createStore({ windowMs: 300000 });
     const chunks = drainUserChunks({

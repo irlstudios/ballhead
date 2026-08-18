@@ -8,9 +8,11 @@ const { packetsBetween } = require('./buffers');
 const { mixToMonoPcm, pcmToWav, resampleMonoPcm } = require('./wav');
 const { VOICE_CHUNK_MIN_PACKETS } = require('../../config/constants');
 
-const drainUserChunks = ({ store, decodeForUser, sinceMs, nowMs, minPackets = VOICE_CHUNK_MIN_PACKETS }) => {
+const drainUserChunks = ({ store, decodeForUser, sinceMs, nowMs, minPackets = VOICE_CHUNK_MIN_PACKETS, users = null }) => {
+    const wanted = users ? new Set(users) : null;
     const chunks = new Map();
     for (const [userId, entries] of packetsBetween(store, sinceMs, nowMs)) {
+        if (wanted && !wanted.has(userId)) continue;
         if (entries.length < minPackets) continue;
         const windowStartMs = entries[0].at;
         const windowEndMs = entries[entries.length - 1].at + 20;

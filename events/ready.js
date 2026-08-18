@@ -28,7 +28,9 @@ const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries')
 const { ensureVoiceIncidentsSchema } = require('../utils/voice_moderation/incidents');
 const { ensureVcSystemLocksSchema } = require('../utils/voice_moderation/system_locks');
 const { initOutageWatch, isHealthy } = require('../utils/voice_moderation/outage');
-const { initRoomModeration } = require('../utils/voice_moderation/room_glue');
+const { initRoomModeration, resumeRoomCaptures } = require('../utils/voice_moderation/room_glue');
+const { onCycleOutcome } = require('../utils/voice_moderation/outage');
+const { pool } = require('../db');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -197,6 +199,11 @@ module.exports = {
         // health, and the watcher probes while no room monitors are running.
         initRoomModeration({ isHealthy });
         initOutageWatch(client);
+        try {
+            await resumeRoomCaptures({ client, pool, onCycleOutcome });
+        } catch (error) {
+            logger.error('[Voice Mod] Room capture resume failed:', error);
+        }
 
         // One-time poll catalog catch-up: if poll_posts is empty (e.g. first run
         // after deploy), index existing forum posts in the background so autocomplete

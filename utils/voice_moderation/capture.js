@@ -70,6 +70,21 @@ const clearTap = (channelId) => {
     if (state) state.tap = null;
 };
 
+// Fires with a userId when that speaker's receive stream ends, which Discord
+// signals after one second of silence: a free utterance boundary. The room
+// monitor uses it to transcribe and scan the moment someone stops talking.
+const setUtteranceHook = (channelId, fn) => {
+    const state = captures.get(channelId);
+    if (!state) return false;
+    state.onUtteranceEnd = fn;
+    return true;
+};
+
+const clearUtteranceHook = (channelId) => {
+    const state = captures.get(channelId);
+    if (state) state.onUtteranceEnd = null;
+};
+
 const decoderFor = (state, userId) => {
     let decoder = state.decoders.get(userId);
     if (!decoder) {
@@ -108,7 +123,16 @@ const subscribeToUser = (state, userId) => {
         }
     });
     const release = () => state.subscriptions.delete(userId);
-    stream.on('end', release);
+    stream.on('end', () => {
+        release();
+        if (state.onUtteranceEnd) {
+            try {
+                state.onUtteranceEnd(userId);
+            } catch (error) {
+                logger.error(`[Voice Mod] Utterance hook failed for ${userId}:`, error);
+            }
+        }
+    });
     stream.on('error', (error) => {
         logger.error(`[Voice Mod] Receive stream error for user ${userId}:`, error);
         release();
@@ -174,6 +198,7 @@ const joinSession = async ({ channel, session, workersOnly = false, notice }) =>
             subscriptions: new Set(),
             decoders: new Map(),
             tap: null,
+            onUtteranceEnd: null,
             guildId,
             client: botClient,
             isMainClient: botClient === mainClient,
@@ -231,4 +256,5 @@ const leaveSession = (channelId) => {
 module.exports = {
     joinSession, leaveSession, getCaptureState, getGuildCaptureChannel,
     pickCaptureClient, countFreeWorkers, freeWorkerCountIn, setTap, clearTap,
+    setUtteranceHook, clearUtteranceHook,
 };
