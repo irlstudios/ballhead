@@ -232,6 +232,12 @@ const VOICE_CLIP_MIN_SECONDS = 15;
 const VOICE_CLIP_MAX_SECONDS = 100;
 const VOICE_MONITOR_MAX_SPEAKERS = 8;
 const VOICE_TRANSCRIPT_FLUSH_SECONDS = 10;
+// Public room monitoring: cadence of the transcription cycle, consecutive
+// failed cycles before the PC counts as down, and the minimum packets
+// (~20ms each) a speaker needs in a cycle to be worth transcribing.
+const VOICE_CHUNK_CYCLE_SECONDS = 120;
+const WHISPER_FAILURE_THRESHOLD = 3;
+const VOICE_CHUNK_MIN_PACKETS = 25;
 
 // Pagination
 const ITEMS_PER_PAGE = 10;
@@ -332,6 +338,9 @@ module.exports = {
     VOICE_CLIP_MAX_SECONDS,
     VOICE_MONITOR_MAX_SPEAKERS,
     VOICE_TRANSCRIPT_FLUSH_SECONDS,
+    VOICE_CHUNK_CYCLE_SECONDS,
+    WHISPER_FAILURE_THRESHOLD,
+    VOICE_CHUNK_MIN_PACKETS,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
