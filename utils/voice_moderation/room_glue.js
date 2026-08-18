@@ -29,7 +29,7 @@ const roomNotice = {
 const beginRoomCapture = async ({ channel, hostId, client, onCycleOutcome }) => {
     await capture.joinSession({
         channel,
-        session: { id: `room:${channel.id}`, hostId },
+        session: { id: `room-${channel.id}`, hostId },
         workersOnly: true,
         notice: roomNotice,
     });

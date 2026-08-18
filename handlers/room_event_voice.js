@@ -10,6 +10,7 @@ const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags, Separato
 const logger = require('../utils/logger');
 const { buildTextBlock } = require('../utils/ui');
 const { getSessionByChannel } = require('../utils/host_session_manager');
+const { getCaptureState } = require('../utils/voice_moderation/capture');
 const { clipFromCapture } = require('../utils/voice_moderation/clipper');
 const { insertIncident } = require('../utils/voice_moderation/incidents');
 const { startMonitoring, stopMonitoring, isMonitoring, transcribeClipSpeakers, formatClipTranscript } = require('../utils/voice_moderation/transcriber');
@@ -36,14 +37,28 @@ const notice = (interaction, body) => {
 };
 
 // Mods may aim at any session channel; everyone else clips the room they are in.
+// Public room captures (session id "room-<channelId>") resolve too, with a
+// session-shaped object; their incidents carry no host_sessions row.
 const resolveTargetSession = (interaction) => {
     const callerRoleIds = [...interaction.member.roles.cache.keys()];
     const explicit = interaction.options.getChannel('channel');
     const channelId = (explicit && isModerator(callerRoleIds)) ? explicit.id : interaction.member.voice.channelId;
     if (!channelId) return { session: null, reason: 'Join the event lobby (or pass the channel option as a moderator) first.' };
     const session = getSessionByChannel(channelId);
-    if (!session) return { session: null, reason: 'That channel has no live event session.' };
-    return { session, reason: null };
+    if (session) return { session, reason: null };
+    const captureState = getCaptureState(channelId);
+    if (captureState?.session && String(captureState.session.id).startsWith('room-')) {
+        return {
+            session: {
+                id: captureState.session.id,
+                hostId: captureState.session.hostId,
+                channelId,
+                isRoom: true,
+            },
+            reason: null,
+        };
+    }
+    return { session: null, reason: 'That channel has no live event session or monitored room.' };
 };
 
 const clipFileName = (sessionId, endMs) =>
@@ -97,7 +112,7 @@ const handleRoomEventClip = async (interaction) => {
     const transcript = formatClipTranscript(await transcribeClipSpeakers(clip.userWavs, namesByUserId));
     const evidence = {
         title: 'Voice Incident Captured',
-        subtitle: `EMH session ${session.id}`,
+        subtitle: session.isRoom ? 'Public room capture' : `EMH session ${session.id}`,
         lines: [
             `**Captured by:** <@${interaction.user.id}>`,
             `**Host:** <@${session.hostId}>`,
@@ -138,7 +153,7 @@ const handleRoomEventClip = async (interaction) => {
 
     try {
         await insertIncident({
-            sessionId: session.id,
+            sessionId: session.isRoom ? null : session.id,
             channelId: session.channelId,
             clippedBy: interaction.user.id,
             note,
