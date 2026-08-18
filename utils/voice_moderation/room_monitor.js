@@ -9,7 +9,7 @@
 // follows the capture.js module-Map precedent.
 
 const { OpusEncoder } = require('@discordjs/opus');
-const { AttachmentBuilder, ContainerBuilder, MessageFlags } = require('discord.js');
+const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags } = require('discord.js');
 const logger = require('../logger');
 const { buildTextBlock } = require('../ui');
 const { drainUserChunks } = require('./chunker');
@@ -71,10 +71,13 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
         const clip = clipFromCapture({ channelId, durationSeconds: VOICE_CLIP_DEFAULT_SECONDS });
         const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
         const container = new ContainerBuilder().setAccentColor(0xEF4444);
+        // ComponentsV2 forbids the top-level content field, so the mod ping
+        // rides inside the container as a text display.
         const block = buildTextBlock({
             title: 'Voice Flag',
             subtitle: 'Public Room Auto Alert',
             lines: [
+                `<@&${MODERATOR_ROLES[0]}>`,
                 `Room: <#${channelId}> (host <@${hostId}>)`,
                 `Speaker: <@${userId}>`,
                 `Matched: ${matches.join(', ')}`,
@@ -82,14 +85,13 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
             ],
         });
         if (block) container.addTextDisplayComponents(block);
-        const files = clip
-            ? [new AttachmentBuilder(clip.wav, { name: `flag-${channelId}-${Date.now()}.wav` })]
-            : [];
+        const fileName = `flag-${channelId}-${Date.now()}.wav`;
+        // ComponentsV2 hides raw attachments; the File component renders it.
+        if (clip) container.addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
         const message = await evidenceChannel.send({
-            content: `<@&${MODERATOR_ROLES[0]}>`,
             flags: MessageFlags.IsComponentsV2,
             components: [container],
-            files,
+            files: clip ? [new AttachmentBuilder(clip.wav, { name: fileName })] : [],
             allowedMentions: { roles: [MODERATOR_ROLES[0]] },
         });
         await insertIncident({
@@ -103,7 +105,9 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
             evidenceMessageUrl: message.url,
         });
     } catch (error) {
-        logger.error(`[Voice Mod] Flag alert failed for ${channelId}:`, error);
+        // String-only log: winston's meta stringify can choke on Discord
+        // error objects and silently drop the line.
+        logger.error(`[Voice Mod] Flag alert failed for ${channelId}: ${error?.message || error}`);
     }
 };
 
