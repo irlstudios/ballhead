@@ -208,8 +208,8 @@ const handleRoomEventMonitor = async (interaction) => {
     const result = await startMonitoring({ client: interaction.client, channelId, startedById: interaction.user.id });
     if (!result.ok) {
         const reasons = {
-            unconfigured: 'Live transcription is not configured (missing DEEPGRAM_API_KEY). Incident clipping still works.',
-            'no-session': 'That channel has no live event session.',
+            unconfigured: 'Live transcription is not configured (missing WHISPER_SERVER_URL). Incident clipping still works.',
+            'no-session': 'That channel has no live event session or monitored room.',
             'already-monitoring': 'That channel is already being monitored.',
         };
         return notice(interaction, { title: 'Cannot Start', subtitle, lines: [reasons[result.reason]] });

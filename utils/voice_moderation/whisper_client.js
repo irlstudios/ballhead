@@ -7,22 +7,38 @@ const REQUEST_TIMEOUT_MS = 30000;
 
 const baseUrl = (url) => (url || process.env.WHISPER_SERVER_URL || '').replace(/\/$/, '');
 
-const transcribeWav = async (wav, { url } = {}) => {
+const postInference = async (wav, url, responseFormat) => {
     const base = baseUrl(url);
     if (!base) return { ok: false, reason: 'unconfigured' };
     try {
         const form = new FormData();
         form.append('file', new Blob([wav], { type: 'audio/wav' }), 'chunk.wav');
-        form.append('response_format', 'json');
+        form.append('response_format', responseFormat);
         const response = await fetch(`${base}/inference`, {
             method: 'POST', body: form, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         });
         if (!response.ok) return { ok: false, reason: `http ${response.status}` };
-        const body = await response.json();
-        return { ok: true, text: (body.text || '').trim() };
+        return { ok: true, body: await response.json() };
     } catch (error) {
         return { ok: false, reason: error.message || 'network error' };
     }
+};
+
+const transcribeWav = async (wav, { url } = {}) => {
+    const result = await postInference(wav, url, 'json');
+    if (!result.ok) return result;
+    return { ok: true, text: (result.body.text || '').trim() };
+};
+
+// Segment offsets are seconds relative to the start of the WAV; callers that
+// send silence-padded clip tracks read them directly as clip offsets.
+const transcribeWavVerbose = async (wav, { url } = {}) => {
+    const result = await postInference(wav, url, 'verbose_json');
+    if (!result.ok) return result;
+    const segments = (result.body.segments || [])
+        .map(({ start, end, text }) => ({ start, end, text: (text || '').trim() }))
+        .filter((segment) => segment.text);
+    return { ok: true, text: (result.body.text || '').trim(), segments };
 };
 
 // Any HTTP response means the server process is up; only a network-level
@@ -38,4 +54,4 @@ const probeServer = async ({ url } = {}) => {
     }
 };
 
-module.exports = { transcribeWav, probeServer };
+module.exports = { transcribeWav, transcribeWavVerbose, probeServer };

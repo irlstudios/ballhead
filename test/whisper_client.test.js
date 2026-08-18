@@ -4,7 +4,7 @@ const { test, after } = require('node:test');
 const assert = require('node:assert');
 const http = require('node:http');
 
-const { transcribeWav, probeServer } = require('../utils/voice_moderation/whisper_client');
+const { transcribeWav, transcribeWavVerbose, probeServer } = require('../utils/voice_moderation/whisper_client');
 
 const servers = [];
 const startStub = (handler) => new Promise((resolve) => {
@@ -37,6 +37,29 @@ test('transcribeWav reports http errors without throwing', async () => {
 test('transcribeWav reports network failure without throwing', async () => {
     const result = await transcribeWav(Buffer.from('RIFFfake'), { url: 'http://127.0.0.1:9' });
     assert.strictEqual(result.ok, false);
+});
+
+test('transcribeWavVerbose returns trimmed segments with offsets', async () => {
+    const url = await startStub((req, res) => {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({
+            text: ' hello there ',
+            segments: [
+                { id: 0, text: ' hello ', start: 0.5, end: 1.2 },
+                { id: 1, text: '   ', start: 2.0, end: 2.4 },
+                { id: 2, text: ' there ', start: 3.1, end: 3.8 },
+            ],
+        }));
+    });
+    const result = await transcribeWavVerbose(Buffer.from('RIFFfake'), { url });
+    assert.deepStrictEqual(result, {
+        ok: true,
+        text: 'hello there',
+        segments: [
+            { start: 0.5, end: 1.2, text: 'hello' },
+            { start: 3.1, end: 3.8, text: 'there' },
+        ],
+    });
 });
 
 test('probeServer true when server answers, false when unreachable', async () => {

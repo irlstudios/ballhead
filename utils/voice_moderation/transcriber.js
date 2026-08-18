@@ -1,24 +1,28 @@
 'use strict';
 
-// Mod-triggered live transcription. One Deepgram streaming connection per
-// speaker gives true attribution with no diarization guesswork; the capture
-// tap hands this module decoded mono PCM only while monitoring is on, so
-// transcription cost accrues only then. Lines land in a thread on the
-// evidence channel in batches.
-//
-// Written against @deepgram/sdk v5: DeepgramClient, listen.v1.connect,
-// sendMedia/sendKeepAlive/sendCloseStream, 'message' events of type Results.
+// Mod-triggered live transcription and clip transcription, both served by
+// the whisper-server on the PC over the tailnet. Live monitoring is chunked:
+// the capture tap accumulates each speaker's decoded mono PCM and a flush
+// cycle every VOICE_TRANSCRIPT_FLUSH_SECONDS transcribes what accumulated,
+// so lines land in the thread roughly one flush behind speech. Per-speaker
+// accumulation gives true attribution with no diarization guesswork.
 
-const { DeepgramClient } = require('@deepgram/sdk');
-const { setTimeout: sleep } = require('node:timers/promises');
 const logger = require('../logger');
 const { setTap, clearTap, getCaptureState } = require('./capture');
+const { transcribeWav, transcribeWavVerbose } = require('./whisper_client');
+const { pcmToWav, resampleMonoPcm, wavToMonoPcm } = require('./wav');
 const {
     VOICE_EVIDENCE_CHANNEL_ID, VOICE_MONITOR_MAX_SPEAKERS, VOICE_TRANSCRIPT_FLUSH_SECONDS,
 } = require('../../config/constants');
 
-// channelId -> { thread, speakers: Map<userId, { live, keepAlive, name }>,
-//                pending: [], flushTimer, guild }
+// 48kHz mono 16-bit is 96,000 bytes per second. A flush needs at least half
+// a second of speech to be worth a request; a speaker may hold at most 60
+// seconds if flushes stall, then further audio is dropped.
+const MIN_FLUSH_BYTES = 48000;
+const MAX_ACCUM_BYTES = 96000 * 60;
+
+// channelId -> { thread, speakers: Map<userId, { name, chunks, bytes }>,
+//                pending: [], flushTimer, flushing, guild }
 const monitors = new Map();
 
 const batchTranscriptLines = (lines, maxLen = 1900) => {
@@ -42,6 +46,22 @@ const batchTranscriptLines = (lines, maxLen = 1900) => {
 
 const isMonitoring = (channelId) => monitors.has(channelId);
 
+// Contained mutation on the speaker accumulator, same pattern as the capture
+// registry. Returns whether the chunk fit under the cap.
+const appendPcm = (speaker, pcm, maxBytes = MAX_ACCUM_BYTES) => {
+    if (speaker.bytes + pcm.length > maxBytes) return false;
+    speaker.chunks.push(pcm);
+    speaker.bytes += pcm.length;
+    return true;
+};
+
+const takePcm = (speaker, minBytes = MIN_FLUSH_BYTES) => {
+    if (speaker.bytes < minBytes) return null;
+    const pcm = Buffer.concat(speaker.chunks.splice(0, speaker.chunks.length), speaker.bytes);
+    speaker.bytes = 0;
+    return pcm;
+};
+
 const postBatches = async (monitor, lines) => {
     for (const content of batchTranscriptLines(lines)) {
         await monitor.thread.send({ content, allowedMentions: { parse: [] } }).catch((error) => {
@@ -50,73 +70,40 @@ const postBatches = async (monitor, lines) => {
     }
 };
 
-const flush = async (channelId) => {
-    const monitor = monitors.get(channelId);
-    if (!monitor || monitor.pending.length === 0) return;
-    await postBatches(monitor, monitor.pending.splice(0, monitor.pending.length));
-};
-
 const speakerName = async (monitor, userId) => {
     const member = await monitor.guild.members.fetch(userId).catch(() => null);
     return member?.displayName || `user ${userId}`;
 };
 
-// The caller has already reserved the speaker entry (with any backlogged
-// audio); this fills in the live connection and drains the backlog. If the
-// monitor was torn down while the socket was opening, the connection is
-// closed immediately instead of leaking past stopMonitoring.
-const openSpeaker = async (monitor, channelId, userId, speaker) => {
+// Transcribe every speaker's accumulated audio, queue the lines, and post
+// them. Guarded against overlapping runs: a slow whisper round must not race
+// the next timer tick.
+const flushMonitor = async (channelId, { minBytes = MIN_FLUSH_BYTES } = {}) => {
+    const monitor = monitors.get(channelId);
+    if (!monitor || monitor.flushing) return;
+    monitor.flushing = true;
     try {
-        speaker.name = await speakerName(monitor, userId);
-        const client = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
-        const live = await client.listen.v1.connect({
-            model: 'nova-3', encoding: 'linear16', sample_rate: 48000, channels: 1,
-            smart_format: true, interim_results: false,
-        });
-        live.on('message', (data) => {
-            if (data?.type !== 'Results') return;
-            const text = data.channel?.alternatives?.[0]?.transcript;
-            if (text) monitor.pending.push({ name: speaker.name, text });
-        });
-        live.on('error', (error) => {
-            logger.error(`[Voice Mod] Deepgram error for ${userId} in ${channelId}:`, error);
-        });
-        live.on('close', () => {
-            clearInterval(speaker.keepAlive);
-            // Dropping the entry lets the next packet from this speaker reopen
-            // a fresh connection while monitoring is still on: reconnect by rebirth.
-            const current = monitors.get(channelId);
-            if (current === monitor) monitor.speakers.delete(userId);
-        });
-        live.connect();
-        await live.waitForOpen();
-        if (monitors.get(channelId) !== monitor) {
-            live.close();
-            return;
-        }
-        speaker.keepAlive = setInterval(() => {
-            try {
-                live.sendKeepAlive({ type: 'KeepAlive' });
-            } catch {
-                // Connection is closing; the close handler cleans up.
+        for (const [userId, speaker] of monitor.speakers) {
+            const pcm48 = takePcm(speaker, minBytes);
+            if (!pcm48) continue;
+            const wav = pcmToWav(resampleMonoPcm(pcm48, 48000, 16000), { sampleRate: 16000, channels: 1 });
+            const result = await transcribeWav(wav);
+            if (result.ok && result.text) {
+                monitor.pending.push({ name: speaker.name || `user ${userId}`, text: result.text });
+            } else if (!result.ok) {
+                logger.error(`[Voice Mod] Live transcription failed for ${userId} in ${channelId}: ${result.reason}`);
             }
-        }, 8000);
-        if (typeof speaker.keepAlive.unref === 'function') speaker.keepAlive.unref();
-        for (const pcm of speaker.backlog.splice(0, speaker.backlog.length)) {
-            live.sendMedia(pcm);
         }
-        speaker.live = live;
-    } catch (error) {
-        monitor.speakers.delete(userId);
-        throw error;
+        if (monitor.pending.length > 0) {
+            await postBatches(monitor, monitor.pending.splice(0, monitor.pending.length));
+        }
+    } finally {
+        monitor.flushing = false;
     }
 };
 
-// ~10s of 48kHz mono at 20ms frames; bounds memory if a socket never opens.
-const SPEAKER_BACKLOG_MAX = 500;
-
 const startMonitoring = async ({ client, channelId, startedById }) => {
-    if (!process.env.DEEPGRAM_API_KEY) return { ok: false, reason: 'unconfigured' };
+    if (!process.env.WHISPER_SERVER_URL) return { ok: false, reason: 'unconfigured' };
     if (monitors.has(channelId)) return { ok: false, reason: 'already-monitoring' };
     const state = getCaptureState(channelId);
     if (!state) return { ok: false, reason: 'no-session' };
@@ -133,32 +120,22 @@ const startMonitoring = async ({ client, channelId, startedById }) => {
     });
 
     const monitor = {
-        thread, speakers: new Map(), pending: [], flushTimer: null, guild: evidenceChannel.guild,
+        thread, speakers: new Map(), pending: [], flushTimer: null, flushing: false,
+        guild: evidenceChannel.guild,
     };
     monitors.set(channelId, monitor);
-    monitor.flushTimer = setInterval(() => { void flush(channelId); }, VOICE_TRANSCRIPT_FLUSH_SECONDS * 1000);
+    monitor.flushTimer = setInterval(() => { void flushMonitor(channelId); }, VOICE_TRANSCRIPT_FLUSH_SECONDS * 1000);
     if (typeof monitor.flushTimer.unref === 'function') monitor.flushTimer.unref();
 
     const tapInstalled = setTap(channelId, (userId, monoPcm) => {
-        const speaker = monitor.speakers.get(userId);
-        if (speaker?.live) {
-            try {
-                speaker.live.sendMedia(monoPcm);
-            } catch {
-                // Connection is closing; rebirth on the next packet handles it.
-            }
-        } else if (speaker) {
-            // Socket still opening: keep the audio so the first words survive.
-            if (speaker.backlog.length < SPEAKER_BACKLOG_MAX) speaker.backlog.push(monoPcm);
-        } else if (monitor.speakers.size < VOICE_MONITOR_MAX_SPEAKERS) {
-            // Reserve synchronously, first packet included, so a burst cannot
-            // open duplicate connections and the opening words are not lost.
-            const reserved = { live: null, keepAlive: null, name: null, backlog: [monoPcm] };
-            monitor.speakers.set(userId, reserved);
-            void openSpeaker(monitor, channelId, userId, reserved).catch((error) => {
-                logger.error(`[Voice Mod] Could not open transcription for ${userId}:`, error);
-            });
+        let speaker = monitor.speakers.get(userId);
+        if (!speaker) {
+            if (monitor.speakers.size >= VOICE_MONITOR_MAX_SPEAKERS) return;
+            speaker = { name: null, chunks: [], bytes: 0 };
+            monitor.speakers.set(userId, speaker);
+            void speakerName(monitor, userId).then((name) => { speaker.name = name; });
         }
+        appendPcm(speaker, monoPcm);
     });
     if (!tapInstalled) {
         // The session closed while the thread was being created.
@@ -174,53 +151,41 @@ const startMonitoring = async ({ client, channelId, startedById }) => {
 const stopMonitoring = async (channelId) => {
     const monitor = monitors.get(channelId);
     if (!monitor) return;
-    monitors.delete(channelId);
-    clearTap(channelId);
     clearInterval(monitor.flushTimer);
-    // CloseStream first, then a short grace so Deepgram can return the final
-    // Results for audio it is still holding; only then drop the sockets.
-    // Entries whose socket is still opening (live null) are handled by
-    // openSpeaker's registry check, which closes them on arrival.
-    const open = [...monitor.speakers.values()].filter((speaker) => speaker.live);
-    for (const speaker of open) {
-        clearInterval(speaker.keepAlive);
-        try {
-            speaker.live.sendCloseStream({ type: 'CloseStream' });
-        } catch {
-            // Already closed.
-        }
-    }
-    if (open.length > 0) await sleep(1500);
-    for (const speaker of open) {
-        try {
-            speaker.live.close();
-        } catch {
-            // Already closed.
-        }
-    }
+    clearTap(channelId);
+    // Final drain with no minimum so closing words are not lost, then drop
+    // the registry entry.
+    await flushMonitor(channelId, { minBytes: 1 }).catch((error) => {
+        logger.error(`[Voice Mod] Final flush failed for ${channelId}:`, error);
+    });
+    monitors.delete(channelId);
     monitor.speakers.clear();
-    // flush() reads the registry, which no longer holds this entry: drain inline.
-    await postBatches(monitor, monitor.pending.splice(0, monitor.pending.length));
     await monitor.thread.send({ content: 'Monitoring stopped.', allowedMentions: { parse: [] } }).catch(() => {});
     logger.info(`[Voice Mod] Monitoring stopped for channel ${channelId}.`);
 };
 
 // Speaker-attributed transcription of a finished clip. Each speaker's own
-// silence-padded track is transcribed separately, so utterance start times
-// are clip offsets and attribution is exact rather than diarization guesses.
-// Returns [] when unconfigured or on failure: the clip must post either way.
+// silence-padded 48k track is resampled and transcribed separately, so
+// segment start times are clip offsets and attribution is exact rather than
+// diarization guesses. Returns [] when unconfigured or on failure: the clip
+// must post either way.
 const transcribeClipSpeakers = async (userWavs, namesByUserId) => {
-    if (!process.env.DEEPGRAM_API_KEY) return [];
+    if (!process.env.WHISPER_SERVER_URL) return [];
     try {
-        const client = new DeepgramClient({ apiKey: process.env.DEEPGRAM_API_KEY });
         const perUser = await Promise.all([...userWavs].map(async ([userId, wav]) => {
-            const result = await client.listen.v1.media.transcribeFile(wav, {
-                model: 'nova-3', smart_format: true, utterances: true,
-            });
+            const parsed = wavToMonoPcm(wav);
+            if (!parsed) return [];
+            const wav16 = pcmToWav(
+                resampleMonoPcm(parsed.pcm, parsed.sampleRate, 16000),
+                { sampleRate: 16000, channels: 1 }
+            );
+            const result = await transcribeWavVerbose(wav16);
+            if (!result.ok) {
+                logger.error(`[Voice Mod] Clip transcription failed for ${userId}: ${result.reason}`);
+                return [];
+            }
             const name = namesByUserId.get(userId) || `user ${userId}`;
-            return (result.results?.utterances || [])
-                .filter((utterance) => utterance.transcript)
-                .map((utterance) => ({ start: utterance.start, name, text: utterance.transcript.trim() }));
+            return result.segments.map((segment) => ({ start: segment.start, name, text: segment.text }));
         }));
         return perUser.flat();
     } catch (error) {
@@ -248,5 +213,5 @@ const formatClipTranscript = (lines, maxLen = 1500) => {
 
 module.exports = {
     batchTranscriptLines, isMonitoring, startMonitoring, stopMonitoring,
-    transcribeClipSpeakers, formatClipTranscript,
+    transcribeClipSpeakers, formatClipTranscript, appendPcm, takePcm,
 };

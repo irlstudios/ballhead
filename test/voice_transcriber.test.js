@@ -3,7 +3,24 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const { batchTranscriptLines } = require('../utils/voice_moderation/transcriber');
+const { batchTranscriptLines, appendPcm, takePcm } = require('../utils/voice_moderation/transcriber');
+
+test('appendPcm accumulates until the byte cap and reports drops', () => {
+    const speaker = { chunks: [], bytes: 0 };
+    assert.strictEqual(appendPcm(speaker, Buffer.alloc(100), 250), true);
+    assert.strictEqual(appendPcm(speaker, Buffer.alloc(100), 250), true);
+    assert.strictEqual(appendPcm(speaker, Buffer.alloc(100), 250), false);
+    assert.strictEqual(speaker.bytes, 200);
+});
+
+test('takePcm returns null below the minimum and drains atomically above it', () => {
+    const speaker = { chunks: [Buffer.from([1, 2]), Buffer.from([3])], bytes: 3 };
+    assert.strictEqual(takePcm(speaker, 10), null);
+    assert.strictEqual(speaker.bytes, 3);
+    const drained = takePcm(speaker, 2);
+    assert.deepStrictEqual([...drained], [1, 2, 3]);
+    assert.deepStrictEqual([speaker.chunks.length, speaker.bytes], [0, 0]);
+});
 
 test('lines render with bold speaker names in order', () => {
     const batches = batchTranscriptLines([
