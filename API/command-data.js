@@ -42,4 +42,31 @@ async function logCommandUsage(interaction) {
     }
 }
 
-module.exports = { logCommandUsage, buildCommandName };
+// Identifies any interaction for outcome analytics: commands by their full
+// name, components and modals by customId.
+const describeInteraction = (interaction) => {
+    if (interaction.isCommand?.()) return { kind: 'command', name: buildCommandName(interaction) };
+    if (interaction.isButton?.()) return { kind: 'button', name: String(interaction.customId) };
+    if (interaction.isModalSubmit?.()) return { kind: 'modal', name: String(interaction.customId) };
+    if (interaction.isStringSelectMenu?.()) return { kind: 'select', name: String(interaction.customId) };
+    return { kind: 'unknown', name: '' };
+};
+
+// Outcome events (submissions, failures, component clicks) are local-only:
+// Mixpanel keeps receiving exactly what it always has.
+async function logInteractionEvent(eventName, interaction, extra = {}) {
+    try {
+        const described = describeInteraction(interaction);
+        await insertAnalyticsEvent(eventName, interaction.user?.id ?? 'unknown', {
+            kind: described.kind,
+            name: described.name,
+            channel_id: String(interaction.channelId),
+            server_id: String(interaction.guildId),
+            ...extra,
+        });
+    } catch (err) {
+        logger.error(`Failed to store ${eventName} event:`, err);
+    }
+}
+
+module.exports = { logCommandUsage, buildCommandName, describeInteraction, logInteractionEvent };

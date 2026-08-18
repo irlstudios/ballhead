@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, MessageFlags, ContainerBuilder, TextDisplayBuilder, PermissionsBitField } = require('discord.js');
 const logger = require('../../utils/logger');
 
 // Authorized role IDs
@@ -37,6 +37,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('set-cooldown')
         .setDescription('Set the channel slowmode (cooldown) for a limited time in this channel')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addIntegerOption(opt =>
             opt.setName('cooldown')
                 .setDescription('Slowmode per-user delay')

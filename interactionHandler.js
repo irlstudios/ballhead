@@ -2,7 +2,7 @@
 
 require('dotenv').config({ path: './resources/.env' });
 const { Collection, MessageFlags, ContainerBuilder } = require('discord.js');
-const { logCommandUsage } = require('./API/command-data');
+const { logCommandUsage, logInteractionEvent } = require('./API/command-data');
 const { createModal } = require('./modals/modalFactory');
 const logger = require('./utils/logger');
 const { buildTextBlock, noticePayload } = require('./utils/ui');
@@ -45,10 +45,13 @@ const interactionHandler = async (interaction, client) => {
             void logCommandUsage(interaction);
             await handleCommand(interaction, client);
         } else if (interaction.isStringSelectMenu()) {
+            void logInteractionEvent('Component Used', interaction);
             await handleSelectMenu(interaction);
         } else if (interaction.isModalSubmit()) {
+            void logInteractionEvent('Modal Submitted', interaction);
             await handleModalSubmit(interaction);
         } else if (interaction.isButton()) {
+            void logInteractionEvent('Component Used', interaction);
             await handleButton(interaction, client);
         } else if (interaction.isAutocomplete()) {
             const command = client.commands.get(interaction.commandName);
@@ -58,6 +61,7 @@ const interactionHandler = async (interaction, client) => {
         }
     } catch (error) {
         logger.error('Error handling interaction:', error);
+        void logInteractionEvent('Interaction Failed', interaction, { error: String(error.message).slice(0, 200) });
 
         if (!interaction.isAutocomplete() && !interaction.replied && !interaction.deferred) {
             await interaction.reply({
@@ -157,6 +161,7 @@ const handleCommand = async (interaction, client) => {
         await command.execute(interaction);
     } catch (error) {
         logger.error('Error executing command:', error);
+        void logInteractionEvent('Interaction Failed', interaction, { error: String(error.message).slice(0, 200) });
 
         if (interaction.replied || interaction.deferred) {
             await interaction.editReply({

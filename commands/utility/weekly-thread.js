@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const logger = require('../../utils/logger');
 const {
     BOT_BUGS_CHANNEL_ID,
@@ -13,6 +13,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('weekly-thread')
         .setDescription('Create the weekly thread for gym class general')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addStringOption(option =>
             option.setName('topic')
                 .setDescription('The topic of the thread / discussion')

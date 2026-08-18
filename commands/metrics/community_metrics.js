@@ -21,6 +21,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('community-metrics')
         .setDescription('Game-ideas and bug-report metrics for a date range (staff only).')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addStringOption(option =>
             option.setName('start-date')
                 .setDescription('Start date (YYYY-MM-DD), interpreted in US Central time')

@@ -1,6 +1,7 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
+const { PermissionsBitField } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchReportsForPlayer, fetchReportStats } = require('../../utils/reports_queries');
@@ -11,6 +12,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('reports')
         .setDescription('Work through the player report backlog.')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addSubcommand(sub =>
             sub.setName('queue')
                 .setDescription('Step through reports, most urgent first.')

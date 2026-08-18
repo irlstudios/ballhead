@@ -12,6 +12,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('list-role-ids-by-role')
         .setDescription('Gets the list of user IDs of people who are in a specified role')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addRoleOption(option =>
             option.setName('role')
                 .setDescription('The role to get the user IDs from')

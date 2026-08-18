@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { MessageFlags, TextDisplayBuilder } = require('discord.js');
+const { MessageFlags, TextDisplayBuilder, PermissionsBitField } = require('discord.js');
 const { getCacheStats, clearCache } = require('../../utils/sheets_cache');
 const logger = require('../../utils/logger');
 
@@ -19,6 +19,7 @@ module.exports = {
     data: new SlashCommandBuilder()
         .setName('cache-stats')
         .setDescription('View Google Sheets cache statistics')
+        .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageRoles)
         .addBooleanOption(option =>
             option.setName('clear')
                 .setDescription('(Admin only) Clear the cache to force fresh data fetch')
