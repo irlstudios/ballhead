@@ -21,7 +21,10 @@ module.exports = [
                 clearInterval: 'readonly',
                 Promise: 'readonly',
                 URL: 'readonly',
-                fetch: 'readonly'
+                fetch: 'readonly',
+                FormData: 'readonly',
+                Blob: 'readonly',
+                AbortSignal: 'readonly'
             }
         },
         rules: {

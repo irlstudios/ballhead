@@ -5,6 +5,8 @@ const logger = require('../../utils/logger');
 const { handleRoomEventStart, handleRoomEventStatus } = require('../../handlers/room_event');
 const { handleRoomEventClip, handleRoomEventMonitor } = require('../../handlers/room_event_voice');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
+const { gateUnlock } = require('../../utils/voice_moderation/room_glue');
+const { onCycleOutcome } = require('../../utils/voice_moderation/outage');
 
 // Subcommands a host may not use on their own lobby while an event session runs.
 const LOCKED_DURING_EVENT = new Set(['lock', 'rename']);
@@ -668,6 +670,16 @@ module.exports = {
                     title: 'Access Denied',
                     subtitle: 'Unlock Room',
                     lines: ['Only the room host or moderators can execute this command.']
+                });
+            }
+            const gate = await gateUnlock({
+                channel: roomChannel, hostId, client: interaction.client, onCycleOutcome,
+            });
+            if (!gate.ok) {
+                return replyRoomNotice(interaction, {
+                    title: 'Cannot Unlock',
+                    subtitle: 'Unlock Room',
+                    lines: ['Public rooms are temporarily unavailable. Your room stays invite only for now.']
                 });
             }
             await applyBlacklistPermissions(roomChannel);

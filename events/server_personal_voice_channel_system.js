@@ -2,6 +2,8 @@ const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDi
 const { pool } = require('../db');
 const logger = require('../utils/logger');
 const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_ROLE_IDS } = require('../config/constants');
+const { gateNewRoom, onRoomGone } = require('../utils/voice_moderation/room_glue');
+const { onCycleOutcome } = require('../utils/voice_moderation/outage');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -194,6 +196,22 @@ module.exports = {
                  DO UPDATE SET host_id = EXCLUDED.host_id, created_at = now()`,
                 [newChannel.id, newState.member.id]
             );
+
+            try {
+                const gate = await gateNewRoom({
+                    channel: newChannel, hostId: newState.member.id, client, onCycleOutcome,
+                });
+                if (!gate.public) {
+                    await newChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
+                    const lockedNotice = new ContainerBuilder();
+                    lockedNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Room Is Invite Only'));
+                    lockedNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+                        'Public rooms are temporarily unavailable, so your room was created invite only. Use /room invite to bring people in.'));
+                    await newChannel.send({ flags: MessageFlags.IsComponentsV2, components: [lockedNotice] }).catch(() => {});
+                }
+            } catch (error) {
+                logger.error(`[Voice Mod] Room gate failed for ${newChannel.id}:`, error);
+            }
         }
 
         if (oldState.channelId && oldState.channelId !== newState.channelId) {
@@ -230,11 +248,14 @@ module.exports = {
             };
 
             if (oldState.member.id === hostId) {
+                onRoomGone(channel.id);
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
                 if (client.vcCreated) client.vcCreated.delete(channel.id);
-            } else if ((client.vcHosts.has(channel.id) || (client.vcCreated && client.vcCreated.has(channel.id))) && channel.members.size === 0) {
+            // Capture bots occupy the room; only humans keep it alive.
+            } else if ((client.vcHosts.has(channel.id) || (client.vcCreated && client.vcCreated.has(channel.id))) && channel.members.filter((member) => !member.user.bot).size === 0) {
+                onRoomGone(channel.id);
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 if (client.vcCreated) client.vcCreated.delete(channel.id);

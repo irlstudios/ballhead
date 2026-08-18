@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { pickCaptureClient } = require('../utils/voice_moderation/capture');
+const { pickCaptureClient, countFreeWorkers } = require('../utils/voice_moderation/capture');
 
 const fakeClient = (id, { guildIds = ['g1'], ready = true } = {}) => ({
     user: { id },
@@ -62,4 +62,18 @@ test('returns null when the main client is busy too', () => {
         busyUserIds: new Set(['w1', 'main']),
     });
     assert.strictEqual(picked, null);
+});
+
+test('workersOnly pick never falls back to the main client', () => {
+    const mainClient = fakeClient('main');
+    const picked = pickCaptureClient({
+        mainClient, workers: [], guildId: 'g1', busyUserIds: new Set(), workersOnly: true,
+    });
+    assert.strictEqual(picked, null);
+});
+
+test('countFreeWorkers counts ready idle workers in the guild', () => {
+    const workers = [fakeClient('w1'), fakeClient('w2', { guildIds: ['g2'] })];
+    assert.strictEqual(countFreeWorkers({ workers, guildId: 'g1', busyUserIds: new Set() }), 1);
+    assert.strictEqual(countFreeWorkers({ workers, guildId: 'g1', busyUserIds: new Set(['w1']) }), 0);
 });

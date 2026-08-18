@@ -37,11 +37,18 @@ const getGuildCaptureChannel = (guildId) => {
 // One bot user holds one voice state per guild, so parallel sessions need
 // parallel bot users. Workers take captures first, keeping the main bot's
 // slot free for TTS; the main bot is the fallback when every worker is taken.
-const pickCaptureClient = ({ mainClient, workers, guildId, busyUserIds }) => {
+// workersOnly (public rooms) never touches the main bot's slot.
+const pickCaptureClient = ({ mainClient, workers, guildId, busyUserIds, workersOnly = false }) => {
     const free = (candidate) => candidate.isReady() && !busyUserIds.has(candidate.user.id);
     return workers.find((worker) => free(worker) && worker.guilds.cache.has(guildId))
-        || (free(mainClient) ? mainClient : null);
+        || (!workersOnly && free(mainClient) ? mainClient : null);
 };
+
+const countFreeWorkers = ({ workers, guildId, busyUserIds }) => workers.filter((worker) =>
+    worker.isReady() && !busyUserIds.has(worker.user.id) && worker.guilds.cache.has(guildId)).length;
+
+const freeWorkerCountIn = (guildId) =>
+    countFreeWorkers({ workers: getReadyWorkers(), guildId, busyUserIds: busyUserIdsIn(guildId) });
 
 const busyUserIdsIn = (guildId) => {
     const busy = new Set();
@@ -110,15 +117,18 @@ const subscribeToUser = (state, userId) => {
 
 // Consent is a hard gate, not a courtesy: if the room cannot be told it is
 // being buffered, nothing may be buffered. Returns whether the notice landed.
-const postConsentNotice = async (channel) => {
+const postConsentNotice = async (channel, {
+    subtitle = 'EMH Event Session',
+    lines = [
+        'Audio in this event is temporarily buffered for moderation while the session runs.',
+        'Nothing is stored unless staff capture an incident clip; the buffer is discarded when the event ends.',
+    ],
+} = {}) => {
     const container = new ContainerBuilder().setAccentColor(0xF59E0B);
     const block = buildTextBlock({
         title: 'Voice Moderation Active',
-        subtitle: 'EMH Event Session',
-        lines: [
-            'Audio in this event is temporarily buffered for moderation while the session runs.',
-            'Nothing is stored unless staff capture an incident clip; the buffer is discarded when the event ends.',
-        ],
+        subtitle,
+        lines,
     });
     if (block) container.addTextDisplayComponents(block);
     try {
@@ -130,13 +140,13 @@ const postConsentNotice = async (channel) => {
     }
 };
 
-const joinSession = async ({ channel, session }) => {
+const joinSession = async ({ channel, session, workersOnly = false, notice }) => {
     if (captures.has(channel.id)) return;
     const guildId = channel.guild.id;
     const mainClient = channel.client;
     const workers = getReadyWorkers();
     const botClient = pickCaptureClient({
-        mainClient, workers, guildId, busyUserIds: busyUserIdsIn(guildId),
+        mainClient, workers, guildId, busyUserIds: busyUserIdsIn(guildId), workersOnly,
     });
     if (!botClient) {
         // ponytail: capacity is 1 + workers-in-guild parallel sessions; add a
@@ -187,7 +197,7 @@ const joinSession = async ({ channel, session }) => {
         });
 
         await entersState(connection, VoiceConnectionStatus.Ready, 15000);
-        if (!(await postConsentNotice(channel))) {
+        if (!(await postConsentNotice(channel, notice))) {
             leaveSession(channel.id);
             return;
         }
@@ -220,5 +230,5 @@ const leaveSession = (channelId) => {
 
 module.exports = {
     joinSession, leaveSession, getCaptureState, getGuildCaptureChannel,
-    pickCaptureClient, setTap, clearTap,
+    pickCaptureClient, countFreeWorkers, freeWorkerCountIn, setTap, clearTap,
 };
