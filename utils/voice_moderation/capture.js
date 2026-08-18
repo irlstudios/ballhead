@@ -10,7 +10,9 @@ const {
     joinVoiceChannel, entersState, VoiceConnectionStatus, EndBehaviorType,
 } = require('@discordjs/voice');
 const { OpusEncoder } = require('@discordjs/opus');
-const { ContainerBuilder, MessageFlags } = require('discord.js');
+const {
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags,
+} = require('discord.js');
 const logger = require('../logger');
 const { buildTextBlock } = require('../ui');
 const { createStore, recordPacket, createPacer, paceTimestamp } = require('./buffers');
@@ -147,6 +149,7 @@ const postConsentNotice = async (channel, {
         'Audio in this event is temporarily buffered for moderation while the session runs.',
         'Nothing is stored unless staff capture an incident clip; the buffer is discarded when the event ends.',
     ],
+    reportButton = false,
 } = {}) => {
     const container = new ContainerBuilder().setAccentColor(0xF59E0B);
     const block = buildTextBlock({
@@ -155,6 +158,14 @@ const postConsentNotice = async (channel, {
         lines,
     });
     if (block) container.addTextDisplayComponents(block);
+    if (reportButton) {
+        container.addActionRowComponents(new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('voicereport')
+                .setLabel('Report to Moderators')
+                .setStyle(ButtonStyle.Danger)
+        ));
+    }
     try {
         await channel.send({ flags: MessageFlags.IsComponentsV2, components: [container] });
         return true;

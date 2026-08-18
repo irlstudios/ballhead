@@ -36,6 +36,7 @@ const { isReengagementInteraction, handleReengagementInteraction } = require('./
 const { handleInviteButton } = require('./handlers/invites');
 const { handleReportApprove, handleReportDeny, handleReportInfo, handleReportQueueButton } = require('./handlers/reports');
 const { isRoomEventInteraction, handleRoomEventButton } = require('./handlers/room_event');
+const { handleVoiceReport } = require('./handlers/voice_report');
 
 const interactionHandler = async (interaction, client) => {
     try {
@@ -306,6 +307,11 @@ const handleButton = async (interaction, client) => {
 
         if (interaction.customId.startsWith('practice:')) {
             await handlePracticeButton(interaction);
+            return;
+        }
+
+        if (interaction.customId === 'voicereport') {
+            await handleVoiceReport(interaction);
             return;
         }
 

@@ -9,15 +9,16 @@
 // follows the capture.js module-Map precedent.
 
 const { OpusEncoder } = require('@discordjs/opus');
-const { AttachmentBuilder, ContainerBuilder, FileBuilder, MessageFlags } = require('discord.js');
 const logger = require('../logger');
-const { buildTextBlock } = require('../ui');
 const { drainUserChunks } = require('./chunker');
 const { transcribeWav } = require('./whisper_client');
 const { scanTranscript } = require('./keyword_scan');
 const { getCaptureState, setUtteranceHook, clearUtteranceHook } = require('./capture');
 const { clipFromCapture } = require('./clipper');
 const { insertIncident } = require('./incidents');
+const { applyEnforcement } = require('./enforcement');
+const { buildEvidenceMessage } = require('./evidence_post');
+const { transcribeClipSpeakers, formatClipTranscript } = require('./transcriber');
 const {
     MODERATOR_ROLES, VOICE_EVIDENCE_CHANNEL_ID, VOICE_CHUNK_CYCLE_SECONDS,
     VOICE_CLIP_DEFAULT_SECONDS,
@@ -66,39 +67,44 @@ const drainUser = async ({ store, decodeForUser, userId, sinceMs, nowMs, transcr
     return { drained: true, ok: true, flagged: false };
 };
 
+const timestampField = (nowMs) => `<t:${Math.floor(nowMs / 1000)}:f> (<t:${Math.floor(nowMs / 1000)}:R>)`;
+
 const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text }) => {
     try {
         const clip = clipFromCapture({ channelId, durationSeconds: VOICE_CLIP_DEFAULT_SECONDS });
         const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
-        const container = new ContainerBuilder().setAccentColor(0xEF4444);
-        // ComponentsV2 forbids the top-level content field, so the mod ping
-        // rides inside the container as a text display.
-        const block = buildTextBlock({
-            title: 'Voice Flag',
-            subtitle: 'Public Room Auto Alert',
-            lines: [
-                `<@&${MODERATOR_ROLES[0]}>`,
-                `Room: <#${channelId}> (host <@${hostId}>)`,
-                `Speaker: <@${userId}>`,
-                `Matched: ${matches.join(', ')}`,
-                `Transcript: ${text.slice(0, 500)}`,
-            ],
+
+        const enforcement = await applyEnforcement({
+            guild: evidenceChannel.guild,
+            userId,
+            reason: `Voice moderation tier1: ${matches.join(', ')}`,
         });
-        if (block) container.addTextDisplayComponents(block);
+
         const fileName = `flag-${channelId}-${Date.now()}.wav`;
-        // ComponentsV2 hides raw attachments; the File component renders it.
-        if (clip) container.addFileComponents(new FileBuilder().setURL(`attachment://${fileName}`));
-        const message = await evidenceChannel.send({
-            flags: MessageFlags.IsComponentsV2,
-            components: [container],
-            files: clip ? [new AttachmentBuilder(clip.wav, { name: fileName })] : [],
+        const message = await evidenceChannel.send(buildEvidenceMessage({
+            accentColor: 0xE53E3E,
+            title: 'Voice Flag',
+            kicker: 'Automatic detection in a public room',
+            mentionLine: `<@&${MODERATOR_ROLES[0]}>`,
+            fields: [
+                ['Speaker', `<@${userId}>`],
+                ['Room', `<#${channelId}> (host <@${hostId}>)`],
+                ['Matched terms', matches.map((match) => `\`${match}\``).join('  ')],
+                ['When', timestampField(Date.now())],
+            ],
+            transcript: text.slice(0, 900),
+            actionsTaken: enforcement.actions,
+            actionFailures: enforcement.failures,
+            clipWav: clip?.wav,
+            fileName,
             allowedMentions: { roles: [MODERATOR_ROLES[0]] },
-        });
+        }));
+
         await insertIncident({
             sessionId: null,
             channelId,
             clippedBy: 'auto-flag',
-            note: `tier1: ${matches.join(', ')}`,
+            note: `tier1: ${matches.join(', ')} | actions: ${enforcement.actions.join(', ') || 'none'}`,
             windowStart: new Date(clip ? clip.windowStartMs : Date.now()),
             windowEnd: new Date(clip ? clip.windowEndMs : Date.now()),
             participantIds: clip ? clip.participantIds : [userId],
@@ -108,6 +114,59 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
         // String-only log: winston's meta stringify can choke on Discord
         // error objects and silently drop the line.
         logger.error(`[Voice Mod] Flag alert failed for ${channelId}: ${error?.message || error}`);
+    }
+};
+
+// User-triggered report: clip the recent window, transcribe it for context,
+// and post it for review. No automatic punishment on reports; mods decide.
+const postRoomReport = async ({ client, channelId, reporterId }) => {
+    const state = getCaptureState(channelId);
+    if (!state) return { ok: false, reason: 'not-monitored' };
+    const clip = clipFromCapture({ channelId, durationSeconds: VOICE_CLIP_DEFAULT_SECONDS });
+    if (!clip) return { ok: false, reason: 'no-audio' };
+    try {
+        const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
+        const namesByUserId = new Map();
+        for (const participantId of clip.participantIds) {
+            const member = await evidenceChannel.guild.members.fetch(participantId).catch(() => null);
+            namesByUserId.set(participantId, member?.displayName || `user ${participantId}`);
+        }
+        const transcript = formatClipTranscript(
+            await transcribeClipSpeakers(clip.userWavs, namesByUserId), 900
+        );
+        const fileName = `report-${channelId}-${Date.now()}.wav`;
+        const message = await evidenceChannel.send(buildEvidenceMessage({
+            accentColor: 0xF59E0B,
+            title: 'Room Report',
+            kicker: 'A member asked for moderator review',
+            mentionLine: `<@&${MODERATOR_ROLES[0]}>`,
+            fields: [
+                ['Reported by', `<@${reporterId}>`],
+                ['Room', `<#${channelId}> (host <@${state.session.hostId || 'unknown'}>)`],
+                ['In the clip', clip.participantIds.map((id) => `<@${id}>`).join(' ')],
+                ['When', timestampField(Date.now())],
+            ],
+            transcript: transcript || null,
+            actionsTaken: [],
+            actionFailures: [],
+            clipWav: clip.wav,
+            fileName,
+            allowedMentions: { roles: [MODERATOR_ROLES[0]] },
+        }));
+        await insertIncident({
+            sessionId: null,
+            channelId,
+            clippedBy: reporterId,
+            note: 'user report',
+            windowStart: new Date(clip.windowStartMs),
+            windowEnd: new Date(clip.windowEndMs),
+            participantIds: clip.participantIds,
+            evidenceMessageUrl: message.url,
+        });
+        return { ok: true };
+    } catch (error) {
+        logger.error(`[Voice Mod] Room report failed for ${channelId}: ${error?.message || error}`);
+        return { ok: false, reason: 'post-failed' };
     }
 };
 
@@ -189,4 +248,7 @@ const stopRoomMonitor = (channelId) => {
     logger.info(`[Voice Mod] Room monitor stopped for ${channelId}.`);
 };
 
-module.exports = { drainUser, startRoomMonitor, stopRoomMonitor, activeMonitorCount, postFlagAlert };
+module.exports = {
+    drainUser, startRoomMonitor, stopRoomMonitor, activeMonitorCount,
+    postFlagAlert, postRoomReport,
+};

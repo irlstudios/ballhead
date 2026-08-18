@@ -23,7 +23,9 @@ const roomNotice = {
     lines: [
         'This public room is monitored. Audio is buffered and transcribed for moderation while the room is open.',
         'Transcripts are scanned and discarded; audio is stored only if an incident is flagged.',
+        'Something happening in here? Hit the button and a moderator gets the last minute of audio.',
     ],
+    reportButton: true,
 };
 
 const beginRoomCapture = async ({ channel, hostId, client, onCycleOutcome }) => {

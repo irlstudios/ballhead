@@ -238,6 +238,9 @@ const VOICE_TRANSCRIPT_FLUSH_SECONDS = 10;
 const VOICE_CHUNK_CYCLE_SECONDS = 120;
 const WHISPER_FAILURE_THRESHOLD = 3;
 const VOICE_CHUNK_MIN_PACKETS = 25;
+// Role the room system already denies Connect/Speak in every room; assigning
+// it is the automated vc blacklist action on tier 1 hits.
+const VC_BLACKLIST_ROLE_ID = '1125497495678615582';
 
 // Pagination
 const ITEMS_PER_PAGE = 10;
@@ -341,6 +344,7 @@ module.exports = {
     VOICE_CHUNK_CYCLE_SECONDS,
     WHISPER_FAILURE_THRESHOLD,
     VOICE_CHUNK_MIN_PACKETS,
+    VC_BLACKLIST_ROLE_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
