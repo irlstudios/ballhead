@@ -35,14 +35,23 @@ const TIER1 = [
     'slit your wrists',
     // Threats and doxxing
     'i know where you live',
+    'i will kill you',
+    'ill kill you',
+    'swat you',
     'rape you',
+    'molest',
     // Grooming patterns
     'send nudes',
     'dont tell your parents',
     'do not tell your parents',
     'are you home alone',
+    'are your parents home',
+    'are you by yourself',
     'whats your address',
     'what is your address',
+    'pedo',
+    'pedophile',
+    'groomer',
 ];
 
 const TIER2 = [
@@ -52,13 +61,6 @@ const TIER2 = [
     'coon',
     'retard',
     'retarded',
-    'pedo',
-    'pedophile',
-    'groomer',
-    'molest',
-    'i will kill you',
-    'ill kill you',
-    'swat you',
     'home alone',
 ];
 
