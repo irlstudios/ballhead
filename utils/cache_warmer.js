@@ -1,15 +1,16 @@
 const { warmCache, getCacheStats, startCacheMaintenance } = require('./sheets_cache');
 const logger = require('./logger');
+const { SPREADSHEET_CONTENT_CREATORS } = require('../config/constants');
 
-const SPREADSHEET_ID = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
+const SPREADSHEET_ID = SPREADSHEET_CONTENT_CREATORS;
 const CACHE_TTL_MS = 1800000; // 30 minutes
 const WARM_INTERVAL_MS = 900000; // Warm every 15 minutes (before 30min TTL expires)
 
-// All ranges used by content creator commands
+// All ranges used by content creator commands. A single invalid range fails
+// the whole batchGet, so every entry here must exist on the sheet.
 const COMMON_RANGES = [
     // cc_check_account ranges
     'CC Applications!A:G',
-    'TikTok Data!A:O',
     'Reels Data!A:O',
     'Creators!A:K',
 
