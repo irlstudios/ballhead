@@ -33,13 +33,13 @@ test('uses the shipped config lists when none are passed', () => {
 });
 
 test('apostrophes in transcripts do not defeat matching', () => {
-    const result = scanTranscript("hey, don't tell your parents about this",
+    const result = scanTranscript('hey, don\'t tell your parents about this',
         { tier1: ['dont tell your parents'], tier2: [] });
     assert.deepStrictEqual(result.tier1, ['dont tell your parents']);
 });
 
 test('curly apostrophes from smart transcription are normalized too', () => {
-    const result = scanTranscript('what’s your address little man',
+    const result = scanTranscript('what\u2019s your address little man',
         { tier1: ['whats your address'], tier2: [] });
     assert.deepStrictEqual(result.tier1, ['whats your address']);
 });
