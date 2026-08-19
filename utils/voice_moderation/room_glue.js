@@ -4,13 +4,14 @@
 // default; this module decides whether a new room may stay public, whether
 // an unlock is allowed, and starts or stops capture plus monitoring.
 
-const { PermissionFlagsBits } = require('discord.js');
+const { ChannelType, PermissionFlagsBits } = require('discord.js');
 const { setTimeout: sleep } = require('node:timers/promises');
 const logger = require('../logger');
 const { pool } = require('../../db');
 const capture = require('./capture');
 const { canGoPublic } = require('./public_gate');
 const { startRoomMonitor, stopRoomMonitor } = require('./room_monitor');
+const { VC_CREATE_CHANNEL_ID } = require('../../config/constants');
 
 let healthCheck = () => false;
 let clientRef = null;
@@ -157,8 +158,47 @@ const onRoomLocked = (channelId) => {
 // humans in them; locked rooms are private and stay bot-free. Rooms the
 // gate would now refuse are left alone rather than locked: they predate the
 // restart and die on their own.
+// A restart between channel creation and the vc_hosts insert leaves an
+// orphan: a real room channel the system does not know about, which would
+// otherwise never be monitored or auto-deleted. Adopt occupied orphans
+// (host is the first human present) and delete empty ones.
+const adoptOrphanRooms = async () => {
+    if (!clientRef) return;
+    const createChannel = clientRef.channels.cache.get(VC_CREATE_CHANNEL_ID);
+    if (!createChannel?.parentId) return;
+    const { rows } = await pool.query('SELECT channel_id FROM vc_hosts');
+    const managed = new Set(rows.map((row) => row.channel_id));
+    const siblings = createChannel.guild.channels.cache.filter((channel) =>
+        channel.type === ChannelType.GuildVoice
+        && channel.parentId === createChannel.parentId
+        && channel.id !== VC_CREATE_CHANNEL_ID
+        && !managed.has(channel.id));
+    for (const [, channel] of siblings) {
+        try {
+            const firstHuman = channel.members.find((member) => !member.user.bot);
+            if (!firstHuman) {
+                await channel.delete().catch(() => {});
+                logger.info(`[Voice Mod] Deleted empty orphan room ${channel.id}.`);
+                continue;
+            }
+            await pool.query(
+                `INSERT INTO vc_hosts(channel_id, host_id, created_at) VALUES($1, $2, now())
+                 ON CONFLICT (channel_id) DO NOTHING`,
+                [channel.id, firstHuman.id]
+            );
+            if (clientRef.vcHosts) clientRef.vcHosts.set(channel.id, firstHuman.id);
+            logger.info(`[Voice Mod] Adopted orphan room ${channel.id} with host ${firstHuman.id}.`);
+        } catch (error) {
+            logger.error(`[Voice Mod] Orphan adoption failed for ${channel.id}: ${error?.message || error}`);
+        }
+    }
+};
+
 const resumeRoomCaptures = async () => {
     if (monitoringMode() === 'off') return;
+    await adoptOrphanRooms().catch((error) => {
+        logger.error(`[Voice Mod] Orphan sweep failed: ${error?.message || error}`);
+    });
     const { rows } = await pool.query('SELECT channel_id FROM vc_hosts');
     for (const row of rows) {
         try {
