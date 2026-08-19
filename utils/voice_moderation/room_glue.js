@@ -16,11 +16,21 @@ let healthCheck = () => false;
 let clientRef = null;
 let cycleOutcomeRef = () => {};
 
+const SWEEP_INTERVAL_MS = 3 * 60 * 1000;
+let sweepTimer = null;
+
 const initRoomModeration = ({ isHealthy, client, onCycleOutcome }) => {
     healthCheck = isHealthy;
     clientRef = client;
     if (onCycleOutcome) cycleOutcomeRef = onCycleOutcome;
     capture.setCaptureLostHandler((channelId) => { void handleCaptureLost(channelId); });
+    // Reconciler sweep: rooms can end up public and occupied without a
+    // capture (empty at restart-resume then joined later, worker freed after
+    // exhaustion). makeRoomMonitored is a quiet no-op for covered rooms.
+    if (!sweepTimer) {
+        sweepTimer = setInterval(() => { void resumeRoomCaptures(); }, SWEEP_INTERVAL_MS);
+        if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+    }
 };
 
 const isPublicRoom = (channel) => {
@@ -153,7 +163,7 @@ const resumeRoomCaptures = async () => {
     for (const row of rows) {
         try {
             const started = await makeRoomMonitored(row.channel_id);
-            if (started) logger.info(`[Voice Mod] Resumed capture for room ${row.channel_id} after restart.`);
+            if (started) logger.info(`[Voice Mod] Capture established for room ${row.channel_id}.`);
         } catch (error) {
             logger.error(`[Voice Mod] Could not resume capture for ${row.channel_id}:`, error);
         }

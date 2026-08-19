@@ -2,7 +2,7 @@ const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDi
 const { pool } = require('../db');
 const logger = require('../utils/logger');
 const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_ROLE_IDS } = require('../config/constants');
-const { gateNewRoom, onRoomGone } = require('../utils/voice_moderation/room_glue');
+const { gateNewRoom, onRoomGone, makeRoomMonitored } = require('../utils/voice_moderation/room_glue');
 const { onCycleOutcome } = require('../utils/voice_moderation/outage');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
@@ -79,6 +79,13 @@ module.exports = {
         if (newState.channelId && newState.channelId !== oldState.channelId && isBlacklisted(newState.member)) {
             await newState.setChannel(null);
             return;
+        }
+
+        // Someone joined a managed room: make sure its capture exists. Cheap
+        // no-op when the room is already covered, locked, or being created.
+        if (newState.channelId && newState.channelId !== oldState.channelId
+            && client.vcHosts.has(newState.channelId) && !newState.member.user.bot) {
+            void makeRoomMonitored(newState.channelId).catch(() => {});
         }
 
         if (oldState.channelId !== specificVCID && newState.channelId === specificVCID) {
