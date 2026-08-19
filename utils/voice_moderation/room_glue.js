@@ -135,15 +135,54 @@ const makeRoomMonitored = async (channelId) => {
 
 // The bot was thrown out of a room it should be monitoring (a host with
 // MoveMembers can always disconnect it; Discord offers no way to prevent
-// that). Public room = monitored room, so it walks straight back in.
+// that). Public room = monitored room, so it walks straight back in, with
+// retries because a kick can land mid-handshake. Someone who keeps kicking
+// the bot loses the public room: repeated disconnects lock it.
+const REJOIN_WINDOW_MS = 10 * 60 * 1000;
+const REJOIN_LIMIT = 3;
+const rejoinTracker = new Map();
+
+const lockRoomForSabotage = async (channelId) => {
+    const channel = clientRef?.channels.cache.get(channelId);
+    if (!channel) return;
+    try {
+        await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { Connect: false });
+        await channel.send({
+            content: 'The moderation bot was repeatedly disconnected from this room, so it is now invite only. The host can use /room unlock to make it public again, which brings monitoring back.',
+            allowedMentions: { parse: [] },
+        }).catch(() => {});
+        logger.warn(`[Voice Mod] Locked ${channelId}: capture bot repeatedly disconnected.`);
+    } catch (error) {
+        logger.error(`[Voice Mod] Sabotage lock failed for ${channelId}: ${error?.message || error}`);
+    }
+};
+
 const handleCaptureLost = async (channelId) => {
     stopRoomMonitor(channelId);
-    await sleep(3000);
-    try {
-        const rejoined = await makeRoomMonitored(channelId);
-        if (rejoined) logger.info(`[Voice Mod] Rejoined ${channelId} after an unexpected disconnect.`);
-    } catch (error) {
-        logger.error(`[Voice Mod] Rejoin failed for ${channelId}: ${error?.message || error}`);
+    const now = Date.now();
+    const previous = rejoinTracker.get(channelId);
+    const tracker = previous && now - previous.windowStart < REJOIN_WINDOW_MS
+        ? previous
+        : { count: 0, windowStart: now };
+    tracker.count += 1;
+    rejoinTracker.set(channelId, tracker);
+    if (tracker.count > REJOIN_LIMIT) {
+        rejoinTracker.delete(channelId);
+        await lockRoomForSabotage(channelId);
+        return;
+    }
+    for (const delayMs of [3000, 10000, 30000]) {
+        await sleep(delayMs);
+        try {
+            if (await makeRoomMonitored(channelId)) {
+                logger.info(`[Voice Mod] Rejoined ${channelId} after an unexpected disconnect.`);
+                return;
+            }
+            const channel = clientRef?.channels.cache.get(channelId);
+            if (!channel || !isPublicRoom(channel)) return;
+        } catch (error) {
+            logger.error(`[Voice Mod] Rejoin attempt failed for ${channelId}: ${error?.message || error}`);
+        }
     }
 };
 
