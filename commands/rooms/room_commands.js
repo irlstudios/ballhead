@@ -5,7 +5,7 @@ const logger = require('../../utils/logger');
 const { handleRoomEventStart, handleRoomEventStatus } = require('../../handlers/room_event');
 const { handleRoomEventClip, handleRoomEventMonitor } = require('../../handlers/room_event_voice');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
-const { gateUnlock } = require('../../utils/voice_moderation/room_glue');
+const { gateUnlock, onRoomLocked } = require('../../utils/voice_moderation/room_glue');
 const { onCycleOutcome } = require('../../utils/voice_moderation/outage');
 
 // Subcommands a host may not use on their own lobby while an event session runs.
@@ -637,10 +637,13 @@ module.exports = {
             await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: false });
             await applyBlacklistPermissions(roomChannel);
+            // Locked rooms are private: monitoring stops and the capture bot
+            // leaves, discarding its buffers.
+            onRoomLocked(roomChannel.id);
             return replyRoomNotice(interaction, {
                 title: 'Room Locked',
                 subtitle: 'Lock Room',
-                lines: ['Room locked.']
+                lines: ['Room locked. Voice monitoring is off while the room is locked.']
             });
         }
         case 'unlock': {
@@ -722,6 +725,13 @@ module.exports = {
             }
             await applyBlacklistPermissions(roomChannel);
             const kickUser = interaction.options.getUser('user');
+            if (kickUser.bot) {
+                return replyRoomNotice(interaction, {
+                    title: 'Cannot Kick Bot',
+                    subtitle: 'Kick User',
+                    lines: ['Moderation bots cannot be kicked. Lock the room to make it private instead.']
+                });
+            }
             const kickMember = roomChannel.members.get(kickUser.id);
             if (kickMember) {
                 await kickMember.voice.disconnect();

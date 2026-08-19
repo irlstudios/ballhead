@@ -24,6 +24,12 @@ const { VOICE_BUFFER_MINUTES } = require('../../config/constants');
 //                client, isMainClient }
 const captures = new Map();
 
+// Fired when a capture drops unexpectedly (kicked from the channel, network
+// death) as opposed to a deliberate leaveSession. Room moderation uses it to
+// rejoin public rooms the bot was thrown out of.
+let captureLostHandler = null;
+const setCaptureLostHandler = (fn) => { captureLostHandler = fn; };
+
 const getCaptureState = (channelId) => captures.get(channelId) || null;
 
 // The channel whose capture rides on the MAIN bot user, if any. Worker
@@ -225,7 +231,17 @@ const joinSession = async ({ channel, session, workersOnly = false, notice }) =>
                     entersState(connection, VoiceConnectionStatus.Connecting, 5000),
                 ]);
             } catch {
+                const wasTracked = captures.has(channel.id);
                 leaveSession(channel.id);
+                // Only an unexpected drop reaches here; deliberate leaves call
+                // leaveSession directly and never pass through Disconnected.
+                if (wasTracked && captureLostHandler) {
+                    try {
+                        captureLostHandler(channel.id);
+                    } catch (error) {
+                        logger.error(`[Voice Mod] Capture lost handler failed for ${channel.id}:`, error);
+                    }
+                }
             }
         });
         connection.on('error', (error) => {
@@ -267,5 +283,5 @@ const leaveSession = (channelId) => {
 module.exports = {
     joinSession, leaveSession, getCaptureState, getGuildCaptureChannel,
     pickCaptureClient, countFreeWorkers, freeWorkerCountIn, setTap, clearTap,
-    setUtteranceHook, clearUtteranceHook,
+    setUtteranceHook, clearUtteranceHook, setCaptureLostHandler,
 };

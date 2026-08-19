@@ -12,6 +12,7 @@ const { createHealth, recordSuccess, recordFailure } = require('./pc_health');
 const { probeServer } = require('./whisper_client');
 const { addSystemLock, removeSystemLock, listSystemLocks } = require('./system_locks');
 const { activeMonitorCount } = require('./room_monitor');
+const { onRoomLocked, makeRoomMonitored } = require('./room_glue');
 const { WHISPER_FAILURE_THRESHOLD } = require('../../config/constants');
 
 const PROBE_INTERVAL_MS = 60000;
@@ -46,6 +47,8 @@ const lockAllPublicRooms = async (client) => {
         try {
             await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { Connect: false });
             await addSystemLock(channel.id);
+            // Locked rooms are private: the capture bot leaves with the lock.
+            onRoomLocked(channel.id);
             await channel.send({
                 content: 'Voice moderation is temporarily offline, so this room is now invite only. It will reopen automatically.',
                 allowedMentions: { parse: [] },
@@ -62,6 +65,7 @@ const unlockSystemLockedRooms = async (client) => {
         try {
             if (channel) {
                 await channel.permissionOverwrites.edit(channel.guild.roles.everyone, { Connect: null });
+                await makeRoomMonitored(channelId);
                 await channel.send({
                     content: 'Voice moderation is back. This room is public again.',
                     allowedMentions: { parse: [] },

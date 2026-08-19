@@ -30,7 +30,6 @@ const { ensureVcSystemLocksSchema } = require('../utils/voice_moderation/system_
 const { initOutageWatch, isHealthy } = require('../utils/voice_moderation/outage');
 const { initRoomModeration, resumeRoomCaptures } = require('../utils/voice_moderation/room_glue');
 const { onCycleOutcome } = require('../utils/voice_moderation/outage');
-const { pool } = require('../db');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -197,10 +196,10 @@ module.exports = {
 
         // Public room moderation: the gate asks the outage watcher for PC
         // health, and the watcher probes while no room monitors are running.
-        initRoomModeration({ isHealthy });
+        initRoomModeration({ isHealthy, client, onCycleOutcome });
         initOutageWatch(client);
         try {
-            await resumeRoomCaptures({ client, pool, onCycleOutcome });
+            await resumeRoomCaptures();
         } catch (error) {
             logger.error('[Voice Mod] Room capture resume failed:', error);
         }
