@@ -182,6 +182,12 @@ const adoptOrphanRooms = async () => {
             // Occupied orphans get adopted; empty ones are left alone.
             const firstHuman = channel.members.find((member) => !member.user.bot);
             if (!firstHuman) continue;
+            // host_id is UNIQUE; clear any stale row for this host first or
+            // the adoption insert dies on the constraint.
+            await pool.query(
+                'DELETE FROM vc_hosts WHERE host_id = $2 AND channel_id <> $1',
+                [channel.id, firstHuman.id]
+            );
             await pool.query(
                 `INSERT INTO vc_hosts(channel_id, host_id, created_at) VALUES($1, $2, now())
                  ON CONFLICT (channel_id) DO NOTHING`,

@@ -196,6 +196,12 @@ module.exports = {
                 return;
             }
             client.vcHosts.set(newChannel.id, newState.member.id);
+            // host_id is UNIQUE (one room per host): a stale row from a
+            // missed cleanup would block this insert and orphan the room.
+            await pool.query(
+                'DELETE FROM vc_hosts WHERE host_id = $2 AND channel_id <> $1',
+                [newChannel.id, newState.member.id]
+            );
             await pool.query(
                 `INSERT INTO vc_hosts(channel_id, host_id, created_at)
                VALUES($1, $2, now())
