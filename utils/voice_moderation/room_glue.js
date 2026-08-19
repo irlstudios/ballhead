@@ -54,7 +54,32 @@ const roomNotice = {
     reportButton: true,
 };
 
+// Rooms can carry sabotage from raw channel admin (user limits keeping the
+// bot out, host-era ManageChannels overwrites on legacy rooms). Normalize
+// before joining; every step is best effort.
+const normalizeRoom = async (channel, hostId) => {
+    try {
+        if (channel.userLimit !== 0) {
+            await channel.setUserLimit(0);
+            logger.warn(`[Voice Mod] Reset user limit on ${channel.id}; it was blocking the capture bot.`);
+        }
+    } catch (error) {
+        logger.error(`[Voice Mod] Could not reset user limit on ${channel.id}: ${error?.message || error}`);
+    }
+    try {
+        const hostOverwrite = channel.permissionOverwrites.cache.get(hostId);
+        if (hostOverwrite && (hostOverwrite.allow.has(PermissionFlagsBits.ManageChannels)
+            || hostOverwrite.allow.has(PermissionFlagsBits.MoveMembers))) {
+            await channel.permissionOverwrites.edit(hostId, { ManageChannels: null, MoveMembers: null });
+            logger.info(`[Voice Mod] Stripped legacy host admin powers on ${channel.id}.`);
+        }
+    } catch (error) {
+        logger.error(`[Voice Mod] Could not strip host powers on ${channel.id}: ${error?.message || error}`);
+    }
+};
+
 const beginRoomCapture = async ({ channel, hostId, client, onCycleOutcome }) => {
+    await normalizeRoom(channel, hostId);
     await capture.joinSession({
         channel,
         session: { id: `room-${channel.id}`, hostId },

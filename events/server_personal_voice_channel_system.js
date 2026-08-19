@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const logger = require('../utils/logger');
 const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_ROLE_IDS } = require('../config/constants');
 const { gateNewRoom, onRoomGone, makeRoomMonitored } = require('../utils/voice_moderation/room_glue');
+const { getReadyWorkers } = require('../utils/voice_moderation/worker_pool');
 const { onCycleOutcome } = require('../utils/voice_moderation/outage');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
@@ -123,10 +124,12 @@ module.exports = {
                     },
                     {
                         id: newState.member.id,
+                        // No ManageChannels or MoveMembers for hosts: raw channel
+                        // admin let hosts kick the moderation bot or cap the user
+                        // limit to keep it out. Room management goes through the
+                        // /room commands, which enforce policy.
                         allow: [
                             PermissionFlagsBits.Connect,
-                            PermissionFlagsBits.ManageChannels,
-                            PermissionFlagsBits.MoveMembers,
                             PermissionFlagsBits.Speak,
                             // UseExternalApps: launching an activity whose app is not
                             // installed to the server requires it; without it Discord
@@ -139,6 +142,16 @@ module.exports = {
                             ...(creatorCanStartActivities ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
                         ]
                     },
+                    ...getReadyWorkers().map((worker) => ({
+                        id: worker.user.id,
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.Connect,
+                            // MoveMembers lets a worker join even if a user limit
+                            // somehow gets set on the room.
+                            PermissionFlagsBits.MoveMembers
+                        ]
+                    })),
                     {
                         id: client.user.id,
                         // SendMessages: rooms deny it for everyone, but the voice
