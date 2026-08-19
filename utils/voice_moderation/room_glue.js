@@ -175,12 +175,11 @@ const adoptOrphanRooms = async () => {
         && !managed.has(channel.id));
     for (const [, channel] of siblings) {
         try {
+            // NEVER delete: the category also holds permanent voice channels
+            // that are indistinguishable from orphaned rooms when empty.
+            // Occupied unmanaged channels get adopted; empty ones are left alone.
             const firstHuman = channel.members.find((member) => !member.user.bot);
-            if (!firstHuman) {
-                await channel.delete().catch(() => {});
-                logger.info(`[Voice Mod] Deleted empty orphan room ${channel.id}.`);
-                continue;
-            }
+            if (!firstHuman) continue;
             await pool.query(
                 `INSERT INTO vc_hosts(channel_id, host_id, created_at) VALUES($1, $2, now())
                  ON CONFLICT (channel_id) DO NOTHING`,
