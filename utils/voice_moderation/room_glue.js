@@ -165,19 +165,21 @@ const onRoomLocked = (channelId) => {
 const adoptOrphanRooms = async () => {
     if (!clientRef) return;
     const createChannel = clientRef.channels.cache.get(VC_CREATE_CHANNEL_ID);
-    if (!createChannel?.parentId) return;
+    if (!createChannel?.guild) return;
     const { rows } = await pool.query('SELECT channel_id FROM vc_hosts');
     const managed = new Set(rows.map((row) => row.channel_id));
-    const siblings = createChannel.guild.channels.cache.filter((channel) =>
+    // Personal rooms are identified by the name the create flow gives them,
+    // not by category: permanent voice channels share categories with rooms.
+    const orphans = createChannel.guild.channels.cache.filter((channel) =>
         channel.type === ChannelType.GuildVoice
-        && channel.parentId === createChannel.parentId
         && channel.id !== VC_CREATE_CHANNEL_ID
-        && !managed.has(channel.id));
-    for (const [, channel] of siblings) {
+        && !managed.has(channel.id)
+        && /'s Room$/.test(channel.name));
+    for (const [, channel] of orphans) {
         try {
-            // NEVER delete: the category also holds permanent voice channels
-            // that are indistinguishable from orphaned rooms when empty.
-            // Occupied unmanaged channels get adopted; empty ones are left alone.
+            // NEVER delete anything here: an empty unmanaged channel might be
+            // a permanent channel or a renamed room; deletion is not our call.
+            // Occupied orphans get adopted; empty ones are left alone.
             const firstHuman = channel.members.find((member) => !member.user.bot);
             if (!firstHuman) continue;
             await pool.query(
