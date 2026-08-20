@@ -20,8 +20,7 @@ const { applyEnforcement } = require('./enforcement');
 const { buildEvidenceMessage } = require('./evidence_post');
 const { transcribeClipSpeakers, formatClipTranscript } = require('./transcriber');
 const {
-    MODERATOR_ROLES, VOICE_EVIDENCE_CHANNEL_ID, VOICE_CHUNK_CYCLE_SECONDS,
-    VOICE_CLIP_DEFAULT_SECONDS,
+    VOICE_ALERT_DM_USER_ID, VOICE_CHUNK_CYCLE_SECONDS, VOICE_CLIP_DEFAULT_SECONDS,
 } = require('../../config/constants');
 
 // channelId -> { timer, hostId, startedMs, lastDrain: Map<userId, ms>,
@@ -72,20 +71,22 @@ const timestampField = (nowMs) => `<t:${Math.floor(nowMs / 1000)}:f> (<t:${Math.
 const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text }) => {
     try {
         const clip = clipFromCapture({ channelId, durationSeconds: VOICE_CLIP_DEFAULT_SECONDS });
-        const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
+        const roomChannel = client.channels.cache.get(channelId);
+        const alertUser = await client.users.fetch(VOICE_ALERT_DM_USER_ID);
 
-        const enforcement = await applyEnforcement({
-            guild: evidenceChannel.guild,
-            userId,
-            reason: `Voice moderation tier1: ${matches.join(', ')}`,
-        });
+        const enforcement = roomChannel
+            ? await applyEnforcement({
+                guild: roomChannel.guild,
+                userId,
+                reason: `Voice moderation tier1: ${matches.join(', ')}`,
+            })
+            : { actions: [], failures: ['room channel not found, no action taken'] };
 
         const fileName = `flag-${channelId}-${Date.now()}.wav`;
-        const message = await evidenceChannel.send(buildEvidenceMessage({
+        const message = await alertUser.send(buildEvidenceMessage({
             accentColor: 0xE53E3E,
             title: 'Voice Flag',
             kicker: 'Automatic detection in a public room',
-            mentionLine: `<@&${MODERATOR_ROLES[0]}>`,
             fields: [
                 ['Speaker', `<@${userId}>`],
                 ['Room', `<#${channelId}> (host <@${hostId}>)`],
@@ -97,7 +98,7 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
             actionFailures: enforcement.failures,
             clipWav: clip?.wav,
             fileName,
-            allowedMentions: { roles: [MODERATOR_ROLES[0]] },
+            allowedMentions: { parse: [] },
         }));
 
         await insertIncident({
@@ -125,21 +126,23 @@ const postRoomReport = async ({ client, channelId, reporterId }) => {
     const clip = clipFromCapture({ channelId, durationSeconds: VOICE_CLIP_DEFAULT_SECONDS });
     if (!clip) return { ok: false, reason: 'no-audio' };
     try {
-        const evidenceChannel = await client.channels.fetch(VOICE_EVIDENCE_CHANNEL_ID);
+        const roomChannel = client.channels.cache.get(channelId);
+        const alertUser = await client.users.fetch(VOICE_ALERT_DM_USER_ID);
         const namesByUserId = new Map();
         for (const participantId of clip.participantIds) {
-            const member = await evidenceChannel.guild.members.fetch(participantId).catch(() => null);
+            const member = roomChannel
+                ? await roomChannel.guild.members.fetch(participantId).catch(() => null)
+                : null;
             namesByUserId.set(participantId, member?.displayName || `user ${participantId}`);
         }
         const transcript = formatClipTranscript(
             await transcribeClipSpeakers(clip.userWavs, namesByUserId), 900
         );
         const fileName = `report-${channelId}-${Date.now()}.wav`;
-        const message = await evidenceChannel.send(buildEvidenceMessage({
+        const message = await alertUser.send(buildEvidenceMessage({
             accentColor: 0xF59E0B,
             title: 'Room Report',
-            kicker: 'A member asked for moderator review',
-            mentionLine: `<@&${MODERATOR_ROLES[0]}>`,
+            kicker: 'A member asked for review',
             fields: [
                 ['Reported by', `<@${reporterId}>`],
                 ['Room', `<#${channelId}> (host <@${state.session.hostId || 'unknown'}>)`],
@@ -151,7 +154,7 @@ const postRoomReport = async ({ client, channelId, reporterId }) => {
             actionFailures: [],
             clipWav: clip.wav,
             fileName,
-            allowedMentions: { roles: [MODERATOR_ROLES[0]] },
+            allowedMentions: { parse: [] },
         }));
         await insertIncident({
             sessionId: null,

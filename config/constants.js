@@ -244,6 +244,8 @@ const VC_BLACKLIST_ROLE_ID = '1125497495678615582';
 // Join-to-create trigger channel for personal rooms; its category is the
 // rooms category (used to find orphaned room channels).
 const VC_CREATE_CHANNEL_ID = '1321321682891178074';
+// Voice moderation alerts go to this user's DMs, not a staff channel.
+const VOICE_ALERT_DM_USER_ID = '781397829808553994';
 
 // Pagination
 const ITEMS_PER_PAGE = 10;
@@ -349,6 +351,7 @@ module.exports = {
     VOICE_CHUNK_MIN_PACKETS,
     VC_BLACKLIST_ROLE_ID,
     VC_CREATE_CHANNEL_ID,
+    VOICE_ALERT_DM_USER_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
