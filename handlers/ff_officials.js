@@ -3,6 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
+const { fetchApplicant } = require('../utils/applications');
 const {
     ensureFfOfficialApplicationsTable,
     findFfOfficialApplication,
@@ -196,7 +197,17 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
         }
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
+        if (!user) {
+            await interaction.editReply({
+                ...noticePayload(
+                    'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
+                    { title: 'Applicant Left', subtitle: 'FF Official Program' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
 
         try {
             const dmContainer = new ContainerBuilder();
@@ -268,19 +279,21 @@ const handleFfOfficialApplicationReject = async (interaction) => {
         }
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
 
-        try {
-            const dmContainer = new ContainerBuilder();
-            const block = buildTextBlock({
-                title: 'FF Official Application Denied',
-                subtitle: 'Application reviewed',
-                lines: ['Unfortunately, your FF Official application has been denied. You are welcome to apply again in the future.'],
-            });
-            if (block) dmContainer.addTextDisplayComponents(block);
-            await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
-        } catch (dmError) {
-            logger.error('Failed to send DM to user:', dmError.message);
+        if (user) {
+            try {
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'FF Official Application Denied',
+                    subtitle: 'Application reviewed',
+                    lines: ['Unfortunately, your FF Official application has been denied. You are welcome to apply again in the future.'],
+                });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
+            } catch (dmError) {
+                logger.error('Failed to send DM to user:', dmError.message);
+            }
         }
 
         await deleteFfOfficialApplication(userId);
@@ -300,7 +313,9 @@ const handleFfOfficialApplicationReject = async (interaction) => {
 
         await interaction.editReply({
             ...noticePayload(
-                'The application has been successfully denied!',
+                user
+                    ? 'The application has been successfully denied!'
+                    : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: 'FF Official Program' }
             ),
             ephemeral: true,

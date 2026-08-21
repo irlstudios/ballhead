@@ -3,6 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
+const { fetchApplicant } = require('../utils/applications');
 const {
     ensureBugSquasherApplicationsTable,
     findBugSquasherApplication,
@@ -153,7 +154,17 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
+        if (!user) {
+            await interaction.editReply({
+                ...noticePayload(
+                    'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
+                    { title: 'Applicant Left', subtitle: 'Community Bug Squasher Program' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
 
         try {
             const dmContainer = new ContainerBuilder();
@@ -217,19 +228,21 @@ const handleBugSquasherApplicationReject = async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
 
-        try {
-            const dmContainer = new ContainerBuilder();
-            const block = buildTextBlock({
-                title: 'Community Bug Squasher Application Denied',
-                subtitle: 'Application reviewed',
-                lines: ['Unfortunately, your Community Bug Squasher application has been denied. You are welcome to apply again in the future.'],
-            });
-            if (block) dmContainer.addTextDisplayComponents(block);
-            await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
-        } catch (dmError) {
-            logger.error('Failed to send DM to user:', dmError.message);
+        if (user) {
+            try {
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'Community Bug Squasher Application Denied',
+                    subtitle: 'Application reviewed',
+                    lines: ['Unfortunately, your Community Bug Squasher application has been denied. You are welcome to apply again in the future.'],
+                });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
+            } catch (dmError) {
+                logger.error('Failed to send DM to user:', dmError.message);
+            }
         }
 
         await deleteBugSquasherApplication(userId);
@@ -249,7 +262,9 @@ const handleBugSquasherApplicationReject = async (interaction) => {
 
         await interaction.editReply({
             ...noticePayload(
-                'The application has been successfully denied!',
+                user
+                    ? 'The application has been successfully denied!'
+                    : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: 'Community Bug Squasher Program' }
             ),
             ephemeral: true,

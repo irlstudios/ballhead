@@ -3,6 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, PermissionsBitField } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
+const { fetchApplicant } = require('../utils/applications');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const {
     findOfficialApplication,
@@ -188,7 +189,17 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         }
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
+        if (!user) {
+            await interaction.editReply({
+                ...noticePayload(
+                    'This applicant has left the server, so the application cannot be approved. Use Reject to close it.',
+                    { title: 'Applicant Left', subtitle: 'Officials Program' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
 
         const qaButton = new ButtonBuilder()
             .setCustomId('officialsQna')
@@ -270,29 +281,31 @@ const handleOfficialsApplicationReject = async (interaction) => {
         }
 
         const userId = interaction.customId.split('_')[1];
-        const user = await interaction.guild.members.fetch(userId);
+        const user = await fetchApplicant(interaction.guild, userId);
 
-        const nextStepsButton = new ButtonBuilder()
-            .setCustomId('officialsQnaReject')
-            .setLabel('Help!')
-            .setStyle(ButtonStyle.Primary);
+        if (user) {
+            const nextStepsButton = new ButtonBuilder()
+                .setCustomId('officialsQnaReject')
+                .setLabel('Help!')
+                .setStyle(ButtonStyle.Primary);
 
-        const actionRow = new ActionRowBuilder().addComponents(nextStepsButton);
+            const actionRow = new ActionRowBuilder().addComponents(nextStepsButton);
 
-        try {
-            const dmContainer = new ContainerBuilder();
-            const block = buildTextBlock({
-                title: 'Officials Application Rejected',
-                subtitle: 'Next steps available',
-                lines: [
-                    'Unfortunately, your application for officials has been rejected.',
-                    'If you are confused about why, use the "Help!" button below.',
-                ],
-            });
-            if (block) dmContainer.addTextDisplayComponents(block);
-            await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer, actionRow] });
-        } catch (dmError) {
-            logger.error('Failed to send DM to user:', dmError.message);
+            try {
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'Officials Application Rejected',
+                    subtitle: 'Next steps available',
+                    lines: [
+                        'Unfortunately, your application for officials has been rejected.',
+                        'If you are confused about why, use the "Help!" button below.',
+                    ],
+                });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer, actionRow] });
+            } catch (dmError) {
+                logger.error('Failed to send DM to user:', dmError.message);
+            }
         }
 
         const sheets = await getSheetsClient();
@@ -316,7 +329,9 @@ const handleOfficialsApplicationReject = async (interaction) => {
 
         await interaction.editReply({
             ...noticePayload(
-                'The application has been successfully rejected!',
+                user
+                    ? 'The application has been successfully rejected!'
+                    : 'The application has been rejected. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Rejected', subtitle: 'Officials Program' }
             ),
             ephemeral: true,

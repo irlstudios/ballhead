@@ -4,6 +4,7 @@ const { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, Messag
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
+const { fetchApplicant } = require('../utils/applications');
 const { buildLeagueGuidePayload } = require('../utils/league_guide');
 const {
     findLeagueApplication,
@@ -400,16 +401,8 @@ const handleDenyLeagueModal = async (interaction) => {
 
         const application = rows[0];
 
-        let member;
-        try {
-            member = await interaction.guild.members.fetch(application.applicant_id);
-        } catch (error) {
-            logger.error('Error fetching member:', error);
-            await interaction.editReply(
-                noticePayload('Could not fetch the applicant.', { title: 'Member Unavailable', subtitle: 'League Applications' })
-            );
-            return;
-        }
+        // A departed applicant must not block the denial; the DM is skipped.
+        const member = await fetchApplicant(interaction.guild, application.applicant_id);
 
         // Atomic Pending-only claim, mirroring handleApproveLeague.
         const claimed = await updateLeagueApplicationDenial(messageId, denialReason, interaction.user.id);
@@ -420,21 +413,23 @@ const handleDenyLeagueModal = async (interaction) => {
             return;
         }
 
-        try {
-            const dmContainer = new ContainerBuilder();
-            const block = buildTextBlock({
-                title: 'League Application Denied',
-                subtitle: application.league_name,
-                lines: [
-                    'Your application to upgrade your league has been denied.',
-                    `**Reason:** ${denialReason}`,
-                    'A Community Developer will follow up with more details.',
-                ],
-            });
-            if (block) dmContainer.addTextDisplayComponents(block);
-            await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
-        } catch (error) {
-            logger.error('Error sending DM to the applicant:', error);
+        if (member) {
+            try {
+                const dmContainer = new ContainerBuilder();
+                const block = buildTextBlock({
+                    title: 'League Application Denied',
+                    subtitle: application.league_name,
+                    lines: [
+                        'Your application to upgrade your league has been denied.',
+                        `**Reason:** ${denialReason}`,
+                        'A Community Developer will follow up with more details.',
+                    ],
+                });
+                if (block) dmContainer.addTextDisplayComponents(block);
+                await member.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
+            } catch (error) {
+                logger.error('Error sending DM to the applicant:', error);
+            }
         }
 
         try {
