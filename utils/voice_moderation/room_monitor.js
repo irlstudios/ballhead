@@ -16,7 +16,7 @@ const { scanTranscript } = require('./keyword_scan');
 const { getCaptureState, setUtteranceHook, clearUtteranceHook } = require('./capture');
 const { clipFromCapture } = require('./clipper');
 const { insertIncident } = require('./incidents');
-const { applyEnforcement } = require('./enforcement');
+const { applyEnforcement, sendEnforcementNotice } = require('./enforcement');
 const { buildEvidenceMessage } = require('./evidence_post');
 const { transcribeClipSpeakers, formatClipTranscript } = require('./transcriber');
 const {
@@ -82,6 +82,19 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
             })
             : { actions: [], failures: ['room channel not found, no action taken'] };
 
+        const notice = await sendEnforcementNotice({
+            client, userId,
+            actions: enforcement.actions,
+            transcript: text.slice(0, 900),
+            clipWav: clip?.userWavs?.get(userId),
+        });
+        const actionsTaken = notice.sent
+            ? [...enforcement.actions, 'user notified by DM']
+            : enforcement.actions;
+        const actionFailures = notice.sent
+            ? enforcement.failures
+            : [...enforcement.failures, `user DM not sent: ${notice.reason}`];
+
         const fileName = `flag-${channelId}-${Date.now()}.wav`;
         const message = await alertUser.send(buildEvidenceMessage({
             accentColor: 0xE53E3E,
@@ -94,8 +107,8 @@ const postFlagAlert = async ({ client, channelId, hostId, userId, matches, text 
                 ['When', timestampField(Date.now())],
             ],
             transcript: text.slice(0, 900),
-            actionsTaken: enforcement.actions,
-            actionFailures: enforcement.failures,
+            actionsTaken,
+            actionFailures,
             clipWav: clip?.wav,
             fileName,
             allowedMentions: { parse: [] },
