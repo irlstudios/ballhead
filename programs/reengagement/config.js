@@ -4,7 +4,7 @@
 // sends come from the environment so the system can be run safely (allowlisted
 // to a single user) before any wide rollout.
 
-const FF_SHEET_ID = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
+const { FF_SHEET_ID } = require('../../utils/ff_sheet');
 
 const parseIdList = (raw) =>
     String(raw || '')

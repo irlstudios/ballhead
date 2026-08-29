@@ -2,6 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { FF_SHEET_ID, resolveActiveSeason } = require('../../utils/ff_sheet');
 const logger = require('../../utils/logger');
 const { BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
@@ -25,7 +26,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
+const sheetId = FF_SHEET_ID;
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
 const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 const FF_LEADERBOARD_CATEGORIES = [
@@ -100,11 +101,8 @@ async function buildFriendlyFireLeaderboardPayload(category) {
         spreadsheetId: sheetId
     });
 
-    const tabs = sheetInfo.data.sheets.map(sheet => sheet.properties.title);
-    const currentSeasonTab = tabs
-        .filter(tab => (tab.startsWith('Season') || tab.match(/Season \d+ Week \d+/)) && !tab.includes('Media'))
-        .sort()
-        .reverse()[0];
+    const activeSeason = await resolveActiveSeason(sheets, sheetInfo);
+    const currentSeasonTab = activeSeason?.title;
 
     if (!currentSeasonTab) {
         return {
@@ -118,7 +116,7 @@ async function buildFriendlyFireLeaderboardPayload(category) {
 
     const response = await sheets.spreadsheets.values.get({
         spreadsheetId: sheetId,
-        range: `${currentSeasonTab}!A:J`
+        range: `'${currentSeasonTab}'!A:J`
     });
 
     const rows = response.data.values || [];

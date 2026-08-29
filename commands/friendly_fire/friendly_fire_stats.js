@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
+const { FF_SHEET_ID, resolveActiveSeason } = require('../../utils/ff_sheet');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -22,7 +23,7 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const sheetId = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
+const sheetId = FF_SHEET_ID;
 
 function buildNoticeContainer({ title, subtitle, lines}) {
     const container = new ContainerBuilder();
@@ -61,13 +62,9 @@ module.exports = {
         const sheets = await getSheetsClient();
 
         const metadata = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
-        const seasonTabs = metadata.data.sheets
-            .map(s => s.properties.title)
-            .filter(t => /^Season \d+$/.test(t))
-            .map(t => ({ title: t, num: parseInt(t.split(' ')[1], 10) }))
-            .sort((a, b) => b.num - a.num);
+        const activeSeason = await resolveActiveSeason(sheets, metadata);
 
-        if (seasonTabs.length === 0) {
+        if (!activeSeason) {
             const emptyContainer = buildNoticeContainer({
                 title: 'No Season Data',
 
@@ -76,7 +73,7 @@ module.exports = {
             return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
         }
 
-        const latestSeason = seasonTabs[0].title;
+        const latestSeason = activeSeason.title;
         const range = `'${latestSeason}'!A:H`;
         const sheet = await sheets.spreadsheets.values.get({
             spreadsheetId: sheetId,

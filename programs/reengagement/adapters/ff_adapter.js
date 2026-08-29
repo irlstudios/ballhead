@@ -3,6 +3,7 @@
 const { getSheetsClient } = require('../../../utils/sheets_cache');
 const logger = require('../../../utils/logger');
 const { config } = require('../config');
+const { resolveActiveSeason } = require('../../../utils/ff_sheet');
 const { findLapsedMembers, normalizeName } = require('../churn/ff_churn');
 
 // Friendly Fire program adapter. Reads the FF tournament-stats sheet to detect
@@ -73,7 +74,8 @@ async function loadSheetState() {
     if (seasonNumbers.length === 0) {
         throw new Error('No Season tabs found in FF sheet');
     }
-    const currentSeason = seasonNumbers[0];
+    const activeSeason = await resolveActiveSeason(sheets, metadata);
+    const currentSeason = activeSeason.number;
 
     // Fetch the current season plus the four prior seasons, and the id map.
     const wanted = [0, 1, 2, 3, 4]
