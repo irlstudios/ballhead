@@ -29,8 +29,13 @@ const resolveCurrentRole = (member) => {
 
 const handleFfOfficialApplicationSubmission = async (interaction) => {
     try {
+        // Deferred up front: the table check, member fetch, channel post and
+        // insert together can outrun Discord's 3 second interaction deadline,
+        // which would show "interaction failed" over a stored application.
+        await interaction.deferReply({ ephemeral: true });
+
         if (FF_APPLICATIONS_PAUSED) {
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     FF_APPLICATIONS_PAUSE_MESSAGE,
                     { title: 'Applications Paused', subtitle: 'FF Official Application' }
@@ -46,7 +51,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
 
         const existingRows = await findFfOfficialApplication(discordId);
         if (existingRows.length > 0) {
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: 'FF Official Application' }
@@ -61,7 +66,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
             member = await interaction.guild.members.fetch(discordId);
         } catch (error) {
             logger.error('Error fetching guild member:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: 'FF Official Application' }
@@ -72,7 +77,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         }
 
         if (member.roles.cache.has(FF_OFFICIAL_ROLE_ID)) {
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'You are already an FF Official and cannot submit another application.',
                     { title: 'Already an FF Official', subtitle: 'FF Official Application' }
@@ -83,7 +88,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         }
 
         if (!FF_OFFICIAL_ELIGIBLE_ROLE_IDS.some(roleId => member.roles.cache.has(roleId))) {
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'Only Active Officials and Senior Officials can apply to become an FF Official.',
                     { title: 'Role Required', subtitle: 'FF Official Application' }
@@ -97,12 +102,12 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         try {
             inGameUsername = interaction.fields.getTextInputValue('ffUsername');
             officiatingDuration = interaction.fields.getTextInputValue('ffOfficiatingDuration');
-            understandsRules = interaction.fields.getTextInputValue('ffRulesUnderstanding').toLowerCase() === 'yes';
+            understandsRules = /^(y|yes)$/i.test(interaction.fields.getTextInputValue('ffRulesUnderstanding').trim());
             motivation = interaction.fields.getTextInputValue('ffMotivation');
             statsLink = interaction.fields.getTextInputValue('ffStatsLink');
         } catch (error) {
             logger.error('Error parsing FF official application fields:', error);
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: 'FF Official Application' }
@@ -117,7 +122,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         const applicationsChannel = interaction.guild.channels.cache.get(FF_OFFICIAL_APPLICATIONS_CHANNEL_ID);
         if (!applicationsChannel) {
             logger.error(`Channel with ID '${FF_OFFICIAL_APPLICATIONS_CHANNEL_ID}' not found.`);
-            await interaction.reply({
+            await interaction.editReply({
                 ...noticePayload(
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: 'FF Official Application' }
@@ -172,7 +177,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
             applicationUrl: applicationMessage.url,
         });
 
-        await interaction.reply({
+        await interaction.editReply({
             ...noticePayload(
                 'Thank you for submitting your FF Official application!',
                 { title: 'Application Submitted', subtitle: 'FF Official Application' }
@@ -181,6 +186,12 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         });
     } catch (error) {
         logger.error('Unexpected error in handleFfOfficialApplicationSubmission:', error);
+        if (interaction.deferred && !interaction.replied) {
+            await interaction.editReply(noticePayload(
+                'There was an issue submitting your application. Please try again in a bit.',
+                { title: 'Submission Failed', subtitle: 'FF Official Application' }
+            )).catch(() => {});
+        }
     }
 };
 
@@ -209,6 +220,24 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
             return;
         }
 
+        // The role goes on before the application is closed out: a DM saying it
+        // was granted, a card marked accepted and a deleted row are all
+        // unrecoverable if the grant never happened. A failure here throws to
+        // the catch below and leaves the application pending for a retry.
+        const ffOfficialRole = interaction.guild.roles.cache.get(FF_OFFICIAL_ROLE_ID);
+        if (!ffOfficialRole) {
+            logger.error(`FF Official role '${FF_OFFICIAL_ROLE_ID}' not found in guild.`);
+            await interaction.editReply({
+                ...noticePayload(
+                    'The FF Official role could not be found, so nothing was granted. The application is still open.',
+                    { title: 'Role Missing', subtitle: 'FF Official Program' }
+                ),
+                ephemeral: true,
+            });
+            return;
+        }
+        await user.roles.add(ffOfficialRole);
+
         try {
             const dmContainer = new ContainerBuilder();
             const block = buildTextBlock({
@@ -220,13 +249,6 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
             await user.send({ flags: MessageFlags.IsComponentsV2, components: [dmContainer] });
         } catch (dmError) {
             logger.error('Failed to send DM to user:', dmError.message);
-        }
-
-        const ffOfficialRole = interaction.guild.roles.cache.get(FF_OFFICIAL_ROLE_ID);
-        if (ffOfficialRole) {
-            await user.roles.add(ffOfficialRole);
-        } else {
-            logger.error(`FF Official role '${FF_OFFICIAL_ROLE_ID}' not found in guild.`);
         }
 
         await deleteFfOfficialApplication(userId);

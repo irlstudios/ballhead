@@ -7,6 +7,7 @@ const modalConfig = require('../modals/modalConfig');
 const applyCommand = require('../commands/general_applications/apply_emh');
 const ffApplyCommand = require('../commands/general_applications/apply_ff_official');
 const { isYoutubeLink } = require('../handlers/emh_applications');
+const { OFFICIAL_ACTIVE_ROLE_ID, FF_OFFICIAL_ROLE_ID } = require('../config/constants');
 
 const modal = modalConfig.emhApplicationModal;
 
@@ -61,33 +62,43 @@ test('isYoutubeLink accepts real YouTube URLs and rejects everything else', () =
     assert.ok(!isYoutubeLink(''));
 });
 
-const pausedInteractionMock = () => {
+const ffInteractionMock = (roleIds = []) => {
     const state = { replied: null, modalShown: false };
+    const member = { roles: { cache: { has: (id) => roleIds.includes(id) } } };
     return {
         state,
         interaction: {
+            user: { id: '42' },
+            guild: { members: { fetch: async () => member } },
             reply: async (payload) => { state.replied = payload; },
             showModal: async () => { state.modalShown = true; },
         },
     };
 };
 
-test('FF Official slash command is paused with the 9/2/26 season notice', async () => {
-    const { state, interaction } = pausedInteractionMock();
+test('FF Official application opens for an Active Official', async () => {
+    const { state, interaction } = ffInteractionMock([OFFICIAL_ACTIVE_ROLE_ID]);
 
     await ffApplyCommand.execute(interaction);
 
-    assert.ok(!state.modalShown, 'modal must not open while paused');
-    assert.ok(state.replied, 'expected an ephemeral pause notice');
-    assert.ok(JSON.stringify(state.replied).includes('9/2/26'), 'notice must mention the new season date');
+    assert.ok(state.modalShown, 'an eligible official should get the form');
+    assert.strictEqual(state.replied, null);
 });
 
-test('FF Official modal submission is also paused', async () => {
-    const { handleFfOfficialApplicationSubmission } = require('../handlers/ff_officials');
-    const { state, interaction } = pausedInteractionMock();
+test('FF Official application is refused without an Official role', async () => {
+    const { state, interaction } = ffInteractionMock([]);
 
-    await handleFfOfficialApplicationSubmission(interaction);
+    await ffApplyCommand.execute(interaction);
 
-    assert.ok(state.replied, 'expected an ephemeral pause notice');
-    assert.ok(JSON.stringify(state.replied).includes('9/2/26'), 'notice must mention the new season date');
+    assert.ok(!state.modalShown, 'modal must not open for an ineligible member');
+    assert.ok(JSON.stringify(state.replied).includes('Only Active Officials'));
+});
+
+test('FF Official application is refused for someone already holding the role', async () => {
+    const { state, interaction } = ffInteractionMock([FF_OFFICIAL_ROLE_ID]);
+
+    await ffApplyCommand.execute(interaction);
+
+    assert.ok(!state.modalShown, 'an existing FF Official cannot re-apply');
+    assert.ok(JSON.stringify(state.replied).includes('already an FF Official'));
 });

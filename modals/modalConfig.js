@@ -94,6 +94,7 @@ const modalConfig = {
                 style: 'Short',
                 placeholder: 'Enter your in-game username',
                 required: true,
+                maxLength: 50,
             },
             {
                 id: 'ffOfficiatingDuration',
@@ -101,6 +102,7 @@ const modalConfig = {
                 style: 'Short',
                 placeholder: 'e.g. 3 months, 1 year',
                 required: true,
+                maxLength: 100,
             },
             {
                 id: 'ffRulesUnderstanding',
@@ -108,6 +110,7 @@ const modalConfig = {
                 style: 'Short',
                 placeholder: 'Yes/No',
                 required: true,
+                maxLength: 10,
             },
             {
                 id: 'ffMotivation',
@@ -115,6 +118,7 @@ const modalConfig = {
                 style: 'Paragraph',
                 placeholder: 'Share your motivation',
                 required: true,
+                maxLength: 900,
             },
             {
                 id: 'ffStatsLink',
@@ -122,6 +126,7 @@ const modalConfig = {
                 style: 'Short',
                 placeholder: 'Paste a link to your recent FF stats',
                 required: true,
+                maxLength: 200,
             },
         ],
     },
