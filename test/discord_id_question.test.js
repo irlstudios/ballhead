@@ -77,8 +77,8 @@ test('execute replies with the asker id and ignores bots and non-questions', asy
     const answered = makeMessage({ author: { bot: false, id: '111111111111111111' } });
     await listener.execute(answered);
     assert.strictEqual(answered.replies.length, 1);
-    const text = JSON.stringify(answered.replies[0]);
-    assert.ok(text.includes('111111111111111111'), 'reply should contain the author id');
+    assert.deepStrictEqual(answered.replies[0], { content: '111111111111111111' },
+        'reply is the bare id, nothing to strip out of a copy and paste');
 
     const ignored = [
         makeMessage({ author: { bot: true, id: '1' } }),

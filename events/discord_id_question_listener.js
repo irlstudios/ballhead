@@ -1,4 +1,3 @@
-const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { insertAnalyticsEvent } = require('../db');
 
@@ -52,17 +51,9 @@ module.exports = {
         if (now - (lastReplyAt.get(userId) ?? 0) < REPLY_COOLDOWN_MS) return;
         lastReplyAt.set(userId, now);
 
+        // Nothing but the id: anything around it gets caught in a copy and paste.
         try {
-            const container = new ContainerBuilder();
-            container.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Your Discord ID'));
-            container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
-                `Hey <@${userId}>! Your Discord ID is:`,
-                '```',
-                userId,
-                '```',
-                '-# Need someone else\'s? Turn on Settings > Advanced > Developer Mode, then right click their profile and pick Copy User ID.',
-            ].join('\n')));
-            await message.reply({ flags: MessageFlags.IsComponentsV2, components: [container] });
+            await message.reply({ content: userId });
         } catch (error) {
             logger.error('[Discord ID Question Listener] Failed to reply:', error);
             return;
