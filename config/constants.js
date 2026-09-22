@@ -135,6 +135,16 @@ const HOST_SESSION_NUDGE_MINUTES = Number(process.env.HOST_SESSION_NUDGE_MINUTES
 // DMed a warning that nothing is being recorded.
 const HOST_SESSION_ACTIVITY_WARNING_MINUTES = Number(process.env.HOST_SESSION_ACTIVITY_WARNING_MINUTES || '5');
 
+// Top Event Winner: EMH hosts record a winner per session, and every two weeks
+// whoever won the most takes the role until the next cycle.
+const EVENT_WINNER_CHANNEL_ID = process.env.EVENT_WINNER_CHANNEL_ID || '764593469746315286';
+// Cleared to empty to announce standings without moving any role.
+const TOP_EVENT_WINNER_ROLE_ID = process.env.TOP_EVENT_WINNER_ROLE_ID ?? '1284637891997335594';
+// A Monday, so every cycle runs Monday to Sunday. Cycles are counted in 14-day
+// steps from here, which is what makes "bi-weekly" a fixed calendar and not
+// whenever the job happened to last run.
+const EVENT_WINNER_CYCLE_ANCHOR = process.env.EVENT_WINNER_CYCLE_ANCHOR || '2026-09-21';
+
 // Role IDs - Squads
 const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
 const COMPETITIVE_SQUAD_OWNER_ROLE_ID = '1288918946258489354';
@@ -325,6 +335,9 @@ module.exports = {
     HOST_SESSION_SHEET_TAB,
     HOST_SESSION_NUDGE_MINUTES,
     HOST_SESSION_ACTIVITY_WARNING_MINUTES,
+    EVENT_WINNER_CHANNEL_ID,
+    TOP_EVENT_WINNER_ROLE_ID,
+    EVENT_WINNER_CYCLE_ANCHOR,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
     SQUAD_OWNER_ROLES,

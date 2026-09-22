@@ -119,3 +119,24 @@ test('the nudge always carries a jump link to the voice channel', () => {
     assert.match(message, /Gartic Phone/);
     assert.match(message, /<@111>/);
 });
+
+test('the winner lands in the last two columns, by name and by id', () => {
+    const row = buildSessionRow({
+        session: {
+            hostId: HOST_ID, endedAt: '2026-07-29T21:00:00Z',
+            winnerId: '222', winnerName: 'cented',
+        },
+        summary: {},
+    });
+    assert.strictEqual(row.length, SHEET_HEADER.length);
+    assert.strictEqual(SHEET_HEADER[SHEET_HEADER.length - 2], 'Winner');
+    assert.strictEqual(row[SHEET_HEADER.length - 2], 'cented');
+    assert.strictEqual(row[SHEET_HEADER.length - 1], '222');
+});
+
+test('a session with no winner leaves the winner columns blank rather than undefined', () => {
+    const row = buildSessionRow({ session: { hostId: HOST_ID }, summary: {} });
+    assert.strictEqual(row.length, SHEET_HEADER.length);
+    assert.strictEqual(row[SHEET_HEADER.length - 2], '');
+    assert.strictEqual(row[SHEET_HEADER.length - 1], '');
+});

@@ -56,6 +56,12 @@ const wrapUpNotice = ({ session = {}, summary = {} } = {}) => ({
         `- Peak in the room with you: **${Number(session.peakConcurrent) || 0}**`,
         `- Average stay: **${summary.avgMinutes ?? 0} min**`,
         `- Total player minutes: **${summary.totalPlayerMinutes ?? 0}**`,
+        // A blank winner column is only discovered days later on the sheet, so a
+        // host who forgot hears about it here, while the next session is ahead of
+        // them rather than behind.
+        session.winnerId
+            ? `- Winner: <@${session.winnerId}>`
+            : '- Winner: **not recorded**. Run `/room event winner` before leaving the lobby next time.',
         '',
         'Thanks for hosting.',
     ],
@@ -100,6 +106,9 @@ const statusNotice = ({ session = {}, members = [], currentParticipants = 0, now
             // as an empty room, so the line is dropped rather than showing 0.
             ...(currentParticipants === null ? [] : [`- In the room with you now: **${currentParticipants}**`]),
             `- Peak in the room with you: **${Number(session.peakConcurrent) || 0}**`,
+            session.winnerId
+                ? `- Winner: <@${session.winnerId}>`
+                : '- Winner: not set yet. Record it with `/room event winner`.',
             '',
             'Leaving the lobby ends the session and I will DM you the wrap-up.',
         ],

@@ -23,6 +23,8 @@ const { runTournySync } = require('../jobs/tourny-sync');
 const { runSquadSweep } = require('../jobs/squad-sweep');
 const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
+const { ensureEventWinnerSchema } = require('../utils/event_winner_queries');
+const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
 const { ensureVoiceIncidentsSchema } = require('../utils/voice_moderation/incidents');
@@ -174,6 +176,7 @@ module.exports = {
             ['reengagement', ensureReengagementTables],
             ['poll', ensurePollTables],
             ['host_sessions', ensureHostSessionSchema],
+            ['event_winner_cycles', ensureEventWinnerSchema],
             ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
             ['voice_incidents', ensureVoiceIncidentsSchema],
             ['vc_system_locks', ensureVcSystemLocksSchema],
@@ -353,6 +356,17 @@ module.exports = {
             }
         });
 
+        // Daily: Top Event Winner cycle - 11:00 AM Chicago. A no-op on every day
+        // but the first after a 14-day cycle closes, which is what lets a run
+        // missed during downtime still land rather than skipping the cycle.
+        cron.schedule('0 11 * * *', async () => {
+            try {
+                await runEventWinnerCycle(client);
+            } catch (error) {
+                logger.error('[Cron] Event Winner cycle failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
         // Daily: mirror the Active Leagues table into the leagues spreadsheet - 7:00 AM Chicago
         cron.schedule('0 7 * * *', async () => {
             try {
@@ -362,6 +376,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT)');
+        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT), Event Winner Cycle (daily 11AM CT, acts bi-weekly)');
     },
 };

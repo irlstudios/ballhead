@@ -20,6 +20,8 @@ const ensureHostSessionSchema = async () => {
             original_name TEXT,
             activity_name TEXT,
             nudge_message_id TEXT,
+            winner_id TEXT,
+            winner_name TEXT,
             peak_concurrent INTEGER NOT NULL DEFAULT 0,
             started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             activity_started_at TIMESTAMPTZ,
@@ -30,6 +32,8 @@ const ensureHostSessionSchema = async () => {
     await executeQuery(
         'ALTER TABLE host_sessions ADD COLUMN IF NOT EXISTS sheet_written BOOLEAN NOT NULL DEFAULT FALSE'
     ).catch(() => {});
+    await executeQuery('ALTER TABLE host_sessions ADD COLUMN IF NOT EXISTS winner_id TEXT').catch(() => {});
+    await executeQuery('ALTER TABLE host_sessions ADD COLUMN IF NOT EXISTS winner_name TEXT').catch(() => {});
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS host_session_members (
             session_id BIGINT NOT NULL REFERENCES host_sessions(id) ON DELETE CASCADE,
@@ -59,6 +63,8 @@ const mapSession = (row) => (row ? {
     originalName: row.original_name,
     activityName: row.activity_name,
     nudgeMessageId: row.nudge_message_id,
+    winnerId: row.winner_id,
+    winnerName: row.winner_name,
     peakConcurrent: row.peak_concurrent,
     startedAt: row.started_at,
     activityStartedAt: row.activity_started_at,
@@ -107,6 +113,20 @@ const markSessionLive = async ({ sessionId, activityName, at = new Date() }) => 
           WHERE id = $1 AND activity_started_at IS NULL AND ended_at IS NULL
         RETURNING *`,
         [sessionId, at, activityName]
+    );
+    return mapSession(result.rows[0]);
+};
+
+// Only a live session takes a winner: the sheet row is written the moment the
+// session ends, so a later entry would have nowhere to land. Re-running replaces
+// the previous pick, which is how a host corrects a mistyped winner.
+const setSessionWinner = async ({ sessionId, winnerId, winnerName }) => {
+    const result = await executeQuery(
+        `UPDATE host_sessions
+            SET winner_id = $2, winner_name = $3
+          WHERE id = $1 AND ended_at IS NULL
+        RETURNING *`,
+        [sessionId, winnerId, winnerName]
     );
     return mapSession(result.rows[0]);
 };
@@ -214,6 +234,7 @@ module.exports = {
     listActiveSessions,
     markSessionLive,
     setNudgeMessageId,
+    setSessionWinner,
     endSession,
     openMemberInterval,
     closeMemberInterval,

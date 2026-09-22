@@ -130,3 +130,23 @@ test('sendHostDm swallows delivery failures and reports them', async () => {
     const ok = await sendHostDm(client, '111', trackingStartedNotice({ activityName: 'Smash Karts' }));
     assert.strictEqual(ok, false);
 });
+
+test('the wrap-up names the winner when one was recorded', () => {
+    const text = flatten(wrapUpNotice({
+        session: { activityName: 'Gartic Phone', winnerId: '222' },
+        summary: { uniqueJoiners: 4 },
+    }));
+    assert.match(text, /<@222>/);
+});
+
+test('the wrap-up tells a host who forgot the winner how to record it next time', () => {
+    const text = flatten(wrapUpNotice({ session: { activityName: 'Gartic Phone' }, summary: {} }));
+    assert.match(text, /not recorded/);
+    assert.match(text, /\/room event winner/);
+});
+
+test('live status shows the recorded winner, or how to set one', () => {
+    const live = { hostId: '111', activityStartedAt: '2026-07-29T20:00:00Z', activityName: 'Gartic Phone' };
+    assert.match(flatten(statusNotice({ session: live })), /\/room event winner/);
+    assert.match(flatten(statusNotice({ session: { ...live, winnerId: '222' } })), /<@222>/);
+});
