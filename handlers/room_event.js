@@ -96,6 +96,7 @@ const handleRoomEventStart = async (interaction) => {
             `- The bot posts an invite to the lobby in general chat every ${HOST_SESSION_NUDGE_MINUTES} minutes.`,
             '- You will not be able to lock or rename the lobby.',
             '- `/room event status` shows your live stats at any time.',
+            '- `/room event winner` records who won, for the sheet. Run it **before you leave**.',
             '',
             '**Tracking stops the moment you leave the lobby**, and the session stats are written to the sheet then. Leaving ends the event.',
         ],
@@ -208,10 +209,85 @@ const handleRoomEventStatus = async (interaction) => {
     return ephemeral(interaction, statusNotice({ session, members, currentParticipants }));
 };
 
+// The winner lands on the session's sheet row, which is written the moment the
+// host leaves the lobby, so there is no window to record one afterwards. The
+// reply says so rather than leaving the host to find out from a blank column.
+const handleRoomEventWinner = async (interaction) => {
+    const subtitle = 'Session Winner';
+    const winner = interaction.options.getUser('user');
+
+    const session = await store.getActiveSessionByHost(interaction.user.id);
+    if (!session) {
+        return ephemeral(interaction, {
+            title: 'No Active Session',
+            subtitle,
+            lines: ['You have no event session running, and a winner can only be recorded while one is live. Start one with `/room event start`.'],
+        });
+    }
+    if (winner.bot) {
+        return ephemeral(interaction, {
+            title: 'Not A Valid Winner',
+            subtitle,
+            lines: ['Bots cannot win an event. Pick the member who won.'],
+        });
+    }
+    if (winner.id === session.hostId) {
+        return ephemeral(interaction, {
+            title: 'Not A Valid Winner',
+            subtitle,
+            lines: ['You are hosting this session, so you cannot record yourself as its winner.'],
+        });
+    }
+    // Nobody is tracked until the activity starts, so there is no participant
+    // list to check against and no sheet row for the winner to land on.
+    if (!session.activityStartedAt) {
+        return ephemeral(interaction, {
+            title: 'Tracking Has Not Started',
+            subtitle,
+            lines: ['I have not detected your activity yet, so nothing is being recorded. Launch it first, then record the winner.'],
+        });
+    }
+    // The winner is the top participant of this event, so it has to be someone
+    // the session actually saw in the lobby. Without this the column accepts any
+    // member of the server, which is the one thing a wins leaderboard cannot take.
+    const members = await store.listSessionMembers(session.id);
+    if (!members.some((member) => member.userId === winner.id)) {
+        return ephemeral(interaction, {
+            title: 'Not A Participant',
+            subtitle,
+            lines: [`<@${winner.id}> has not been in the lobby during this session, so they cannot be its winner.`],
+        });
+    }
+
+    const previous = session.winnerId;
+    const winnerName = interaction.options.getMember('user')?.displayName || winner.username;
+    const updated = await store.setSessionWinner({ sessionId: session.id, winnerId: winner.id, winnerName });
+    if (!updated) {
+        return ephemeral(interaction, {
+            title: 'Session Already Ended',
+            subtitle,
+            lines: ['Your session ended before this landed, so its stats are already on the sheet and the winner could not be added.'],
+        });
+    }
+
+    logger.info(`[Host Session] Session ${session.id} winner set to ${winner.id} by host ${session.hostId}.`);
+    return ephemeral(interaction, {
+        title: previous ? 'Winner Replaced' : 'Winner Recorded',
+        subtitle,
+        lines: [
+            `<@${winner.id}> is recorded as the winner of this session.`,
+            ...(previous && previous !== winner.id ? [`This replaces <@${previous}>.`] : []),
+            '',
+            'It is written to the sheet with the rest of your stats when you leave the lobby. Run this again before then to change it.',
+        ],
+    });
+};
+
 module.exports = {
     CONFIRM_PREFIX,
     isRoomEventInteraction,
     handleRoomEventStart,
     handleRoomEventStatus,
+    handleRoomEventWinner,
     handleRoomEventButton,
 };

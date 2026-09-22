@@ -19,6 +19,8 @@ const SHEET_HEADER = [
     'Avg Play Time (min)',
     'Median Play Time (min)',
     'Total Player Minutes',
+    'Winner',
+    'Winner ID',
 ];
 
 // Discord rejects channel names past 100 characters, so the host part is trimmed
@@ -94,6 +96,8 @@ const buildSessionRow = ({ session = {}, summary = {} } = {}) => [
     summary.avgMinutes ?? 0,
     summary.medianMinutes ?? 0,
     summary.totalPlayerMinutes ?? 0,
+    session.winnerName || '',
+    session.winnerId || '',
 ];
 
 const nudgeMessage = ({ guildId, channelId, hostId, activityName } = {}) => [

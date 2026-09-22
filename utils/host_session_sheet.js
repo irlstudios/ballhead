@@ -7,19 +7,24 @@ const { SPREADSHEET_HOST_SESSIONS, HOST_SESSION_SHEET_TAB } = require('../config
 const { SHEET_HEADER, buildSessionRow } = require('./host_session_stats');
 const logger = require('./logger');
 
+// Derived from the header rather than hardcoded, so adding a column cannot leave
+// the range one short and silently drop it on every write.
+const columnName = (n) => (n > 26 ? columnName(Math.floor((n - 1) / 26)) : '') + String.fromCharCode(65 + ((n - 1) % 26));
+const LAST_COLUMN = columnName(SHEET_HEADER.length);
 // Quoted because the tab name contains a space. The API tolerates it unquoted
 // today, but quoting is the documented form and costs nothing.
-const HEADER_RANGE = `'${HOST_SESSION_SHEET_TAB}'!A1:O1`;
-const APPEND_RANGE = `'${HOST_SESSION_SHEET_TAB}'!A:O`;
+const HEADER_RANGE = `'${HOST_SESSION_SHEET_TAB}'!A1:${LAST_COLUMN}1`;
+const APPEND_RANGE = `'${HOST_SESSION_SHEET_TAB}'!A:${LAST_COLUMN}`;
 
-// The tab starts empty, so the first write lays down the header. Checked rather
-// than assumed: a sheet someone cleared by hand should get its header back.
+// The tab starts empty, so the first write lays down the header. Compared by
+// width rather than mere presence, so a sheet someone cleared by hand gets its
+// header back and one written before a column was added is widened in place.
 const ensureHeaderRow = async (sheets) => {
     const existing = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_HOST_SESSIONS,
         range: HEADER_RANGE,
     });
-    if (existing.data.values?.[0]?.length) return;
+    if (existing.data.values?.[0]?.length === SHEET_HEADER.length) return;
     await sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_HOST_SESSIONS,
         range: HEADER_RANGE,

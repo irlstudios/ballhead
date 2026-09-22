@@ -2,7 +2,7 @@ const { SlashCommandBuilder, MessageFlags, ContainerBuilder, ChannelType, TextDi
 const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
-const { handleRoomEventStart, handleRoomEventStatus } = require('../../handlers/room_event');
+const { handleRoomEventStart, handleRoomEventStatus, handleRoomEventWinner } = require('../../handlers/room_event');
 const { handleRoomEventClip, handleRoomEventMonitor } = require('../../handlers/room_event_voice');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
 const { gateUnlock, onRoomLocked } = require('../../utils/voice_moderation/room_glue');
@@ -190,6 +190,12 @@ module.exports = {
                 )
                 .addSubcommand(subcommand =>
                     subcommand
+                        .setName('winner')
+                        .setDescription('Record who won your event, saved to the sheet with the session stats.')
+                        .addUserOption(option => option.setName('user').setDescription('The member who won').setRequired(true))
+                )
+                .addSubcommand(subcommand =>
+                    subcommand
                         .setName('clip')
                         .setDescription('Capture the recent audio of a live event as moderation evidence.')
                         .addIntegerOption(option => option.setName('duration').setDescription('Seconds to capture (15-100, default 60)').setMinValue(15).setMaxValue(100))
@@ -209,6 +215,7 @@ module.exports = {
         if (interaction.options.getSubcommandGroup(false) === 'event') {
             switch (interaction.options.getSubcommand()) {
             case 'status': return handleRoomEventStatus(interaction);
+            case 'winner': return handleRoomEventWinner(interaction);
             case 'clip': return handleRoomEventClip(interaction);
             case 'monitor': return handleRoomEventMonitor(interaction);
             default: return handleRoomEventStart(interaction);
