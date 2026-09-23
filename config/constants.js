@@ -143,7 +143,7 @@ const TOP_EVENT_WINNER_ROLE_ID = process.env.TOP_EVENT_WINNER_ROLE_ID ?? '128463
 // A Monday, so every cycle runs Monday to Sunday. Cycles are counted in 14-day
 // steps from here, which is what makes "bi-weekly" a fixed calendar and not
 // whenever the job happened to last run.
-const EVENT_WINNER_CYCLE_ANCHOR = process.env.EVENT_WINNER_CYCLE_ANCHOR || '2026-09-21';
+const EVENT_WINNER_CYCLE_ANCHOR = process.env.EVENT_WINNER_CYCLE_ANCHOR || '2026-09-14';
 
 // Role IDs - Squads
 const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
