@@ -85,14 +85,14 @@ const run = (todayISO) => runEventWinnerCycle(clientStub(), { todayISO });
 
 test('a cycle that has not closed does not even query the standings', async () => {
     resetState();
-    assert.strictEqual(await run('2026-09-30'), null);
+    assert.strictEqual(await run('2026-09-23'), null);
     assert.strictEqual(calls.length, 0);
 });
 
 test('an empty cycle is left unclaimed so it can still be announced if wins land', async () => {
     resetState();
     state.standings = [];
-    assert.strictEqual(await run('2026-10-05'), null);
+    assert.strictEqual(await run('2026-09-28'), null);
     assert.deepStrictEqual(calls.map((c) => c[0]), ['standings']);
     assert.strictEqual(state.posts.length, 0);
 });
@@ -100,9 +100,9 @@ test('an empty cycle is left unclaimed so it can still be announced if wins land
 test('the top winner is announced and the cycle is claimed', async () => {
     resetState();
     state.standings = [{ userId: '111', userName: 'cented', wins: 3 }, { userId: '222', wins: 1 }];
-    const result = await run('2026-10-05');
+    const result = await run('2026-09-28');
     assert.strictEqual(result.champion.userId, '111');
-    assert.deepStrictEqual(calls.find((c) => c[0] === 'claim'), ['claim', '2026-09-21', '111', 3]);
+    assert.deepStrictEqual(calls.find((c) => c[0] === 'claim'), ['claim', '2026-09-14', '111', 3]);
     assert.strictEqual(state.posts.length, 1);
     assert.match(state.posts[0].content, /<@111>/);
     // Only the listed members may be pinged, so a stray role or everyone in the
@@ -116,7 +116,7 @@ test('a cycle already claimed posts nothing on a rerun', async () => {
     resetState();
     state.standings = [{ userId: '111', wins: 2 }];
     state.claimed = false;
-    assert.strictEqual(await run('2026-10-05'), null);
+    assert.strictEqual(await run('2026-09-28'), null);
     assert.strictEqual(state.posts.length, 0);
 });
 
@@ -133,7 +133,7 @@ test('the role moves off the previous holder and onto the champion', async () =>
     state.standings = [{ userId: 'new', wins: 4 }];
     state.previousWinnerId = 'old';
     state.roleMemberIds = ['old', 'by-hand'];
-    await withRole(clientStub(), { todayISO: '2026-10-05' });
+    await withRole(clientStub(), { todayISO: '2026-09-28' });
 
     assert.deepStrictEqual(roleRemovals.sort(), ['by-hand', 'old']);
     assert.deepStrictEqual(roleAdds, ['new']);
@@ -153,7 +153,7 @@ test('a champion who already holds the role is not re-granted it', async () => {
     state.standings = [{ userId: 'champ', wins: 5 }];
     state.previousWinnerId = 'champ';
     state.roleMemberIds = ['champ'];
-    await withRole(clientStub(), { todayISO: '2026-10-05' });
+    await withRole(clientStub(), { todayISO: '2026-09-28' });
 
     assert.deepStrictEqual(roleRemovals, []);
     assert.deepStrictEqual(roleAdds, []);
@@ -166,7 +166,7 @@ test('a missing announcement channel leaves the cycle unclaimed', async () => {
     resetState();
     state.standings = [{ userId: '111', wins: 2 }];
     state.channelMissing = true;
-    assert.strictEqual(await run('2026-10-05'), null);
+    assert.strictEqual(await run('2026-09-28'), null);
     assert.strictEqual(calls.some((c) => c[0] === 'claim'), false);
 });
 
@@ -174,7 +174,7 @@ test('a failed post logs the text in full so it can be sent by hand', async () =
     resetState();
     state.standings = [{ userId: '111', wins: 2 }];
     state.sendFails = true;
-    await run('2026-10-05');
+    await run('2026-09-28');
     const logged = calls.find((c) => c[0] === 'error' && c[1].includes('send it manually'));
     assert.ok(logged, 'the announcement text was logged');
     assert.match(logged[1], /<@111>/);
@@ -196,7 +196,7 @@ test('a failed grant leaves the previous holder wearing the role', async () => {
     state.previousWinnerId = 'old';
     state.roleMemberIds = ['old'];
     state.grantFails = true;
-    await withRole(clientStub(), { todayISO: '2026-10-05' });
+    await withRole(clientStub(), { todayISO: '2026-09-28' });
 
     assert.deepStrictEqual(roleAdds, []);
     assert.deepStrictEqual(roleRemovals, []);
@@ -216,7 +216,7 @@ test('a role the bot cannot manage is reported as a hierarchy problem', async ()
     state.standings = [{ userId: 'new', wins: 4 }];
     state.roleMemberIds = ['old'];
     state.roleAboveBot = true;
-    await withRole(clientStub(), { todayISO: '2026-10-05' });
+    await withRole(clientStub(), { todayISO: '2026-09-28' });
 
     assert.deepStrictEqual(roleAdds, []);
     assert.deepStrictEqual(roleRemovals, []);
