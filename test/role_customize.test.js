@@ -43,3 +43,15 @@ test('only offers roles the member holds that no other system owns', () => {
     );
     assert.strictEqual(roleCustomize.isRemovable(cosmetic, owned, 10), true);
 });
+
+test('blacklist roles cannot be self-removed', () => {
+    const { VC_BLACKLIST_ROLE_ID, ROOM_BLACKLIST_ROLE_ID } = require('../config/constants');
+    const roomBlacklist = role({ id: ROOM_BLACKLIST_ROLE_ID, name: 'Blacklist', position: 3 });
+    const vcBlacklist = role({ id: VC_BLACKLIST_ROLE_ID, name: 'VC Blacklist', position: 4 });
+    const owned = member(roomBlacklist, vcBlacklist);
+
+    assert.strictEqual(ROOM_BLACKLIST_ROLE_ID, '847977550731149364');
+    assert.strictEqual(roleCustomize.isRemovable(roomBlacklist, owned, 10), false);
+    assert.strictEqual(roleCustomize.isRemovable(vcBlacklist, owned, 10), false);
+    assert.deepStrictEqual(roleCustomize.removableRoles(owned, 10), []);
+});

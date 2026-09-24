@@ -19,6 +19,8 @@ const {
     BOOSTER_ROLE_ID,
     MODERATOR_ROLES,
     PROGRAM_ROLE_IDS,
+    VC_BLACKLIST_ROLE_ID,
+    ROOM_BLACKLIST_ROLE_ID,
 } = require('../../config/constants');
 const { mascotSquads } = require('../../config/squads');
 const { RANK_ROLE_IDS } = require('../../jobs/rank-role-sync');
@@ -47,6 +49,8 @@ const PROTECTED_ROLE_IDS = new Set([
     LEAGUE_CO_OWNER_ROLE_ID,
     LEVEL_5_ROLE_ID,
     BOOSTER_ROLE_ID,
+    VC_BLACKLIST_ROLE_ID,
+    ROOM_BLACKLIST_ROLE_ID,
 ]);
 
 // A role is self-removable when the member holds it, it is not @everyone, not

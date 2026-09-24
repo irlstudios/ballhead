@@ -251,6 +251,8 @@ const VOICE_CHUNK_MIN_PACKETS = 25;
 // Role the room system already denies Connect/Speak in every room; assigning
 // it is the automated vc blacklist action on tier 1 hits.
 const VC_BLACKLIST_ROLE_ID = '1125497495678615582';
+// Manual room blacklist role; rooms deny it the same way as the vc blacklist.
+const ROOM_BLACKLIST_ROLE_ID = '847977550731149364';
 // Join-to-create trigger channel for personal rooms; its category is the
 // rooms category (used to find orphaned room channels).
 const VC_CREATE_CHANNEL_ID = '1321321682891178074';
@@ -363,6 +365,7 @@ module.exports = {
     WHISPER_FAILURE_THRESHOLD,
     VOICE_CHUNK_MIN_PACKETS,
     VC_BLACKLIST_ROLE_ID,
+    ROOM_BLACKLIST_ROLE_ID,
     VC_CREATE_CHANNEL_ID,
     VOICE_ALERT_DM_USER_ID,
     ITEMS_PER_PAGE,
