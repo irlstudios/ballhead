@@ -127,6 +127,14 @@ const SPREADSHEET_COMMUNITY_METRICS = '1cukQXP1_HKt-bwos3sd4-YR51EskJ6Fl_vgZR4hF
 const SPREADSHEET_HOST_SESSIONS = '1BEypzniqiUb-fB7dfmV9AyODisSL3ZNIgPOCMBa6CQk';
 const SPREADSHEET_LEAGUES = '1dlWAdJzfO5V46SFW2YgaZQIZSuudZAnGOTffz9ZUVxM';
 const HOST_SESSION_SHEET_TAB = 'Session Stats';
+// EMH self-scheduling. Leads may cancel or move any host's slot; BOT_OWNER_ID
+// is added at check time. The bot draws the calendar into EMH_SCHEDULE_TAB,
+// which stays on the preview tab until Roy approves taking over Monthly View.
+const EMH_LEAD_IDS = (process.env.EMH_LEAD_IDS || '942807149627736135')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+const EMH_SCHEDULE_TAB = process.env.EMH_SCHEDULE_TAB || 'Monthly View (Bot Preview)';
 // How often a live session advertises itself in general chat. Overridable so the
 // cadence can be tuned without a deploy.
 const HOST_SESSION_NUDGE_MINUTES = Number(process.env.HOST_SESSION_NUDGE_MINUTES || '15');
@@ -335,6 +343,8 @@ module.exports = {
     SPREADSHEET_HOST_SESSIONS,
     SPREADSHEET_LEAGUES,
     HOST_SESSION_SHEET_TAB,
+    EMH_LEAD_IDS,
+    EMH_SCHEDULE_TAB,
     HOST_SESSION_NUDGE_MINUTES,
     HOST_SESSION_ACTIVITY_WARNING_MINUTES,
     EVENT_WINNER_CHANNEL_ID,
