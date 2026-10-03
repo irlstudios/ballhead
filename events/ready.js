@@ -26,6 +26,7 @@ const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { ensureEventWinnerSchema } = require('../utils/event_winner_queries');
 const { ensureEmhScheduleSchema } = require('../utils/emh_schedule_queries');
 const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
+const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
 const { ensureVoiceIncidentsSchema } = require('../utils/voice_moderation/incidents');
@@ -347,6 +348,16 @@ module.exports = {
                 logger.error('[Cron] Tourny sync failed:', error.message);
             }
         });
+
+        // Every 15 minutes: resolve ended EMH slots to Hosted / No-Show and
+        // redraw the booking calendar tab.
+        cron.schedule('*/15 * * * *', async () => {
+            try {
+                await runEmhScheduleSync();
+            } catch (error) {
+                logger.error('[Cron] EMH schedule sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
 
         // Every 5 minutes: squad sweep (application expiry, practice
         // reminders/starts/cleanup). DB-driven so restarts lose nothing.
