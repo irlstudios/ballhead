@@ -24,6 +24,7 @@ const { runSquadSweep } = require('../jobs/squad-sweep');
 const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
 const { ensureEventWinnerSchema } = require('../utils/event_winner_queries');
+const { ensureEmhScheduleSchema } = require('../utils/emh_schedule_queries');
 const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
@@ -177,6 +178,7 @@ module.exports = {
             ['poll', ensurePollTables],
             ['host_sessions', ensureHostSessionSchema],
             ['event_winner_cycles', ensureEventWinnerSchema],
+            ['emh_bookings', ensureEmhScheduleSchema],
             ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
             ['voice_incidents', ensureVoiceIncidentsSchema],
             ['vc_system_locks', ensureVcSystemLocksSchema],
