@@ -8,11 +8,16 @@ const { setImmediate } = require('node:timers');
 // Stub the Sheets client and the queries through the require cache so the
 // renderer runs without Google or Postgres.
 const writes = [];
+const optionsSeen = [];
 const state = { tabs: ['Monthly View (Bot Preview)'], fail: false, bookings: [], delays: [] };
 const fakeSheets = {
     spreadsheets: {
-        get: async () => ({ data: { sheets: state.tabs.map((title, i) => ({ properties: { title, sheetId: i + 1 } })) } }),
-        batchUpdate: async ({ requestBody }) => {
+        get: async (_params, options) => {
+            optionsSeen.push(options);
+            return { data: { sheets: state.tabs.map((title, i) => ({ properties: { title, sheetId: i + 1 } })) } };
+        },
+        batchUpdate: async ({ requestBody }, options) => {
+            optionsSeen.push(options);
             const delay = state.delays.shift() || 0;
             if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
             writes.push(requestBody.requests);
@@ -40,6 +45,7 @@ const updates = () => writes.flat().filter((r) => r.updateCells);
 
 beforeEach(() => {
     writes.length = 0;
+    optionsSeen.length = 0;
     Object.assign(state, { tabs: ['Monthly View (Bot Preview)'], fail: false, bookings: [], delays: [] });
     resetRenderState();
 });
@@ -87,4 +93,13 @@ test('renders are serialized so older data cannot land last', async () => {
     assert.strictEqual(updates().length, 2);
     const last = updates().at(-1).updateCells.rows;
     assert.match(JSON.stringify(last), /host_a/);
+});
+
+// gaxios has no default timeout; without one a stalled request would hold the
+// render queue forever.
+test('every sheets call carries a timeout', async () => {
+    state.tabs = ['Monthly View'];
+    await renderMonthlyView(NOW);
+    assert.ok(optionsSeen.length >= 3);
+    assert.ok(optionsSeen.every((options) => options?.timeout > 0));
 });

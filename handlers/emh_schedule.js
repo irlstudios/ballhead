@@ -72,6 +72,12 @@ const resolveSlot = async (interaction) => {
         await reply(interaction, 'Not Your Slot', ['You can only change your own bookings.']);
         return null;
     }
+    // Once a slot starts, only a lead may change it; otherwise a host could
+    // cancel in the gap before the resolver runs and erase their own No-Show.
+    if (new Date(booking.startsAt) <= new Date() && !isLead(interaction.user.id)) {
+        await reply(interaction, 'Already Started', ['This slot has already started, so it can no longer be changed. Ask an EMH lead if something went wrong.']);
+        return null;
+    }
     return booking;
 };
 
@@ -148,10 +154,16 @@ const autocomplete = async (interaction) => {
         if (focused.name === 'slot') {
             const lead = isLead(interaction.user.id);
             const bookings = await store.listUpcomingBookings({ hostId: lead ? null : interaction.user.id });
-            return interaction.respond(bookings.map((booking) => ({
-                name: (lead ? `${rules.slotLabel(booking)} - ${booking.hostUsername}` : rules.slotLabel(booking)).slice(0, 100),
-                value: String(booking.id),
-            })));
+            // Filtered before the 25-choice cap so a lead can reach a late-week
+            // slot by typing its day or the host's name.
+            const choices = bookings
+                .map((booking) => ({
+                    name: (lead ? `${rules.slotLabel(booking)} - ${booking.hostUsername}` : rules.slotLabel(booking)).slice(0, 100),
+                    value: String(booking.id),
+                }))
+                .filter((choice) => choice.name.toLowerCase().includes(typed))
+                .slice(0, 25);
+            return interaction.respond(choices);
         }
         return interaction.respond([]);
     } catch (error) {

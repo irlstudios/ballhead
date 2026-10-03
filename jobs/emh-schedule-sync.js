@@ -35,16 +35,19 @@ const runEmhScheduleSync = async (now = new Date()) => {
         return null;
     }
     running = true;
+    let decided;
     try {
-        const decided = await resolveDueBookings(now);
+        decided = await resolveDueBookings(now);
         if (decided.length > 0) {
             logger.info(`[EMH Schedule] Resolved ${decided.length} slot(s).`);
         }
-        await renderMonthlyView(now);
-        return decided;
     } finally {
         running = false;
     }
+    // Outside the guard: a stalled Sheets call must never stop the next tick
+    // from resolving slots.
+    await renderMonthlyView(now);
+    return decided;
 };
 
 module.exports = { runEmhScheduleSync };

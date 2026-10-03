@@ -3,9 +3,10 @@
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert');
 const path = require('node:path');
+const { setImmediate } = require('node:timers');
 
 const calls = [];
-const state = { due: [], sessions: [] };
+const state = { due: [], sessions: [], hangRender: false };
 const stub = (relative, exports) => {
     const file = require.resolve(path.join('..', relative));
     require.cache[file] = { id: file, filename: file, loaded: true, exports };
@@ -18,7 +19,12 @@ stub('utils/emh_schedule_queries', {
     },
     setBookingStatus: async (id, status) => calls.push(['set', id, status]),
 });
-stub('utils/emh_schedule_sheet', { renderMonthlyView: async () => calls.push(['render']) });
+stub('utils/emh_schedule_sheet', {
+    renderMonthlyView: () => {
+        calls.push(['render']);
+        return state.hangRender ? new Promise(() => {}) : Promise.resolve(true);
+    },
+});
 
 const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
 
@@ -29,7 +35,7 @@ const slot = (id, hostId, start) => ({
 
 beforeEach(() => {
     calls.length = 0;
-    Object.assign(state, { due: [], sessions: [] });
+    Object.assign(state, { due: [], sessions: [], hangRender: false });
 });
 
 test('due slots resolve to hosted or no-show and the sheet redraws', async () => {
@@ -61,4 +67,15 @@ test('a second run while one is in flight is skipped', async () => {
     const second = await runEmhScheduleSync(NOW);
     await first;
     assert.strictEqual(second, null);
+});
+
+// A Sheets call that never returns must not freeze Hosted / No-Show tracking.
+test('a hung render does not block the next run from resolving slots', async () => {
+    state.hangRender = true;
+    void runEmhScheduleSync(NOW);
+    await new Promise((resolve) => setImmediate(resolve));
+    state.hangRender = false;
+    state.due = [slot(1, 'h1', '2026-10-06T00:00:00Z')];
+    const decided = await runEmhScheduleSync(NOW);
+    assert.deepStrictEqual(decided, [{ id: 1, status: 'no_show' }]);
 });

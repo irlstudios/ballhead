@@ -113,8 +113,7 @@ const listUpcomingBookings = async ({ hostId = null } = {}) => {
     const result = await executeQuery(
         `SELECT * FROM emh_bookings
           WHERE status = 'scheduled' AND starts_at > NOW() AND ($1::text IS NULL OR host_id = $1)
-          ORDER BY starts_at
-          LIMIT 25`,
+          ORDER BY starts_at`,
         [hostId]
     );
     return result.rows.map(mapBooking);

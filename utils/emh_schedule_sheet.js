@@ -11,6 +11,9 @@ const { listBookingsBetween } = require('./emh_schedule_queries');
 const logger = require('./logger');
 
 const DAY_COLUMN_PIXELS = 170;
+// gaxios has no default timeout, and one stalled request would hold the render
+// queue forever.
+const SHEETS_OPTIONS = { timeout: 30 * 1000 };
 
 // Last payload written, so the 15-minute job costs no Sheets writes on a quiet
 // day. ponytail: in-memory, so each restart rewrites once.
@@ -23,7 +26,7 @@ const createTab = async (sheets) => {
     const created = await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_HOST_SESSIONS,
         requestBody: { requests: [{ addSheet: { properties: { title: EMH_SCHEDULE_TAB, gridProperties: { frozenRowCount: 2 } } } }] },
-    });
+    }, SHEETS_OPTIONS);
     const sheetId = created.data.replies[0].addSheet.properties.sheetId;
     await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_HOST_SESSIONS,
@@ -33,12 +36,12 @@ const createTab = async (sheets) => {
                 { updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: GRID_COLUMNS }, properties: { pixelSize: DAY_COLUMN_PIXELS }, fields: 'pixelSize' } },
             ],
         },
-    });
+    }, SHEETS_OPTIONS);
     return sheetId;
 };
 
 const resolveSheetId = async (sheets) => {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_HOST_SESSIONS, fields: 'sheets.properties(sheetId,title)' });
+    const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_HOST_SESSIONS, fields: 'sheets.properties(sheetId,title)' }, SHEETS_OPTIONS);
     const tab = meta.data.sheets.find((sheet) => sheet.properties.title === EMH_SCHEDULE_TAB);
     return tab ? tab.properties.sheetId : createTab(sheets);
 };
@@ -63,7 +66,7 @@ const render = async (now) => {
                     },
                 }],
             },
-        });
+        }, SHEETS_OPTIONS);
         lastWritten = signature;
         return true;
     } catch (error) {
