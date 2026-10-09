@@ -83,6 +83,9 @@ try {
 
 try {
     const eventFiles = fs.readdirSync('./events').filter(file => file.endsWith('.js'));
+    // A dozen event modules legitimately listen on messageCreate; Node warns
+    // past ten listeners as a leak heuristic, so raise the cap before adding them.
+    client.setMaxListeners(Math.max(client.getMaxListeners(), eventFiles.length + 5));
     for (const file of eventFiles) {
         const event = require(`./events/${file}`);
         if (!event.name || !event.execute) {
@@ -102,9 +105,6 @@ try {
             client.on(event.name, safeExecute);
         }
     }
-    // A dozen event modules legitimately listen on messageCreate; Node warns
-    // past ten listeners as a leak heuristic, so raise the cap to what we load.
-    client.setMaxListeners(Math.max(client.getMaxListeners(), eventFiles.length + 5));
 } catch (error) {
     logger.error('Error reading event files:', error);
 }
