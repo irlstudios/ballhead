@@ -86,3 +86,12 @@ test('does not mutate the input league object', () => {
     buildDisbandPlan(input);
     assert.strictEqual(JSON.stringify(input), snapshot);
 });
+
+const disbandCommand = require('../commands/leagues/disband-league');
+
+// interactionHandler skips these so its unknown-button fallback never races
+// the command's own collector for the confirm click.
+test('disband exposes the button ids its collector owns', () => {
+    assert.deepStrictEqual([...disbandCommand.COLLECTOR_OWNED_IDS], ['disband-league-confirm', 'disband-league-cancel']);
+    assert.ok(Object.isFrozen(disbandCommand.COLLECTOR_OWNED_IDS));
+});

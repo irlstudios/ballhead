@@ -1,6 +1,7 @@
 'use strict';
 
 require('dotenv').config({ path: './resources/.env' });
+const { COLLECTOR_OWNED_IDS: DISBAND_COLLECTOR_IDS } = require('./commands/leagues/disband-league');
 const { Collection, MessageFlags, ContainerBuilder } = require('discord.js');
 const { logCommandUsage, logInteractionEvent } = require('./API/command-data');
 const { createModal } = require('./modals/modalFactory');
@@ -285,6 +286,13 @@ const handleModalSubmit = async (interaction) => {
 
 const handleButton = async (interaction, client) => {
     try {
+        // /league disband answers its confirm and cancel buttons through an
+        // awaitMessageComponent collector. The router used to fall through to
+        // the "Button Error" reply for them, racing the collector's ack and
+        // logging "already acknowledged" roughly weekly.
+        if (DISBAND_COLLECTOR_IDS.includes(interaction.customId)) {
+            return;
+        }
         if (isReengagementInteraction(interaction.customId)) {
             await handleReengagementInteraction(interaction, client);
             return;

@@ -15,8 +15,10 @@ const { fetchLeaguesByOwner, markLeagueDisbanded } = require('../../db');
 const { LEAGUE_CO_OWNER_ROLE_ID } = require('../../config/constants');
 const { buildDisbandPlan } = require('../../utils/league_disband');
 
+// Answered by the collector in execute(), never by the global button router.
 const CONFIRM_ID = 'disband-league-confirm';
 const CANCEL_ID = 'disband-league-cancel';
+const COLLECTOR_OWNED_IDS = Object.freeze([CONFIRM_ID, CANCEL_ID]);
 const CONFIRM_TIMEOUT_MS = 60_000;
 
 function buildConfirmComponents(league, coOwnerIds) {
@@ -122,6 +124,7 @@ async function performDisband(interaction, league) {
 }
 
 module.exports = {
+    COLLECTOR_OWNED_IDS,
     data: new SlashCommandBuilder()
         .setName('league-disband')
         .setDescription('Disband a league you own. This cannot be undone.'),
