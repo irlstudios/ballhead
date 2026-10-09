@@ -150,7 +150,7 @@ module.exports = {
                     subtitle: 'Home Run Derby',
                     lines: ['No data found.']
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
             }
             const headers = rows[0];
             const dataRows = rows.slice(1);
@@ -356,7 +356,7 @@ module.exports = {
                 subtitle: 'Home Run Derby',
                 lines: ['Failed to fetch leaderboard.']
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     }
 };

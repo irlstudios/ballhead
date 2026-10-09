@@ -65,3 +65,31 @@ test('returns null when the workbook has no season tabs', async () => {
     const season = await resolveActiveSeason(sheetsFor([]), metadataFor(['Discord IDs']));
     assert.strictEqual(season, null);
 });
+
+const { getActiveSeason, resetActiveSeasonCache } = require('../utils/ff_sheet');
+
+// Counts metadata reads so the memo can be shown to absorb a burst of lookups.
+const countingSheets = (titles, populated) => {
+    const sheets = sheetsFor(populated);
+    let metadataReads = 0;
+    sheets.spreadsheets.get = async () => { metadataReads += 1; return metadataFor(titles); };
+    return { sheets, reads: () => metadataReads };
+};
+
+test('getActiveSeason reads sheet metadata once within the memo window', async () => {
+    resetActiveSeasonCache();
+    const { sheets, reads } = countingSheets(['Season 44', 'Season 45'], ['Season 45']);
+    const first = await getActiveSeason(sheets, { now: 1000 });
+    const second = await getActiveSeason(sheets, { now: 2000 });
+    assert.strictEqual(first.title, 'Season 45');
+    assert.strictEqual(second.title, 'Season 45');
+    assert.strictEqual(reads(), 1);
+});
+
+test('getActiveSeason re-reads once the memo expires', async () => {
+    resetActiveSeasonCache();
+    const { sheets, reads } = countingSheets(['Season 44'], ['Season 44']);
+    await getActiveSeason(sheets, { now: 0 });
+    await getActiveSeason(sheets, { now: 11 * 60 * 1000 });
+    assert.strictEqual(reads(), 2);
+});

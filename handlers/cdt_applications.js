@@ -42,7 +42,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -57,7 +57,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -68,7 +68,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'You are already a Community Design Team member and cannot submit another application.',
                     { title: 'Already a Team Member', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -87,7 +87,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -98,7 +98,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'The design examples link must be a full URL (starting with http:// or https://). Please apply again with a valid link.',
                     { title: 'Invalid Portfolio Link', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -111,7 +111,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -164,7 +164,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
                 'Thank you for submitting your Community Design Team application!',
                 { title: 'Application Submitted', subtitle: SUBTITLE }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Unexpected error in handleCdtApplicationSubmission:', error);
@@ -173,7 +173,7 @@ const handleCdtApplicationSubmission = async (interaction) => {
 
 const handleCdtApplicationApprove = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -183,7 +183,6 @@ const handleCdtApplicationApprove = async (interaction) => {
                     'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
                     { title: 'Applicant Left', subtitle: PROGRAM }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -196,7 +195,6 @@ const handleCdtApplicationApprove = async (interaction) => {
                     'The Community Design Team role could not be found, so the application was left untouched.',
                     { title: 'Approval Failed', subtitle: PROGRAM }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -245,7 +243,6 @@ const handleCdtApplicationApprove = async (interaction) => {
                 'The application has been successfully accepted!',
                 { title: 'Application Accepted', subtitle: PROGRAM }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error approving CDT application:', error);
@@ -256,7 +253,6 @@ const handleCdtApplicationApprove = async (interaction) => {
                     'There was an error while accepting the application. Please try again later.',
                     { title: 'Approval Failed', subtitle: PROGRAM }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -264,7 +260,7 @@ const handleCdtApplicationApprove = async (interaction) => {
 
 const handleCdtApplicationReject = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -306,7 +302,6 @@ const handleCdtApplicationReject = async (interaction) => {
                     : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: PROGRAM }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error denying CDT application:', error);
@@ -317,7 +312,6 @@ const handleCdtApplicationReject = async (interaction) => {
                     'There was an error while denying the application. Please try again later.',
                     { title: 'Denial Failed', subtitle: PROGRAM }
                 ),
-                ephemeral: true,
             });
         }
     }

@@ -43,7 +43,7 @@ const rejectNonLead = async (interaction) => {
             'Only Community Design Team leads can use this command.',
             { title: 'Team Leads Only', subtitle: SUBTITLE }
         ),
-        ephemeral: true,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
     };
     if (interaction.deferred || interaction.replied) {
         await interaction.editReply(payload);
@@ -313,7 +313,6 @@ const resolveDesignOption = async (interaction) => {
                 'That design was not found. Pick one from the autocomplete list.',
                 { title: 'Design Not Found', subtitle: SUBTITLE }
             ),
-            ephemeral: true,
         });
         return null;
     }

@@ -15,7 +15,7 @@ function notice(title, lines) {
         new TextDisplayBuilder().setContent(`## ${title}`),
         new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
     );
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 module.exports = {
@@ -29,7 +29,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const squadNameToDisband = interaction.options.getString('squad-name').toUpperCase();
         const moderatorUserId = interaction.user.id;

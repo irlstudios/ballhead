@@ -1,7 +1,7 @@
 'use strict';
 
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { PermissionsBitField } = require('discord.js');
+const { PermissionsBitField, MessageFlags } = require('discord.js');
 const moment = require('moment-timezone');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
@@ -37,7 +37,7 @@ module.exports = {
 
     async execute(interaction) {
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
             if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
                 await interaction.editReply(

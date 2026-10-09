@@ -495,7 +495,7 @@ module.exports = {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Fetch Failed\nAn error occurred while fetching posts.'));
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
             } else {
                 await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             }

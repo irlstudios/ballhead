@@ -1,5 +1,5 @@
 const { SlashCommandBuilder } = require('@discordjs/builders');
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const {
     BOT_BUGS_CHANNEL_ID,
@@ -24,7 +24,7 @@ module.exports = {
         if (!interaction.member.roles.cache.has(REQUIRED_ROLE_ID)) {
             return interaction.reply({
                 content: 'You do not have the required role to use this command.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -39,7 +39,7 @@ module.exports = {
 
             await thread.send('Hey folks! Welcome to the weekly discussion thread where you can chat with others on the presented topic of the week. We would love to hear your thoughts so please drop them in here!');
 
-            await interaction.reply({content: 'The weekly discussion thread has been created.', ephemeral: true});
+            await interaction.reply({content: 'The weekly discussion thread has been created.', flags: MessageFlags.Ephemeral});
 
             const announcementEmbed = new EmbedBuilder()
                 .setTitle('Hey Gym Class!')
@@ -75,7 +75,7 @@ module.exports = {
             if (!interaction.replied) {
                 await interaction.reply({
                     content: 'An error occurred while processing your request.',
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 }).catch(() => {});
             }
         }

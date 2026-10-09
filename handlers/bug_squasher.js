@@ -31,7 +31,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -46,7 +46,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -57,7 +57,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                     'You are already a Community Bug Squasher and cannot submit another application.',
                     { title: 'Already a Bug Squasher', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -76,7 +76,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -89,7 +89,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -142,7 +142,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
                 'Thank you for submitting your Community Bug Squasher application!',
                 { title: 'Application Submitted', subtitle: SUBTITLE }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Unexpected error in handleBugSquasherApplicationSubmission:', error);
@@ -151,7 +151,7 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
 
 const handleBugSquasherApplicationApprove = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -161,7 +161,6 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
                     'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
                     { title: 'Applicant Left', subtitle: 'Community Bug Squasher Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -206,7 +205,6 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
                 'The application has been successfully accepted!',
                 { title: 'Application Accepted', subtitle: 'Community Bug Squasher Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error approving bug squasher application:', error);
@@ -217,7 +215,6 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
                     'There was an error while accepting the application. Please try again later.',
                     { title: 'Approval Failed', subtitle: 'Community Bug Squasher Program' }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -225,7 +222,7 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
 
 const handleBugSquasherApplicationReject = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -267,7 +264,6 @@ const handleBugSquasherApplicationReject = async (interaction) => {
                     : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: 'Community Bug Squasher Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error denying bug squasher application:', error);
@@ -278,7 +274,6 @@ const handleBugSquasherApplicationReject = async (interaction) => {
                     'There was an error while denying the application. Please try again later.',
                     { title: 'Denial Failed', subtitle: 'Community Bug Squasher Program' }
                 ),
-                ephemeral: true,
             });
         }
     }

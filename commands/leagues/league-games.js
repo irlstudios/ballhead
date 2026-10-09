@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionsBitField, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, fetchLeagueByName, getLeagueGamesSummary, getLeagueWeeklyStats, fetchRecentLeagueGames } = require('../../db');
@@ -20,7 +20,7 @@ module.exports = {
             .setMaxLength(100)),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const userId = interaction.user.id;

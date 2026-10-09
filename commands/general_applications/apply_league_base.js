@@ -36,9 +36,8 @@ module.exports = {
             const block = buildTextBlock({ title: 'Level Requirement', subtitle: 'Base League Application', lines: ['You need to be at least Level 5 to apply for a Base League.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
             return interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
-                components: [errorContainer],
-                ephemeral: true
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [errorContainer]
             });
         }
 
@@ -50,9 +49,8 @@ module.exports = {
             const block = buildTextBlock({ title: 'Form Unavailable', subtitle: 'Try Again Soon', lines: ['Error loading the application form.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
-                components: [errorContainer],
-                ephemeral: true
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [errorContainer]
             });
         }
     } };

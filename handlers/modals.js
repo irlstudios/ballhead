@@ -31,7 +31,7 @@ const handleBugReport = async (interaction, customId) => {
         await loggingChannel.send({ flags: MessageFlags.IsComponentsV2, components: [logContainer] });
         await interaction.reply({
             ...noticePayload('Thank you for reporting the bug. The development team has been notified.', { title: 'Bug Report Received', subtitle: 'Thanks for helping' }),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Failed to log bug report:', error);
@@ -40,7 +40,7 @@ const handleBugReport = async (interaction, customId) => {
                 'Ironically.... There was an error logging your bug report the developers have been notified \n-# if this issue persists please reach out to support to escalate your issue.',
                 { title: 'Bug Report Error', subtitle: 'Logging Failed' }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
 
         try {
@@ -71,13 +71,13 @@ const handleSnackModal = async (interaction) => {
                 [`**Snack:** ${snack}`, `**Reason:** ${reason}`],
                 { title: 'Snack Selected', subtitle: 'Modal Test' }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Error handling snack modal:', error);
         await interaction.reply({
             ...noticePayload('Could not read your selections from the modal.', { title: 'Modal Error', subtitle: 'Snack Modal' }),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     }
 };
@@ -98,7 +98,7 @@ const handleRankedSessionModal = async (interaction) => {
         if (!participantsName) {
             await interaction.reply({
                 ...noticePayload('Please include participant names for the session.', { title: 'Missing Participants' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -111,7 +111,7 @@ const handleRankedSessionModal = async (interaction) => {
         if (isNaN(attemptsNum) || attemptsNum < 0 || attemptsNum > 10) {
             await interaction.reply({
                 ...noticePayload('Made Attempts must be a number between 0 and 10.', { title: 'Invalid Attempts' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -167,13 +167,13 @@ const handleRankedSessionModal = async (interaction) => {
 
             await interaction.reply({
                 ...noticePayload(replyLines, { title: 'Session Logged' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         } catch (sheetError) {
             logger.error('Failed to write ranked session to sheet:', sheetError);
             await interaction.reply({
                 ...noticePayload('There was an error logging the session. Please try again later.', { title: 'Logging Failed' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     } catch (error) {
@@ -181,7 +181,7 @@ const handleRankedSessionModal = async (interaction) => {
         if (!interaction.replied && !interaction.deferred) {
             await interaction.reply({
                 ...noticePayload('There was an error submitting the ranked session. Please try again later.', { title: 'Submission Failed' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             }).catch(e => logger.error('Reply failed:', e));
         }
     }
@@ -197,7 +197,7 @@ const handleGenerateTemplateModal = async (interaction) => {
 
     await interaction.reply({
         ...noticePayload('One moment while we generate your template!', { title: 'Template Generator', subtitle: 'Preparing Template' }),
-        ephemeral: true,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
     });
 
     let templateMessage;

@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { ensureCdtDesignTables, insertCdtDesign, updateCdtDesign, deleteCdtDesign } = require('../../db');
@@ -52,7 +52,7 @@ module.exports = {
             .setDescription('Credit name shown on the post (defaults to the designer\'s display name)')
             .setMaxLength(60)),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (await rejectNonLead(interaction)) {
             return;
         }
@@ -64,7 +64,6 @@ module.exports = {
             if (error) {
                 await interaction.editReply({
                     ...noticePayload(error, { title: 'Bad Submission Link', subtitle: SUBTITLE }),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -77,7 +76,6 @@ module.exports = {
             if (filesResult.error) {
                 await interaction.editReply({
                     ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -87,7 +85,6 @@ module.exports = {
                         'The files link points at the whole submission message, which would publish the design file as a preview. Right click the design file itself and use Copy Link instead, or link a separate message.',
                         { title: 'Separate The Files', subtitle: SUBTITLE }
                     ),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -99,7 +96,6 @@ module.exports = {
                         'The submission message has no image attachments to use as previews (attachments used as design files are excluded).',
                         { title: 'No Previews Found', subtitle: SUBTITLE }
                     ),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -111,7 +107,6 @@ module.exports = {
                         'The designs forum channel is not configured or not reachable.',
                         { title: 'Forum Unavailable', subtitle: SUBTITLE }
                     ),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -175,7 +170,6 @@ module.exports = {
                     ],
                     { title: 'Design Published', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             });
         } catch (error) {
             logger.error('Error approving CDT design:', error);
@@ -187,7 +181,6 @@ module.exports = {
                     ],
                     { title: 'Publish Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             }).catch(() => {});
         }
     },

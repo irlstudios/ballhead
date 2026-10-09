@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { deleteCdtDesign } = require('../../db');
@@ -25,7 +25,7 @@ module.exports = {
             .setRequired(true)),
     autocomplete: respondDesignAutocomplete,
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (await rejectNonLead(interaction)) {
             return;
         }
@@ -49,7 +49,6 @@ module.exports = {
                             'I could not delete the forum post, so nothing was removed. Please try again.',
                             { title: 'Removal Failed', subtitle: SUBTITLE }
                         ),
-                        ephemeral: true,
                     });
                     return;
                 }
@@ -64,7 +63,6 @@ module.exports = {
                     `Design #${design.design_id} **${design.title}** has been removed, along with its files and download stats.`,
                     { title: 'Design Removed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             });
         } catch (error) {
             logger.error('Error removing CDT design:', error);
@@ -73,7 +71,6 @@ module.exports = {
                     'There was an error removing the design. Please try again.',
                     { title: 'Removal Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             }).catch(() => {});
         }
     },

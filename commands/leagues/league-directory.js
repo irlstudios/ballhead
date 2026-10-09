@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesForDirectory } = require('../../db');
@@ -15,7 +15,7 @@ module.exports = {
         .setDescription('Browse the registered leagues (Sponsored, Active, Base)'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const leagues = await fetchLeaguesForDirectory();
@@ -24,7 +24,7 @@ module.exports = {
             const chunks = chunkLines(buildDirectoryLines(leagues));
             await interaction.editReply(noticePayload(chunks[0], { title: 'League Directory', subtitle: SUB }));
             for (const chunk of chunks.slice(1)) {
-                await interaction.followUp({ ...noticePayload(chunk, { subtitle: SUB }), ephemeral: true });
+                await interaction.followUp({ ...noticePayload(chunk, { subtitle: SUB }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
             }
             return undefined;
         } catch (error) {

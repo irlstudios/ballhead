@@ -179,7 +179,7 @@ module.exports = {
         if (!requiredRoles.some(role => userRoles.has(role))) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have the required role to apply.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         const instagramRegex = /^(?:https?:\/\/(?:www\.)?instagram\.com\/([\w.-]+)\/?|([\w.-]+))$/;
@@ -189,7 +189,7 @@ module.exports = {
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent(
                     '## Invalid Instagram Format\nAccepted formats:\n`yourusername`\n`https://instagram.com/yourusername/`\n`https://www.instagram.com/yourusername/`'
                 ));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         let instagramUsername = match[1] || match[2];
@@ -197,10 +197,10 @@ module.exports = {
 
         // check to make sure user is not applying with official gymclass account
         if (instagramUsername === "gymclassvr") {
-            return interaction.reply({ content: 'You may not apply using an official gymclass social account.', ephemeral: true });
+            return interaction.reply({ content: 'You may not apply using an official gymclass social account.', flags: MessageFlags.Ephemeral });
         }
 
-        await interaction.deferReply({ephemeral: true});
+        await interaction.deferReply({flags: MessageFlags.Ephemeral});
         const cleanUsername = instagramUsername.replace(/^@+/, '');
         const cleanUsernameLower = cleanUsername.toLowerCase();
 
@@ -262,7 +262,7 @@ module.exports = {
                         'No need to reapply. Keep posting quality content and use `/cc check-progress` plus `/cc quality-score` to track your progress.'
                     ]
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [noticeContainer] });
                 return;
             }
 
@@ -290,7 +290,7 @@ module.exports = {
                         'You cannot apply for Reels again.'
                     ]
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [alreadyCreatorContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [alreadyCreatorContainer] });
                 return;
             }
         } catch (lookupError) {
@@ -302,7 +302,7 @@ module.exports = {
                     'Please try again later or contact staff if the issue persists.'
                 ]
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             return;
         }
 

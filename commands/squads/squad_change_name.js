@@ -28,7 +28,7 @@ function notice(title, lines) {
         new TextDisplayBuilder().setContent(`## ${title}`),
         new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
     );
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 // Shared by /squad rename and /squad force-name: rename every row holding the
@@ -88,7 +88,7 @@ module.exports = {
                 .setDescription('Current squad name (required if you own multiple)')
                 .setRequired(false)),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;

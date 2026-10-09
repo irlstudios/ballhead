@@ -29,7 +29,7 @@ const {
 
 const handleTransferButton = async (interaction, action) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const transfer = await fetchTransferRequestByMessageId(interaction.message.id);
         if (!transfer) {

@@ -19,7 +19,7 @@ module.exports = {
                 .setRequired(true)),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const targetUser = interaction.options.getUser('user');

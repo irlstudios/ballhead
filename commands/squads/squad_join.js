@@ -20,7 +20,7 @@ module.exports = {
         .setName('squad-join-random')
         .setDescription('Attempt to join a random squad that is currently open.'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
@@ -34,7 +34,7 @@ module.exports = {
                 subtitle: 'Random Squad Join',
                 lines: ['This command must be run in a server.'],
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             return;
         }
 
@@ -45,7 +45,7 @@ module.exports = {
                     subtitle: 'Random Squad Join',
                     lines: ['You are already a squad leader and cannot join another squad.'],
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                 return;
             }
             const membership = await squadDb.fetchMembership(userId);
@@ -55,7 +55,7 @@ module.exports = {
                     subtitle: 'Random Squad Join',
                     lines: [`You are already in squad **${membership.squad.name}**.`, 'You must leave it first.'],
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                 return;
             }
             if (!(await squadDb.getInvitesOptIn(userId))) {
@@ -64,7 +64,7 @@ module.exports = {
                     subtitle: 'Random Squad Join',
                     lines: ['You have opted out of squad invitations/joining.', 'Use `/squad opt-in` first.'],
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                 return;
             }
 
@@ -81,7 +81,7 @@ module.exports = {
                         subtitle: 'Random Squad Join',
                         lines: ['Sorry, there are currently no squads open for joining.'],
                     });
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                     return;
                 }
                 const result = await squadDb.addSquadMember(chosenSquad.id, userId, username);
@@ -93,7 +93,7 @@ module.exports = {
                         subtitle: 'Random Squad Join',
                         lines: ['You are already in a squad. You must leave it first.'],
                     });
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                     return;
                 }
                 // FULL or NO_SQUAD: loop once more with a fresh pool.
@@ -104,7 +104,7 @@ module.exports = {
                     subtitle: 'Random Squad Join',
                     lines: ['Sorry, all open squads filled up before your join could complete. Please try again.'],
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
                 return;
             }
 
@@ -119,7 +119,7 @@ module.exports = {
                     subtitle: 'Manual Update Needed',
                     lines: [`Set it manually to \`[${chosenSquad.name}] ${username}\`.`],
                 });
-                await interaction.followUp({ flags: MessageFlags.IsComponentsV2, components: [warningContainer], ephemeral: true }).catch(() => {});
+                await interaction.followUp({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [warningContainer] }).catch(() => {});
             }
 
             let assignedMascotRole = null;
@@ -145,7 +145,7 @@ module.exports = {
             const successContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Joined Squad!', subtitle: 'Random Squad Join', lines: [successDescription] });
             if (block) successContainer.addTextDisplayComponents(block);
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
 
             try {
                 const leaderUser = await interaction.client.users.fetch(chosenSquad.owner_id);
@@ -192,7 +192,7 @@ module.exports = {
                 subtitle: 'Random Squad Join',
                 lines: [`An error occurred: ${error.message || 'Could not process your request. Please try again later.'}`],
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer] }).catch(err => logger.error('Failed to edit reply:', err));
         }
     },
 };

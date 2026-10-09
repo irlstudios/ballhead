@@ -18,7 +18,7 @@ function normalizeId(value) {
 
 const handleInviteButton = async (interaction, action) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         let inviteData;
         try {
@@ -108,13 +108,12 @@ const handleInviteButton = async (interaction, action) => {
                 inviteMessage,
             });
         } else {
-            await interaction.editReply({ ...noticePayload('Unknown action specified.', { title: 'Unknown Action', subtitle: 'Squad Invite' }), ephemeral: true });
+            await interaction.editReply({ ...noticePayload('Unknown action specified.', { title: 'Unknown Action', subtitle: 'Squad Invite' }) });
         }
     } catch (error) {
         logger.error('Error handling invite button interaction:', error);
         await interaction.editReply({
             ...noticePayload('An error occurred while processing the invite interaction.', { title: 'Invite Error', subtitle: 'Squad Invite' }),
-            ephemeral: true,
         }).catch(e => logger.error('editReply failed:', e));
 
         try {
@@ -220,7 +219,6 @@ const handleAcceptInvite = async (interaction, ctx) => {
         // FULL (or the squad vanished mid-click). Terminal for this invite.
         await interaction.editReply({
             ...noticePayload(`Cannot accept: Squad **${squadName}** is full (${squadDb.MAX_SQUAD_MEMBERS}/${squadDb.MAX_SQUAD_MEMBERS}).`, { title: 'Squad Full', subtitle: 'Squad Invite' }),
-            ephemeral: true,
         });
         if (trackingMessage) {
             const trackingContainer = buildNoticeContainer({ title: 'Invite Failed', subtitle: squadName, lines: [`Invite from <@${commandUserID}> to <@${invitedMemberId}> failed: Squad Full.`] });
@@ -273,11 +271,11 @@ const handleAcceptInvite = async (interaction, ctx) => {
                     assignedMascotRoleName = roleToAdd.name;
                 } else {
                     logger.warn(`Mascot role ID ${mascotInfo.roleId} (${mascotInfo.name}) not found.`);
-                    await interaction.followUp({ ...noticePayload(`Warning: Joined squad, but couldn't find mascot role (${mascotInfo.name}).`, { title: 'Mascot Role Missing', subtitle: 'Squad Invite' }), ephemeral: true }).catch(() => {});
+                    await interaction.followUp({ ...noticePayload(`Warning: Joined squad, but couldn't find mascot role (${mascotInfo.name}).`, { title: 'Mascot Role Missing', subtitle: 'Squad Invite' }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral }).catch(() => {});
                 }
             } catch (roleError) {
                 logger.error(`Failed to add mascot role ${mascotInfo.name}: ${roleError.message}`);
-                await interaction.followUp({ ...noticePayload(`Warning: Joined squad, but couldn't assign mascot role (${mascotInfo.name}).`, { title: 'Mascot Role Failed', subtitle: 'Squad Invite' }), ephemeral: true }).catch(() => {});
+                await interaction.followUp({ ...noticePayload(`Warning: Joined squad, but couldn't assign mascot role (${mascotInfo.name}).`, { title: 'Mascot Role Failed', subtitle: 'Squad Invite' }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral }).catch(() => {});
             }
         }
     }
@@ -322,7 +320,7 @@ const handleRejectInvite = async (interaction, ctx) => {
     }
 
     await updateInviteStatus(interaction.message.id, 'Rejected');
-    await interaction.editReply({ ...noticePayload('You have rejected the invite.', { title: 'Invite Rejected', subtitle: 'Squad Invite' }), ephemeral: true });
+    await interaction.editReply({ ...noticePayload('You have rejected the invite.', { title: 'Invite Rejected', subtitle: 'Squad Invite' }) });
 
     if (trackingMessage) {
         const trackingContainer = buildNoticeContainer({ title: 'Invite Rejected', subtitle: squadName, lines: [`<@${invitedMemberId}> rejected invite from <@${commandUserID}> for **${squadName}**.`] });

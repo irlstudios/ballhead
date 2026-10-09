@@ -39,7 +39,7 @@ module.exports = {
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Access Denied', subtitle: 'Ranked Coaching Only', lines: ['You do not have permission to log ranked sessions.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             return;
         }
 

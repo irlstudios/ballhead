@@ -59,7 +59,7 @@ function staffCanManage(interaction) {
 
 // Reply on a not-yet-deferred interaction.
 function ephemeralNotice(interaction, message, title) {
-    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), ephemeral: true });
+    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 }
 
 // Edit on a deferred interaction.
@@ -172,7 +172,7 @@ async function handleOfficialsButton(interaction) {
 // requester DM: unlike a CD denial the requester is the actor here, and this
 // ephemeral reply is their notification.
 async function handleRequesterCancel(interaction, requestId) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const request = await fetchOfficialRequestById(requestId);
     const check = canCancelOfficialRequest(request, interaction.user.id);
@@ -249,9 +249,8 @@ async function showAssignSelect(interaction, requestId) {
     if (block) container.addTextDisplayComponents(block);
 
     await interaction.reply({
-        flags: MessageFlags.IsComponentsV2,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         components: [container, new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true,
     });
 }
 
@@ -322,7 +321,7 @@ async function handleOfficialsSelect(interaction) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const requestId = parseInt(idStr, 10);
     const officialId = interaction.values[0];
@@ -388,7 +387,7 @@ async function handleDenySubmit(interaction, requestId) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, CD_REQUIRED_MESSAGE, 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const reason = interaction.fields.getTextInputValue('reason');
 
     const denied = await denyOfficialRequest(requestId, reason, interaction.user.id);
@@ -418,7 +417,7 @@ async function handleDenySubmit(interaction, requestId) {
 }
 
 async function handleReportSubmit(interaction, requestId) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const request = await fetchOfficialRequestById(requestId);
     const check = canSubmitReport(request, interaction.user.id);

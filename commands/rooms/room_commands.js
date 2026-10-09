@@ -69,8 +69,8 @@ const enforceBlacklistForUser = async (channel, userId) => {
 };
 
 function replySimple(interaction, message) {
-    return interaction.reply({
-        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+    return interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
         components: [new TextDisplayBuilder().setContent(message)]
     });
 }
@@ -83,8 +83,8 @@ function replyRoomNotice(interaction, notice) {
     const container = new ContainerBuilder();
     const block = buildTextBlock(notice);
     if (block) container.addTextDisplayComponents(block);
-    return interaction.reply({
-        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+    return interaction.editReply({
+        flags: MessageFlags.IsComponentsV2,
         components: [container]
     });
 }
@@ -222,6 +222,11 @@ module.exports = {
             }
         }
 
+        // lock, unlock and invite each make several permission edits before
+        // replying, which regularly passed Discord's 3s reply window and died
+        // as "Unknown interaction". Acknowledge first; helpers edit the reply.
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
         const subcommand = interaction.options.getSubcommand();
         const MOD_ROLE_ID = MODERATOR_ROLES[0];
 
@@ -313,8 +318,8 @@ module.exports = {
                 );
             }
 
-            return interaction.reply({
-                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+            return interaction.editReply({
+                flags: MessageFlags.IsComponentsV2,
                 components: [roomContainer]
             });
         }

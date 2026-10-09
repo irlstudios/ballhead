@@ -24,7 +24,7 @@ function notice(title, lines) {
         new TextDisplayBuilder().setContent(`## ${title}`),
         new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
     );
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 module.exports = {
@@ -43,7 +43,7 @@ module.exports = {
         .addStringOption((o) => o.setName('squad').setDescription('Squad name (required if you own multiple)').setRequired(false)),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.user.id;
         const fields = {

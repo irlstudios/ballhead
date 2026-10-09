@@ -64,7 +64,7 @@ module.exports = {
                 title: 'Access Denied',
                 subtitle: 'Ranked Coaching Only',
                 lines: ['You do not have permission to update ranked sessions.']});
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             return;
         }
 
@@ -76,7 +76,7 @@ module.exports = {
                 title: 'Missing Details',
                 subtitle: 'Ranked Session',
                 lines: ['Please provide both the session ID and best participant.']});
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             return;
         }
 
@@ -103,7 +103,7 @@ module.exports = {
                     title: 'Session Not Found',
                     subtitle: 'Ranked Session',
                     lines: [`No session found for ID: ${sessionId}`]});
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
                 return;
             }
 
@@ -118,14 +118,14 @@ module.exports = {
                 title: 'Best Participant Updated',
                 subtitle: 'Ranked Session',
                 lines: [`**Session ID:** ${sessionId}`, `**Best Participant:** ${bestParticipant}`]});
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [successContainer] });
         } catch (error) {
             logger.error('Error updating best participant:', error);
             const errorContainer = buildNotice({
                 title: 'Update Failed',
                 subtitle: 'Ranked Session',
                 lines: ['There was an error updating the session. Please try again later.']});
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
         }
     }
 };

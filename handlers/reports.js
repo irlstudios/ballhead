@@ -180,7 +180,7 @@ const refusalNotice = (result) => {
 
 const handleForumAction = async (interaction, outcomeKey) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!canActionReports(interaction)) {
             await interaction.editReply(noticePayload(
@@ -246,7 +246,7 @@ const handleReportQueueButton = async (interaction) => {
                     'You do not have permission to action reports.',
                     { title: 'Permission Denied', subtitle: 'Player Reports' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -281,7 +281,7 @@ const handleReportQueueButton = async (interaction) => {
             const refusal = refusalNotice(result);
             await interaction.followUp({
                 ...noticePayload(refusal.lines, { title: refusal.title, subtitle: refId }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     } catch (error) {

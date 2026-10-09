@@ -1,5 +1,7 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
+
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const { getPollPostBoards, searchPollPosts } = require('../../db');
 const { buildUserListReply } = require('../../utils/poll_view');
@@ -35,7 +37,7 @@ module.exports = {
             .addStringOption((o) => o.setName('board').setDescription('Which list').setRequired(true).addChoices(...BOARD_CHOICES))),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const board = interaction.options.getString('board');
         const sub = interaction.options.getSubcommand();
         if (sub === 'add') {

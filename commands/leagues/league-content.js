@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, getLeagueContentSummary } = require('../../db');
@@ -14,7 +14,7 @@ module.exports = {
         .setDescription('View your league\'s content hashtag and view totals'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const userId = interaction.user.id;

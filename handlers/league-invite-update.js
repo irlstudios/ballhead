@@ -1,5 +1,7 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
+
 const axios = require('axios');
 const logger = require('../utils/logger');
 const { noticePayload } = require('../utils/ui');
@@ -20,7 +22,7 @@ function buildBannerUrl(guildId, hash) {
 }
 
 const handleUpdateLeagueInviteModal = async (interaction) => {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const newInvite = interaction.fields.getTextInputValue('new-invite-link');

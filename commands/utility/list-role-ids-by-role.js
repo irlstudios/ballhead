@@ -28,7 +28,7 @@ module.exports = {
         if (!interaction.guild) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Server Only\nThis command can only be used in a guild.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         const botMember = await interaction.guild.members.fetch(interaction.client.user.id);
@@ -36,10 +36,10 @@ module.exports = {
         if (!botMember.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Missing Permissions\nI do not have permission to manage roles.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
-        await interaction.deferReply({ephemeral: true});
+        await interaction.deferReply({flags: MessageFlags.Ephemeral});
 
         try {
             await interaction.guild.members.fetch();

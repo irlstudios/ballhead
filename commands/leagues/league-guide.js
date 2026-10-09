@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { buildLeagueGuidePayload } = require('../../utils/league_guide');
@@ -12,7 +12,7 @@ module.exports = {
 
     async execute(interaction) {
         try {
-            await interaction.reply({ ...buildLeagueGuidePayload(), ephemeral: true });
+            await interaction.reply({ ...buildLeagueGuidePayload(), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
         } catch (error) {
             logger.error('[League Guide] Error:', error);
             await interaction.reply({
@@ -20,7 +20,7 @@ module.exports = {
                     title: 'Guide Unavailable',
                     subtitle: 'League Guide',
                 }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             }).catch(err => logger.error('[League Guide] Failed to reply:', err));
         }
     },

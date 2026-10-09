@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesByOwner, fetchLeaguesByCoOwner } = require('../../db');
@@ -21,7 +21,7 @@ module.exports = {
                     'You do not own or co-own any registered leagues.',
                     { title: 'No League Found', subtitle: 'Update Invite' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
@@ -34,7 +34,7 @@ module.exports = {
                     'Error loading the invite update form.',
                     { title: 'Form Unavailable', subtitle: 'Update Invite' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     },

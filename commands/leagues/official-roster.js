@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder, PermissionFlagsBits, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, PermissionsBitField, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { addRosterOfficial, removeRosterOfficial, listRosterOfficials } = require('../../db');
@@ -31,11 +31,11 @@ module.exports = {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             return interaction.reply({
                 ...noticePayload('You do not have permission to manage the officials roster.', { title: 'Permission Denied', subtitle: SUB }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const sub = interaction.options.getSubcommand();

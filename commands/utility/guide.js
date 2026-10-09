@@ -18,6 +18,6 @@ module.exports = {
         const container = new ContainerBuilder();
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${page.title}`));
         container.addTextDisplayComponents(new TextDisplayBuilder().setContent(page.lines.join('\n')));
-        await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+        await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
     },
 };

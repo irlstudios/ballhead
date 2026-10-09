@@ -9,7 +9,7 @@ module.exports = {
         .setName('squad-list')
         .setDescription('Lists all registered squads and their owners.'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         async function getSquadList() {
             const rows = await squadDb.fetchAllSquadsWithCounts();
@@ -28,7 +28,7 @@ module.exports = {
                     new TextDisplayBuilder().setContent('## Registered Squads'),
                     new TextDisplayBuilder().setContent('No squads found in the registry.')
                 );
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
                 return;
             }
 
@@ -76,8 +76,7 @@ module.exports = {
 
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
-                components: [generateContainer(currentPage), generateButtons(currentPage)],
-                ephemeral: true
+                components: [generateContainer(currentPage), generateButtons(currentPage)]
             });
 
         } catch (error) {
@@ -88,7 +87,7 @@ module.exports = {
                 new TextDisplayBuilder().setContent('## Request Failed'),
                 new TextDisplayBuilder().setContent(`An error occurred: ${error.message || 'Please try again later.'}`)
             );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     }
 };

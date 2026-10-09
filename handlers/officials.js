@@ -29,7 +29,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: 'Officials Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -44,7 +44,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: 'Officials Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -55,7 +55,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                     'You already have an official role and cannot submit another application.',
                     { title: 'Already an Official', subtitle: 'Officials Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -74,7 +74,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: 'Officials Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -88,7 +88,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: 'Officials Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -143,7 +143,7 @@ const handleOfficialsApplicationSubmission = async (interaction) => {
                 'Thank you for submitting your application!',
                 { title: 'Application Submitted', subtitle: 'Officials Application' }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Unexpected error in handleOfficialsApplicationSubmission:', error);
@@ -178,12 +178,11 @@ const updateOfficialApplicationStatus = async (sheets, applicationUrl, newStatus
 
 const handleOfficialsApplicationApprove = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to approve applications.', { title: 'Permission Denied', subtitle: 'Officials Program' }),
-                ephemeral: true,
             });
             return;
         }
@@ -196,7 +195,6 @@ const handleOfficialsApplicationApprove = async (interaction) => {
                     'This applicant has left the server, so the application cannot be approved. Use Reject to close it.',
                     { title: 'Applicant Left', subtitle: 'Officials Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -248,7 +246,6 @@ const handleOfficialsApplicationApprove = async (interaction) => {
                 'The application has been successfully approved!',
                 { title: 'Application Approved', subtitle: 'Officials Program' }
             ),
-            ephemeral: true,
         });
 
         const officialRole = interaction.guild.roles.cache.get(OFFICIAL_PROSPECT_ROLE_ID);
@@ -262,7 +259,6 @@ const handleOfficialsApplicationApprove = async (interaction) => {
                     'There was an error while approving the application. Please try again later.',
                     { title: 'Approval Failed', subtitle: 'Officials Program' }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -270,12 +266,11 @@ const handleOfficialsApplicationApprove = async (interaction) => {
 
 const handleOfficialsApplicationReject = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to reject applications.', { title: 'Permission Denied', subtitle: 'Officials Program' }),
-                ephemeral: true,
             });
             return;
         }
@@ -334,7 +329,6 @@ const handleOfficialsApplicationReject = async (interaction) => {
                     : 'The application has been rejected. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Rejected', subtitle: 'Officials Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error rejecting application:', error);
@@ -345,7 +339,6 @@ const handleOfficialsApplicationReject = async (interaction) => {
                     'There was an error while rejecting the application. Please try again later.',
                     { title: 'Rejection Failed', subtitle: 'Officials Program' }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -382,9 +375,8 @@ If you're still confused, feel free to read-up on the [documentation](https://do
     if (block) qaContainer.addTextDisplayComponents(block);
 
     await interaction.reply({
-        flags: MessageFlags.IsComponentsV2,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         components: [qaContainer],
-        ephemeral: true,
     });
 };
 
@@ -406,9 +398,8 @@ const handleNextStepsInteraction = async (interaction) => {
     if (block) nextStepsContainer.addTextDisplayComponents(block);
 
     await interaction.reply({
-        flags: MessageFlags.IsComponentsV2,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         components: [nextStepsContainer],
-        ephemeral: true,
     });
 };
 

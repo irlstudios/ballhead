@@ -64,7 +64,7 @@ function renderBrowsePage(pages, pageIndex) {
             new ButtonBuilder().setCustomId(`squadbrowse:page:${pageIndex + 1}`).setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(pageIndex >= pages.length - 1),
         ));
     }
-    return { flags: MessageFlags.IsComponentsV2, components, ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components };
 }
 
 module.exports = {
@@ -76,7 +76,7 @@ module.exports = {
         .setDescription('Browse squads that are recruiting and join or apply.'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
             const pages = buildBrowsePages(await squadDb.fetchBrowseSquads());
             if (pages.length === 0) {
@@ -85,7 +85,7 @@ module.exports = {
                     new TextDisplayBuilder().setContent('## Squad Browser'),
                     new TextDisplayBuilder().setContent('No squads registered yet. Start one with `/squad register`.')
                 );
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             }
             return interaction.editReply(renderBrowsePage(pages, 0));
         } catch (error) {
@@ -95,7 +95,7 @@ module.exports = {
                 new TextDisplayBuilder().setContent('## Browse Failed'),
                 new TextDisplayBuilder().setContent('An error occurred while loading squads. Please try again later.')
             );
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true }).catch(() => {});
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] }).catch(() => {});
         }
     },
 };

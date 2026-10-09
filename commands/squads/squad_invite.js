@@ -56,7 +56,7 @@ module.exports = {
                 .setRequired(false)
         ),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const commandUserID = interaction.user.id;
         const commandUserTag = interaction.user.tag;
@@ -69,8 +69,7 @@ module.exports = {
                 components: [
                     new TextDisplayBuilder().setContent('## User Not Found'),
                     new TextDisplayBuilder().setContent('Could not find the specified member/user.')
-                ],
-                ephemeral: true
+                ]
             });
             return;
         }
@@ -81,16 +80,14 @@ module.exports = {
         if (targetUserId === commandUserID) {
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
-                components: [new TextDisplayBuilder().setContent('You cannot invite yourself to your own squad.')],
-                ephemeral: true
+                components: [new TextDisplayBuilder().setContent('You cannot invite yourself to your own squad.')]
             });
             return;
         }
         if (targetUser.bot) {
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
-                components: [new TextDisplayBuilder().setContent('You cannot invite bots to a squad.')],
-                ephemeral: true
+                components: [new TextDisplayBuilder().setContent('You cannot invite bots to a squad.')]
             });
             return;
         }
@@ -101,7 +98,6 @@ module.exports = {
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
                 components: [new TextDisplayBuilder().setContent('That user is not currently in this server and cannot join a squad.')],
-                ephemeral: true,
             });
             return;
         }
@@ -114,7 +110,6 @@ module.exports = {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
                     components: [new TextDisplayBuilder().setContent(disambigError)],
-                    ephemeral: true,
                 });
                 return;
             }
@@ -144,7 +139,6 @@ module.exports = {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
                     components: [new TextDisplayBuilder().setContent(copy)],
-                    ephemeral: true,
                 });
                 return;
             }
@@ -187,7 +181,7 @@ module.exports = {
                             new TextDisplayBuilder().setContent(`<@${targetUserId}> isn't accepting DMs from the bot. This usually means they have DMs disabled or have blocked the bot.`),
                             new TextDisplayBuilder().setContent('-# Ask them to enable server DMs (or unblock the bot) and try again')
                         );
-                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [dmFailedContainer], ephemeral: true });
+                    await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [dmFailedContainer] });
                 } else {
                     logger.error(`Failed to send invite DM to ${targetUserId}:`, dmError);
                     throw new Error('Failed to send the invite DM due to an unexpected error.');
@@ -319,7 +313,7 @@ module.exports = {
                     new TextDisplayBuilder().setContent(`<@${targetUserId}> has been invited to **${squadName}**.`),
                     new TextDisplayBuilder().setContent('-# They have 48 hours to respond')
                 );
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
 
         } catch (error) {
             logger.error(`Error during /squad invite for ${commandUserTag}:`, error);
@@ -339,8 +333,7 @@ module.exports = {
             } catch (logError) { logger.error('Failed to log invite command error:', logError); }
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
-                components: [new TextDisplayBuilder().setContent('Something went wrong. Please try again later.')],
-                ephemeral: true
+                components: [new TextDisplayBuilder().setContent('Something went wrong. Please try again later.')]
             }).catch(logger.error);
         }
     }

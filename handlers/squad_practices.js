@@ -35,7 +35,7 @@ async function handlePracticeButton(interaction) {
         logger.warn('[Practice] Unknown button action:', interaction.customId);
         return;
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const practice = await squadDb.fetchPracticeById(parseInt(idStr, 10));
     if (!practice || practice.status !== 'Scheduled') {

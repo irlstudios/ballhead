@@ -52,7 +52,7 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'No Active Post', subtitle: 'Remove Participant', lines: ['You do not have any active posts.'] });
                 if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             }
 
             const { discord_thread_id: threadId, participants } = postDetails;
@@ -61,7 +61,7 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Participant Not Found', subtitle: 'Remove Participant', lines: [`<@${user.id}> is not a participant in your post.`] });
                 if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             }
 
             const thread = interaction.guild.channels.cache.get(threadId);
@@ -69,7 +69,7 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Thread Not Found', subtitle: 'Remove Participant', lines: ['The post thread could not be found.'] });
                 if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             }
 
             await thread.members.remove(user.id);
@@ -105,15 +105,14 @@ module.exports = {
             const block = buildTextBlock({ title: 'Participant Removed', subtitle: 'Remove Participant', lines: [`<@${user.id}> has been removed from your post.`] });
             if (block) successContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
-                components: [successContainer],
-                ephemeral: true
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [successContainer]
             });
         } catch (error) {
             logger.error('Error handling interaction or updating Google Sheet:', error);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Remove Participant', lines: ['An error occurred while processing your request.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
         }
     } };

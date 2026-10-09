@@ -522,7 +522,7 @@ module.exports = {
     async execute(interaction) {
         const cmdStartTime = Date.now();
         try {
-            await interaction.deferReply({ ephemeral: false });
+            await interaction.deferReply({  });
 
             const sheetsStartTime = Date.now();
             const sheets = await getSheetsClient();
@@ -552,7 +552,7 @@ module.exports = {
             if (targetUser && targetUser.id !== interaction.user.id && !isModerator) {
                 const container = new ContainerBuilder()
                     .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have permission to check other users\' progress.\nYou can only check your own progress.'));
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
                 return;
             }
 
@@ -599,9 +599,9 @@ module.exports = {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Request Failed\nAn unexpected error occurred while processing your request.'));
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
             } else {
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [container] });
             }
         }
     }

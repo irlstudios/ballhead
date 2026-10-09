@@ -9,7 +9,7 @@ function payload(title, lines) {
     const container = new ContainerBuilder();
     const block = buildTextBlock({ title, subtitle: 'Squad Invitations', lines });
     if (block) container.addTextDisplayComponents(block);
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 module.exports = {
@@ -17,7 +17,7 @@ module.exports = {
         .setName('squad-opt-out')
         .setDescription('Opt out of receiving squad invitations.'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userId = interaction.user.id;
 
         try {

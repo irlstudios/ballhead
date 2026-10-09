@@ -36,7 +36,7 @@ module.exports = {
         .setName('apply-sponsored-league')
         .setDescription('Apply to upgrade your league to Sponsored League'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const userId = interaction.user.id;
@@ -51,7 +51,7 @@ module.exports = {
                     subtitle: 'Sponsored League Application',
                     lines: ['You do not own an Active League. You cannot proceed.']
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                 return;
             }
 
@@ -63,7 +63,7 @@ module.exports = {
                     subtitle: 'Sponsored League Application',
                     lines: ['Your league does not have an invite link associated with it.', 'Please update your league information.']
                 });
-                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                 return;
             }
 
@@ -73,7 +73,6 @@ module.exports = {
                 await interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
                     components: [buildNoticeContainer({ title: strikeGate.title, subtitle: 'Sponsored League Application', lines: [strikeGate.message] })],
-                    ephemeral: true,
                 });
                 return;
             }
@@ -144,7 +143,7 @@ module.exports = {
                 subtitle: 'Sponsored League Application',
                 lines: ['Your application has been submitted for review.']
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
         } catch (error) {
             logger.error('Error in /apply sponsored-league command:', error);
             const errorContainer = buildNoticeContainer({
@@ -152,6 +151,6 @@ module.exports = {
                 subtitle: 'Sponsored League Application',
                 lines: ['An error occurred while processing your application.']
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     } };

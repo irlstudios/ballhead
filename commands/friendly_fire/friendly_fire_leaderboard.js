@@ -2,7 +2,7 @@ const { SlashCommandBuilder } = require('@discordjs/builders');
 const { createCanvas, registerFont } = require('canvas');
 const { AttachmentBuilder, MessageFlags, ContainerBuilder, MediaGalleryBuilder, MediaGalleryItemBuilder, TextDisplayBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { FF_SHEET_ID, resolveActiveSeason } = require('../../utils/ff_sheet');
+const { getActiveSeason, getTabRows } = require('../../utils/ff_sheet');
 const logger = require('../../utils/logger');
 const { BOT_BUGS_CHANNEL_ID, GYM_CLASS_GUILD_ID } = require('../../config/constants');
 
@@ -26,7 +26,6 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
 
-const sheetId = FF_SHEET_ID;
 const ERROR_LOG_CHANNEL_ID = BOT_BUGS_CHANNEL_ID;
 const ERROR_LOG_GUILD_ID = GYM_CLASS_GUILD_ID;
 const FF_LEADERBOARD_CATEGORIES = [
@@ -97,11 +96,7 @@ async function buildFriendlyFireLeaderboardPayload(category) {
     const categoryLabel = FF_LEADERBOARD_CATEGORIES.find(option => option.value === normalizedCategory)?.label || normalizedCategory;
     const sheets = await getSheetsClient();
 
-    const sheetInfo = await sheets.spreadsheets.get({
-        spreadsheetId: sheetId
-    });
-
-    const activeSeason = await resolveActiveSeason(sheets, sheetInfo);
+    const activeSeason = await getActiveSeason(sheets);
     const currentSeasonTab = activeSeason?.title;
 
     if (!currentSeasonTab) {
@@ -114,12 +109,7 @@ async function buildFriendlyFireLeaderboardPayload(category) {
         };
     }
 
-    const response = await sheets.spreadsheets.values.get({
-        spreadsheetId: sheetId,
-        range: `'${currentSeasonTab}'!A:J`
-    });
-
-    const rows = response.data.values || [];
+    const rows = await getTabRows(sheets, currentSeasonTab, 'A:J');
     const headers = rows[0] || [];
     const data = rows.slice(1);
 
@@ -215,7 +205,7 @@ module.exports = {
             await interaction.deferReply();
             const result = await buildFriendlyFireLeaderboardPayload(FF_LEADERBOARD_DEFAULT_CATEGORY);
             if (result.errorContainer) {
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [result.errorContainer] });
             }
             await interaction.editReply({
                 flags: MessageFlags.IsComponentsV2,
@@ -244,7 +234,7 @@ module.exports = {
                 subtitle: 'Friendly Fire',
                 lines: ['An error occurred while fetching the leaderboard.', 'The admins have been notified.']
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     },
     buildFriendlyFireLeaderboardPayload,

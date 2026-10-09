@@ -1,6 +1,6 @@
 'use strict';
 
-const { ContextMenuCommandBuilder, ApplicationCommandType } = require('discord.js');
+const { ContextMenuCommandBuilder, ApplicationCommandType, MessageFlags } = require('discord.js');
 const { addPostFromThread } = require('../../utils/poll_add');
 
 module.exports = {
@@ -9,7 +9,7 @@ module.exports = {
         .setType(ApplicationCommandType.Message),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         // A forum post's messages live in the post's thread, so the message's
         // channelId is the thread id we index in poll_posts.
         return addPostFromThread(interaction, interaction.targetMessage.channelId);

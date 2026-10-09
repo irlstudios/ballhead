@@ -1,3 +1,4 @@
+const { MessageFlags } = require('discord.js');
 const { SlashCommandBuilder } = require('@discordjs/builders');
 const logger = require('../../utils/logger');
 const { MOD_PING_ROLES } = require('../../config/constants');
@@ -42,7 +43,7 @@ module.exports = {
             if (!isMod) {
                 return interaction.reply({
                     content: 'You do not have the required role to use this command.',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
@@ -58,7 +59,7 @@ module.exports = {
                     content: names.length > 0
                         ? `You are subscribed to: ${names.join(', ')}`
                         : 'You have no mod ping subscriptions.',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
@@ -74,21 +75,21 @@ module.exports = {
                 await subscribeToModPings(userId, roleIds);
                 return interaction.reply({
                     content: `Subscribed to pings for ${label}. You will be DMed unless you hold the pinged role.`,
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 });
             }
 
             await unsubscribeFromModPings(userId, roleIds);
             return interaction.reply({
                 content: `Unsubscribed from pings for ${label}.`,
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         } catch (error) {
             logger.error('[ModPings] Command failed:', error);
             if (!interaction.replied) {
                 await interaction.reply({
                     content: 'An error occurred while processing your request.',
-                    ephemeral: true,
+                    flags: MessageFlags.Ephemeral,
                 }).catch(() => {});
             }
         }

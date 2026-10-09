@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { getSheetsClient } = require('../../utils/sheets_cache');
@@ -29,11 +29,11 @@ module.exports = {
         if (interaction.user.id !== BOT_ADMIN_USER_ID) {
             return interaction.reply({
                 ...noticePayload('This command is restricted to the bot administrator.', { title: 'Permission Denied', subtitle: SUB }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             // Always read the sheet fresh: syncing roles from a stale cache

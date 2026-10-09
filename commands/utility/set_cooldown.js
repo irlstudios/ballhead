@@ -65,7 +65,7 @@ module.exports = {
         if (!hasRole) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Access Denied\nYou do not have permission to use this command.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         // Ensure the command runs in a guild text-based channel that supports slowmode
@@ -73,14 +73,14 @@ module.exports = {
         if (!channel || interaction.guildId == null) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Server Only\nThis command can only be used in a server channel.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         // Check capability: setRateLimitPerUser is available on text-based guild channels (not DMs)
         if (typeof channel.setRateLimitPerUser !== 'function') {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Unsupported Channel\nThis channel type does not support cooldown (slowmode).'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         const cooldownSeconds = interaction.options.getInteger('cooldown', true);
@@ -89,7 +89,7 @@ module.exports = {
         if (durationMs == null) {
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Invalid Length\nInvalid length. Use formats like 30m, 1h, or 1d.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
 
         try {
@@ -118,7 +118,7 @@ module.exports = {
                     `## ${title}\n**Cooldown:** ${cooldownSeconds} seconds\n**Length:** ${lengthInput}\n**Expires:** <t:${Math.floor(expiresAt / 1000)}:R>`
                 ));
 
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
 
             // Log this action to the specified log channel
             try {
@@ -148,7 +148,7 @@ module.exports = {
             logger.error('Error setting channel slowmode:', error);
             const container = new ContainerBuilder()
                 .addTextDisplayComponents(new TextDisplayBuilder().setContent('## Cooldown Failed\nFailed to set cooldown. Ensure I have permission to manage this channel.'));
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] });
         }
     },
 };

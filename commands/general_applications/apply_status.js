@@ -40,7 +40,7 @@ module.exports = {
     buildStatusLines,
     PROGRAMS,
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const results = await Promise.all(PROGRAMS.map(async (program) => {
             try {

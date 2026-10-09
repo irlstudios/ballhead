@@ -36,9 +36,8 @@ module.exports = {
             const block = buildTextBlock({ title: 'Role Required', subtitle: 'Official Application', lines: [`You must have <@&${LEVEL_5_ROLE_ID}>+ to apply for official.`] });
             if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
-                components: [errorContainer],
-                ephemeral: true
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [errorContainer]
             });
             return;
         }
@@ -51,9 +50,8 @@ module.exports = {
             const block = buildTextBlock({ title: 'Form Unavailable', subtitle: 'Try Again Soon', lines: ['Error loading the application form.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
-                components: [errorContainer],
-                ephemeral: true
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
+                components: [errorContainer]
             });
         }
     }

@@ -15,7 +15,7 @@ module.exports = {
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Role Required', subtitle: 'Squad Recruitment', lines: ['You must be a Squad Leader to use this command.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
         }
 
         try {
@@ -28,7 +28,7 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Active Post Found', subtitle: 'Squad Recruitment', lines: ['You already have an active recruitment post. Please close it before creating a new one.'] });
                 if (block) errorContainer.addTextDisplayComponents(block);
-                return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             }
 
             const modal = createModal('LfgSystem2Create');
@@ -38,14 +38,14 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Form Unavailable', subtitle: 'Squad Recruitment', lines: ['Error loading the application form.'] });
                 if (block) errorContainer.addTextDisplayComponents(block);
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
             }
         } catch (error) {
             logger.error('Error in find-squad-members command:', error);
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Squad Recruitment', lines: ['Error loading the application form.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-            return interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            return interaction.reply({ flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [errorContainer] });
         }
     }
 };

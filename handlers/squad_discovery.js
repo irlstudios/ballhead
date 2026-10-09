@@ -147,7 +147,7 @@ async function handleBrowseSelect(interaction) {
         return interaction.showModal(modal);
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     if (!squad) {
         return editNotice(interaction, 'That squad no longer exists.', 'Squad Not Found');
     }
@@ -182,7 +182,7 @@ async function handleApplicationModal(interaction) {
     if (action !== 'modal') {
         return;
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const userId = interaction.user.id;
     const squad = await squadDb.fetchSquadById(parseInt(squadIdStr, 10));
@@ -269,7 +269,7 @@ async function handleApplicationButton(interaction) {
 }
 
 async function handleOwnerDecision(interaction, applicationId, action) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const application = await squadDb.fetchApplicationById(applicationId);
     if (!application || application.status !== 'Pending') {
@@ -361,7 +361,7 @@ async function handleOwnerDecision(interaction, applicationId, action) {
 }
 
 async function handleWithdraw(interaction, applicationId) {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const application = await squadDb.fetchApplicationById(applicationId);
     if (!application || String(application.user_id) !== String(interaction.user.id)) {

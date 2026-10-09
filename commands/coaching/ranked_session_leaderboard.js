@@ -143,7 +143,7 @@ module.exports = {
                     subtitle: 'Ranked Sessions',
                     lines: ['No leaderboard data found.']
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
             }
 
             const data = rows.filter(row => row[0] && row[1] && !row[0].startsWith('#'));
@@ -154,7 +154,7 @@ module.exports = {
                     subtitle: 'Ranked Sessions',
                     lines: ['No leaderboard data found for this month.']
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [emptyContainer] });
             }
 
             const sortedData = data
@@ -397,7 +397,7 @@ module.exports = {
                 subtitle: 'Ranked Sessions',
                 lines: ['An error occurred while fetching the leaderboard.', 'The admins have been notified.']
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     }
 };

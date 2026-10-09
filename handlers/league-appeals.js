@@ -35,7 +35,7 @@ function staffCanManage(interaction) {
     return Boolean(interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles));
 }
 function ephemeralNotice(interaction, message, title) {
-    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), ephemeral: true });
+    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 }
 function editNotice(interaction, message, title) {
     return interaction.editReply(noticePayload(message, { title, subtitle: SUBTITLE }));
@@ -118,7 +118,7 @@ async function handleAccept(interaction, appealId) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, 'You do not have permission to review appeals.', 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // Accepting the appeal and lifting the strike are one atomic transaction so
     // an accepted appeal can never leave its strike active.
@@ -162,7 +162,7 @@ async function handleAppealsModal(interaction) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, 'You do not have permission to review appeals.', 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const notes = interaction.fields.getTextInputValue('notes');
     const rejected = await resolveAppeal(appealId, APPEAL_STATUS.REJECTED, interaction.user.id, notes);

@@ -13,7 +13,7 @@ module.exports = {
         .setDescription('Leave your current squad'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
@@ -26,7 +26,7 @@ module.exports = {
                 subtitle: 'Leave Squad',
                 lines: ['Could not retrieve necessary server information.'],
             });
-            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
             return;
         }
 
@@ -37,7 +37,7 @@ module.exports = {
                     subtitle: 'Leave Squad',
                     lines: ['Squad leaders cannot leave their squad using this command.', 'Please use `/squad disband`.'],
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
             }
 
             const removed = await squadDb.removeMembershipAnywhere(userId);
@@ -47,7 +47,7 @@ module.exports = {
                     subtitle: 'Leave Squad',
                     lines: ['You are not currently in a squad.'],
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
             }
 
             const squad = await squadDb.fetchSquadById(removed.squad_id);
@@ -108,7 +108,7 @@ module.exports = {
                 subtitle: squadName,
                 lines: [`You have left **${squadName}**.`],
             });
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
         } catch (error) {
             logger.error(`Error during /squad leave for ${userTag}:`, error);
             try {
@@ -130,7 +130,7 @@ module.exports = {
                 subtitle: 'Leave Squad',
                 lines: ['An error occurred while leaving your squad. Please try again later.'],
             });
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [replyContainer] }).catch(err => logger.error('Failed to edit reply:', err));
         }
     },
 };

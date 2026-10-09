@@ -54,7 +54,7 @@ function notice(title, lines) {
         new TextDisplayBuilder().setContent(`## ${title}`),
         new TextDisplayBuilder().setContent(Array.isArray(lines) ? lines.join('\n') : lines)
     );
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 // Creates the private practice thread and invites the roster. Returns the
@@ -112,7 +112,7 @@ module.exports = {
             .addStringOption((o) => o.setName('squad').setDescription('Squad name (required if you own multiple)').setRequired(false))),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const userId = interaction.user.id;
 
         try {
@@ -140,7 +140,6 @@ module.exports = {
                     if (thread) {
                         await thread.send({
                             ...notice('Practice Cancelled', `The scheduled practice was cancelled by <@${userId}>.`),
-                            ephemeral: undefined,
                         }).catch(() => {});
                         await thread.setArchived(true).catch(() => {});
                     }
@@ -188,7 +187,6 @@ module.exports = {
             if (logChannel) {
                 await logChannel.send({
                     ...notice('Practice Started', `**${squad.name}** started a practice session (${members.length + 1} invited).`),
-                    ephemeral: undefined,
                 }).catch(() => {});
             }
             logger.info(`[Practice] Immediate practice ${practice.id} started for ${squad.name}`);

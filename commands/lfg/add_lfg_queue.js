@@ -37,7 +37,7 @@ module.exports = {
         .addStringOption(o => o.setName('play_rules').setDescription('Play rules').setRequired(true))
         .addStringOption(o => o.setName('region').setDescription('Region').setRequired(true)),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const key = interaction.options.getString('key', true).trim();
         const name = interaction.options.getString('name', true).trim();
         const lobby_display_name = interaction.options.getString('lobby_display_name', true).trim();

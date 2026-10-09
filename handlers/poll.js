@@ -1,5 +1,7 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
+
 const { getUserBoardList, saveUserBoardList } = require('../db');
 const { moveItem, removeItem } = require('../utils/poll_logic');
 const { buildUserListReply } = require('../utils/poll_view');
@@ -21,7 +23,7 @@ const handlePollButton = async (interaction) => {
             await interaction.deferUpdate();
             return addPostToBoard(interaction, interaction.channelId, board, { broadcast: false });
         }
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         return addPostFromThread(interaction, interaction.channelId, { broadcast: false });
     }
 

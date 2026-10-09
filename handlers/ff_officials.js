@@ -32,7 +32,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         // Deferred up front: the table check, member fetch, channel post and
         // insert together can outrun Discord's 3 second interaction deadline,
         // which would show "interaction failed" over a stored application.
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (FF_APPLICATIONS_PAUSED) {
             await interaction.editReply({
@@ -40,7 +40,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     FF_APPLICATIONS_PAUSE_MESSAGE,
                     { title: 'Applications Paused', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -56,7 +55,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -71,7 +69,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -82,7 +79,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'You are already an FF Official and cannot submit another application.',
                     { title: 'Already an FF Official', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -93,7 +89,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'Only Active Officials and Senior Officials can apply to become an FF Official.',
                     { title: 'Role Required', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -112,7 +107,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -127,7 +121,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -182,7 +175,6 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
                 'Thank you for submitting your FF Official application!',
                 { title: 'Application Submitted', subtitle: 'FF Official Application' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Unexpected error in handleFfOfficialApplicationSubmission:', error);
@@ -197,12 +189,11 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
 
 const handleFfOfficialApplicationApprove = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to approve applications.', { title: 'Permission Denied', subtitle: 'FF Official Program' }),
-                ephemeral: true,
             });
             return;
         }
@@ -215,7 +206,6 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
                     'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
                     { title: 'Applicant Left', subtitle: 'FF Official Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -232,7 +222,6 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
                     'The FF Official role could not be found, so nothing was granted. The application is still open.',
                     { title: 'Role Missing', subtitle: 'FF Official Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -271,7 +260,6 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
                 'The application has been successfully accepted!',
                 { title: 'Application Accepted', subtitle: 'FF Official Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error approving FF official application:', error);
@@ -282,7 +270,6 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
                     'There was an error while accepting the application. Please try again later.',
                     { title: 'Approval Failed', subtitle: 'FF Official Program' }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -290,12 +277,11 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
 
 const handleFfOfficialApplicationReject = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         if (!FF_APPLICATION_MANAGERS.includes(interaction.user.id)) {
             await interaction.editReply({
                 ...noticePayload('You do not have permission to deny applications.', { title: 'Permission Denied', subtitle: 'FF Official Program' }),
-                ephemeral: true,
             });
             return;
         }
@@ -340,7 +326,6 @@ const handleFfOfficialApplicationReject = async (interaction) => {
                     : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: 'FF Official Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error denying FF official application:', error);
@@ -351,7 +336,6 @@ const handleFfOfficialApplicationReject = async (interaction) => {
                     'There was an error while denying the application. Please try again later.',
                     { title: 'Denial Failed', subtitle: 'FF Official Program' }
                 ),
-                ephemeral: true,
             });
         }
     }

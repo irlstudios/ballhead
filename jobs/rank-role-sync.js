@@ -2,10 +2,9 @@
 
 const { MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../utils/sheets_cache');
-const { FF_SHEET_ID, resolveActiveSeason } = require('../utils/ff_sheet');
+const { getActiveSeason, getTabRows } = require('../utils/ff_sheet');
 const logger = require('../utils/logger');
 
-const SHEET_ID = FF_SHEET_ID;
 const ROLES = [
     { min: 0, max: 3699, id: '1379598636068896828' },
     { min: 3700, max: 5099, id: '1379598705283432509' },
@@ -21,14 +20,9 @@ const PARENT_CHANNEL_ID = '1083515855985442906';
 
 async function fetchMMRData() {
     const sheets = await getSheetsClient();
-    const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID });
-    const season = await resolveActiveSeason(sheets, meta);
+    const season = await getActiveSeason(sheets);
     if (!season) return [];
-    const res = await sheets.spreadsheets.values.get({
-        spreadsheetId: SHEET_ID,
-        range: `'${season.title}'!G2:H`
-    });
-    return res.data.values || [];
+    return getTabRows(sheets, season.title, 'G2:H');
 }
 
 async function updateRoles(client) {

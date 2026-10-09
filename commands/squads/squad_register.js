@@ -57,7 +57,7 @@ function notice(title, lines) {
         new TextDisplayBuilder().setContent(`## ${title}`),
         new TextDisplayBuilder().setContent(lines)
     );
-    return { flags: MessageFlags.IsComponentsV2, components: [container], ephemeral: true };
+    return { flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral, components: [container] };
 }
 
 const GATE_COPY = {
@@ -90,7 +90,7 @@ module.exports = {
     registrationGate,
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const hasRequiredRole = interaction.member.roles.cache.has(LEVEL_5_ROLE_ID);
         if (!hasRequiredRole) {

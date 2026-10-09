@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { noticePayload } = require('../../utils/ui');
 const logger = require('../../utils/logger');
 const {
@@ -107,7 +107,7 @@ module.exports = {
         if (!interaction.inGuild()) {
             return interaction.reply({
                 ...noticePayload('Use this command in the server.', { title: 'Server Only', subtitle: SUBTITLE }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
@@ -120,14 +120,14 @@ module.exports = {
             if (!role) {
                 return interaction.reply({
                     ...noticePayload('You do not have that role. Pick one from the list the command suggests.', { title: 'Role Not on Your Account', subtitle: SUBTITLE }),
-                    ephemeral: true,
+                    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 });
             }
 
             if (!isRemovable(role, member, await botHighestPosition(interaction.guild))) {
                 return interaction.reply({
                     ...noticePayload(`**${role.name}** is managed by staff or another Ballhead system, so it cannot be removed here.`, { title: 'Role Protected', subtitle: SUBTITLE }),
-                    ephemeral: true,
+                    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 });
             }
 
@@ -136,13 +136,13 @@ module.exports = {
 
             return interaction.reply({
                 ...noticePayload(`Removed **${role.name}** from your account.`, { title: 'Role Removed', subtitle: SUBTITLE }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         } catch (error) {
             logger.error(`[Role Customize] Failed to remove role ${roleId} for ${interaction.user.id}:`, error);
             return interaction.reply({
                 ...noticePayload('Could not update your roles. Please try again later.', { title: 'Request Failed', subtitle: SUBTITLE }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             }).catch(() => {});
         }
     },

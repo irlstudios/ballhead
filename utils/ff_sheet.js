@@ -8,7 +8,16 @@
 // otherwise a pre-created tab blanks out stats, the leaderboard and rank sync
 // for the weeks between the tab being made and the season opening.
 
+const { getCachedValues } = require('./sheets_cache');
+
 const FF_SHEET_ID = '1yxGmKTN27i9XtOefErIXKgcbfi1EXJHYWH7wZn_Cnok';
+
+// Season resolution costs two read requests (metadata plus the probe
+// batchGet) and every FF surface paid them per call. A burst of /ff stats on
+// 2026-09-27 blew through the 60 reads/min quota, so the answer is memoized;
+// a new season tab only has to show up within this window.
+const ACTIVE_SEASON_TTL_MS = 10 * 60 * 1000;
+const TAB_ROWS_TTL_MS = 60 * 1000;
 
 const SEASON_TAB_RE = /^Season (\d+)$/;
 
@@ -44,4 +53,35 @@ async function resolveActiveSeason(sheets, metadata) {
     return populated || seasons[0];
 }
 
-module.exports = { FF_SHEET_ID, listSeasonTabs, resolveActiveSeason };
+let activeSeasonMemo = null;
+
+async function getActiveSeason(sheets, { now = Date.now() } = {}) {
+    if (activeSeasonMemo && activeSeasonMemo.expiresAt > now) {
+        return activeSeasonMemo.value;
+    }
+    const metadata = await sheets.spreadsheets.get({ spreadsheetId: FF_SHEET_ID });
+    const value = await resolveActiveSeason(sheets, metadata);
+    activeSeasonMemo = { value, expiresAt: now + ACTIVE_SEASON_TTL_MS };
+    return value;
+}
+
+function resetActiveSeasonCache() {
+    activeSeasonMemo = null;
+}
+
+// Rows of one tab, e.g. getTabRows(sheets, 'Season 45', 'A:H'). Cached briefly
+// so a burst of lookups costs a single read request.
+async function getTabRows(sheets, title, columns, { ttlMs = TAB_ROWS_TTL_MS } = {}) {
+    const range = `'${title}'!${columns}`;
+    const results = await getCachedValues({ sheets, spreadsheetId: FF_SHEET_ID, ranges: [range], ttlMs });
+    return results.get(range) || [];
+}
+
+module.exports = {
+    FF_SHEET_ID,
+    listSeasonTabs,
+    resolveActiveSeason,
+    getActiveSeason,
+    resetActiveSeasonCache,
+    getTabRows,
+};

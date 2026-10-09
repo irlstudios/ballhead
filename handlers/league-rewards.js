@@ -32,7 +32,7 @@ function staffCanManage(interaction) {
     return Boolean(interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageRoles));
 }
 function ephemeralNotice(interaction, message, title) {
-    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), ephemeral: true });
+    return interaction.reply({ ...noticePayload(message, { title, subtitle: SUBTITLE }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
 }
 function editNotice(interaction, message, title) {
     return interaction.editReply(noticePayload(message, { title, subtitle: SUBTITLE }));
@@ -117,7 +117,7 @@ async function handleApprove(interaction, id) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, 'You do not have permission to review reward requests.', 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const approved = await resolveRewardRequest(id, REWARD_STATUS.APPROVED, interaction.user.id, null, FULFILLMENT.AWAITING);
     if (!approved) {
         return editNotice(interaction, 'This request has already been reviewed.', 'Already Handled');
@@ -137,7 +137,7 @@ async function handleFulfill(interaction, id) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, 'You do not have permission to fulfil reward requests.', 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const fulfilled = await markRewardFulfilled(id, interaction.user.id);
     if (!fulfilled) {
         return editNotice(interaction, 'This request is not in an approved state.', 'Not Fulfillable');
@@ -175,7 +175,7 @@ async function handleRewardsModal(interaction) {
     if (!staffCanManage(interaction)) {
         return ephemeralNotice(interaction, 'You do not have permission to review reward requests.', 'Permission Denied');
     }
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const notes = interaction.fields.getTextInputValue('notes');
     const denied = await resolveRewardRequest(id, REWARD_STATUS.DENIED, interaction.user.id, notes, FULFILLMENT.NONE);
     if (!denied) {

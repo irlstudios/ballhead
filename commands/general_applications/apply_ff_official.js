@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
 const { noticePayload } = require('../../utils/ui');
 const { FF_OFFICIAL_ELIGIBLE_ROLE_IDS, FF_OFFICIAL_ROLE_ID, FF_APPLICATIONS_PAUSED, FF_APPLICATIONS_PAUSE_MESSAGE } = require('../../config/constants');
@@ -14,7 +14,7 @@ module.exports = {
                     FF_APPLICATIONS_PAUSE_MESSAGE,
                     { title: 'Applications Paused', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -27,7 +27,7 @@ module.exports = {
                     'You are already an FF Official and cannot submit another application.',
                     { title: 'Already an FF Official', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -38,7 +38,7 @@ module.exports = {
                     'Only Active Officials and Senior Officials can apply to become an FF Official.',
                     { title: 'Role Required', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -52,7 +52,7 @@ module.exports = {
                     'Error loading the application form. Please try again soon.',
                     { title: 'Form Unavailable', subtitle: 'FF Official Application' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     }

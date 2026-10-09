@@ -220,7 +220,7 @@ const handleLfgButton = async (interaction) => {
         logger.error('Button Error', error);
         try {
             if (!interaction.deferred && !interaction.replied) {
-                await interaction.reply({ ...noticePayload('An error occurred while processing this button.', { title: 'Action Failed', subtitle: 'LFG Queue' }), ephemeral: true });
+                await interaction.reply({ ...noticePayload('An error occurred while processing this button.', { title: 'Action Failed', subtitle: 'LFG Queue' }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
             } else {
                 await interaction.editReply(noticePayload('An error occurred while processing this button.', { title: 'Action Failed', subtitle: 'LFG Queue' }));
             }

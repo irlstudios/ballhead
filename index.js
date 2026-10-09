@@ -102,6 +102,9 @@ try {
             client.on(event.name, safeExecute);
         }
     }
+    // A dozen event modules legitimately listen on messageCreate; Node warns
+    // past ten listeners as a leak heuristic, so raise the cap to what we load.
+    client.setMaxListeners(Math.max(client.getMaxListeners(), eventFiles.length + 5));
 } catch (error) {
     logger.error('Error reading event files:', error);
 }

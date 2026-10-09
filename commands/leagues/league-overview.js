@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder, PermissionFlagsBits, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, PermissionFlagsBits, PermissionsBitField, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeagueOverviewStats } = require('../../db');
@@ -20,11 +20,11 @@ module.exports = {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
             return interaction.reply({
                 ...noticePayload('You do not have permission to view the league overview.', { title: 'Permission Denied', subtitle: SUB }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const leagues = await fetchLeagueOverviewStats();
@@ -36,7 +36,7 @@ module.exports = {
                 { title: `League Overview (${leagues.length})`, subtitle: SUB }
             ));
             for (const chunk of chunks.slice(1)) {
-                await interaction.followUp({ ...noticePayload(chunk, { subtitle: SUB }), ephemeral: true });
+                await interaction.followUp({ ...noticePayload(chunk, { subtitle: SUB }), flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
             }
             return undefined;
         } catch (error) {

@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, SeparatorSpacingSize } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
-const { FF_SHEET_ID, resolveActiveSeason } = require('../../utils/ff_sheet');
+const { getActiveSeason, getTabRows } = require('../../utils/ff_sheet');
 const logger = require('../../utils/logger');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
@@ -22,8 +22,6 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
     }
     return new TextDisplayBuilder().setContent(parts.join('\n'));
 }
-
-const sheetId = FF_SHEET_ID;
 
 function buildNoticeContainer({ title, subtitle, lines}) {
     const container = new ContainerBuilder();
@@ -61,8 +59,7 @@ module.exports = {
 
         const sheets = await getSheetsClient();
 
-        const metadata = await sheets.spreadsheets.get({ spreadsheetId: sheetId });
-        const activeSeason = await resolveActiveSeason(sheets, metadata);
+        const activeSeason = await getActiveSeason(sheets);
 
         if (!activeSeason) {
             const emptyContainer = buildNoticeContainer({
@@ -74,12 +71,7 @@ module.exports = {
         }
 
         const latestSeason = activeSeason.title;
-        const range = `'${latestSeason}'!A:H`;
-        const sheet = await sheets.spreadsheets.values.get({
-            spreadsheetId: sheetId,
-            range });
-
-        const rows = sheet.data.values;
+        const rows = await getTabRows(sheets, latestSeason, 'A:H');
         if (!rows || rows.length < 2) {
             const emptyContainer = buildNoticeContainer({
                 title: 'Stats Unavailable',
@@ -97,17 +89,13 @@ module.exports = {
 
         if (!userRow) {
             // Check the "Discord IDs" tab for pending signups
-            const idSheet = await sheets.spreadsheets.values.get({
-                spreadsheetId: sheetId,
-                range: '\'Discord IDs\'!A:C' });
-            const idRows = idSheet.data.values || [];
+            const idRows = await getTabRows(sheets, 'Discord IDs', 'A:C');
             const idIndex = 1;
             const pendingEntry = idRows.find(row => row[idIndex] === discordId);
             if (pendingEntry) {
                 return interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent('Your signup was received! Stats will be linked to your Discord ID soon.')],
-                    ephemeral: true
+                    components: [new TextDisplayBuilder().setContent('Your signup was received! Stats will be linked to your Discord ID soon.')]
                 });
             }
             if (user.id === interaction.user.id) {
@@ -116,14 +104,12 @@ module.exports = {
                     components: [
                         new TextDisplayBuilder().setContent('You haven\'t signed up yet.'),
                         new TextDisplayBuilder().setContent('Register here: https://forms.gle/DKLWrwU9BzBMiT9X7')
-                    ],
-                    ephemeral: true
+                    ]
                 });
             } else {
                 return interaction.editReply({
                     flags: MessageFlags.IsComponentsV2,
-                    components: [new TextDisplayBuilder().setContent(`${user.username} hasn't signed up yet.`)],
-                    ephemeral: true
+                    components: [new TextDisplayBuilder().setContent(`${user.username} hasn't signed up yet.`)]
                 });
             }
         }

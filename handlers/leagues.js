@@ -28,7 +28,7 @@ const {
 } = require('../config/constants');
 
 const handleApplyBaseLeagueModal = async (interaction) => {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const leagueName = interaction.fields.getTextInputValue('league-name');
     const discordInvite = interaction.fields.getTextInputValue('discord-invite');
@@ -212,7 +212,7 @@ const handleApplyBaseLeagueModal = async (interaction) => {
             { title: 'Application Failed', subtitle: 'Base League' }
         );
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ ...errorPayload, ephemeral: true });
+            await interaction.reply({ ...errorPayload, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral });
         } else {
             await interaction.editReply(errorPayload);
         }
@@ -220,7 +220,7 @@ const handleApplyBaseLeagueModal = async (interaction) => {
 };
 
 const handleApproveLeague = async (interaction) => {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     let claimedMessageId = null;
     try {
@@ -385,7 +385,7 @@ const handleApproveLeague = async (interaction) => {
 };
 
 const handleDenyLeagueModal = async (interaction) => {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const denialReason = interaction.fields.getTextInputValue('denial-reason');
@@ -461,7 +461,7 @@ const handleDenyLeagueButton = async (interaction) => {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageRoles)) {
         return await interaction.reply({
             ...noticePayload('You do not have permission to deny league applications.', { title: 'Permission Denied', subtitle: 'League Applications' }),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     }
 

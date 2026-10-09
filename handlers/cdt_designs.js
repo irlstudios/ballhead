@@ -12,7 +12,7 @@ const { getDesignFiles } = require('../utils/cdt_storage');
 // prefix, so lead file swaps take effect instantly.
 const handleCdtDownloadButton = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const designId = Number.parseInt(interaction.customId.split('_')[1], 10);
         const design = Number.isInteger(designId) ? await getCdtDesign(designId) : null;
@@ -22,7 +22,6 @@ const handleCdtDownloadButton = async (interaction) => {
                     'This design is no longer available.',
                     { title: 'Design Unavailable', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -39,7 +38,6 @@ const handleCdtDownloadButton = async (interaction) => {
                     'The files for this design could not be found. Please let a team lead know.',
                     { title: 'Files Missing', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -72,7 +70,6 @@ const handleCdtDownloadButton = async (interaction) => {
                     'There was an error fetching the files. Please try again.',
                     { title: 'Download Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             }).catch(() => {});
         }
     }

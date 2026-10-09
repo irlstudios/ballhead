@@ -68,13 +68,16 @@ module.exports = {
         .setDescription('List and log officials with specific roles into Google Sheets'),
 
     async execute(interaction) {
+        // Fetching every guild member and writing the sheet takes well over
+        // Discord's 3s reply window; acknowledge first.
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
             const guild = interaction.guild;
             if (!guild) {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'Guild Missing', subtitle: 'Officials Sync', lines: ['Bot is not in the server.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                 return;
             }
 
@@ -102,7 +105,7 @@ module.exports = {
                 const errorContainer = new ContainerBuilder();
                 const block = buildTextBlock({ title: 'No Officials Found', subtitle: 'Officials Sync', lines: ['No officials found.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-                await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+                await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
                 return;
             }
 
@@ -111,13 +114,13 @@ module.exports = {
             const successContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Officials Updated', subtitle: 'Google Sheets Sync', lines: ['Officials list has been updated in Google Sheets.'] });
             if (block) successContainer.addTextDisplayComponents(block);
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
         } catch (error) {
             logger.info('Error executing the list_officials command', { error });
             const errorContainer = new ContainerBuilder();
             const block = buildTextBlock({ title: 'Request Failed', subtitle: 'Officials Sync', lines: ['An error occurred while processing your request.'] });
             if (block) errorContainer.addTextDisplayComponents(block);
-            await interaction.reply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true });
+            await interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] });
         }
     }
 };

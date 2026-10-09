@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { ensureCdtDesignTables, cdtDownloadStats } = require('../../db');
@@ -11,7 +11,7 @@ module.exports = {
         .setName('cdt-stats')
         .setDescription('Show unique downloads per published design (team leads)'),
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (await rejectNonLead(interaction)) {
             return;
         }
@@ -29,7 +29,6 @@ module.exports = {
 
             await interaction.editReply({
                 ...noticePayload(lines, { title: 'Design Downloads (Top 20)', subtitle: SUBTITLE }),
-                ephemeral: true,
             });
         } catch (error) {
             logger.error('Error fetching CDT stats:', error);
@@ -38,7 +37,6 @@ module.exports = {
                     'There was an error fetching download stats. Please try again.',
                     { title: 'Stats Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             }).catch(() => {});
         }
     },

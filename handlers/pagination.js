@@ -98,7 +98,7 @@ const handleQualityScorePagination = async (interaction, direction) => {
             logger.error(`No pagination data found for message ID: ${messageId}`);
             return await interaction.followUp({
                 ...noticePayload('Pagination data not found or has expired.', { title: 'Pagination Expired', subtitle: 'Quality Scores' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
 
@@ -231,7 +231,7 @@ const handlePagination1 = async (interaction, customId) => {
         try {
             await interaction.followUp({
                 ...noticePayload('An error occurred while changing pages. Please try running the command again.', { title: 'Pagination Error', subtitle: 'Squad List' }),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         } catch (followUpError) {
             logger.error('Failed to send follow-up error message:', followUpError);

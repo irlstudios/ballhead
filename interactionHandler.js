@@ -70,7 +70,7 @@ const interactionHandler = async (interaction, client) => {
                     'We encountered an error while processing your request. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.',
                     { title: 'Request Failed', subtitle: 'Interaction Error' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             }).catch((err) => {
                 if (err.code === 10062) {
                     logger.error('Interaction expired and cannot be replied to.');
@@ -90,7 +90,7 @@ const interactionHandler = async (interaction, client) => {
                 { title: 'Request Failed', subtitle: 'Interaction Error' }
             );
             if (interaction.isMessageComponent() && interaction.ephemeral === null) {
-                await interaction.followUp({ ...errorNotice, ephemeral: true })
+                await interaction.followUp({ ...errorNotice, flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral })
                     .catch((err) => logger.error('Failed to follow up with error notice:', err));
             } else {
                 await interaction.editReply(errorNotice)
@@ -150,7 +150,7 @@ const handleCommand = async (interaction, client) => {
                     `You are on cooldown for the \`/${commandLabel}\` command. Please wait ${timeLeft} second(s) before using it again.`,
                     { title: 'Cooldown Active', subtitle: 'Command Cooldown' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     }
@@ -183,7 +183,7 @@ const handleCommand = async (interaction, client) => {
                     'An error occurred while executing the command.',
                     { title: 'Command Error', subtitle: 'Execution Failed' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             }).catch((err) => {
                 if (err.code === 10062) {
                     logger.error('Interaction expired and cannot be replied to.');
@@ -219,7 +219,7 @@ const handleSelectMenu = async (interaction) => {
                     'We encountered an error while processing your modal submission. \n -# if this issue persists please reach out to support to escalate your issue to the developers \n -# Do note, this error has been logged internally and will be investigated.',
                     { title: 'Modal Error', subtitle: 'Submission Failed' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
         return;
@@ -279,7 +279,7 @@ const handleModalSubmit = async (interaction) => {
     logger.warn('Unhandled modal action:', action);
     await interaction.reply({
         ...noticePayload('This modal is not recognized.', { title: 'Unknown Modal', subtitle: 'Modal Submission' }),
-        ephemeral: true,
+        flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
     });
 };
 
@@ -393,7 +393,7 @@ const handleButton = async (interaction, client) => {
                     'We encountered an error while processing your button interaction. \n-# if this issue persists please reach out to support to escalate your issue to the developers \n-# Do note, this error has been logged internally and will be investigated.',
                     { title: 'Button Error', subtitle: 'Interaction Failed' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     } catch (error) {
@@ -404,7 +404,7 @@ const handleButton = async (interaction, client) => {
                     'An error occurred while processing your button interaction.',
                     { title: 'Button Error', subtitle: 'Interaction Failed' }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     }
@@ -442,7 +442,7 @@ const handleFFLeaderboardSelect = async (interaction) => {
         }
         await interaction.followUp({
             ...noticePayload('An error occurred while updating the leaderboard.', { title: 'Leaderboard Error', subtitle: 'Friendly Fire' }),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         }).catch(e => logger.error('FF followUp failed:', e));
     }
 };
@@ -454,7 +454,7 @@ const handleSquadsPagination = async (interaction, direction) => {
     if (!paginationData) {
         await interaction.followUp({
             ...noticePayload('This pagination session has expired. Please run `/squad list` again.', { title: 'Session Expired', subtitle: 'Squads List' }),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         }).catch(() => {});
         return;
     }

@@ -32,12 +32,11 @@ module.exports = {
             // Check admin permission if trying to clear
             if (shouldClear && !isAdmin(interaction.member)) {
                 await interaction.reply({
-                    flags: MessageFlags.IsComponentsV2,
+                    flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                     components: [
                         new TextDisplayBuilder().setContent('## Access Denied'),
                         new TextDisplayBuilder().setContent('You do not have permission to clear the cache.')
-                    ],
-                    ephemeral: true
+                    ]
                 });
                 return;
             }
@@ -60,23 +59,21 @@ module.exports = {
             ];
 
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 components: [
                     new TextDisplayBuilder().setContent('## Cache Statistics'),
                     new TextDisplayBuilder().setContent(statsLines.join('\n')),
                     new TextDisplayBuilder().setContent(`-# ${shouldClear ? 'Cache cleared' : 'Cache warming every 15 minutes'}`)
-                ],
-                ephemeral: true
+                ]
             });
         } catch (error) {
             logger.error('Error in cache-stats command:', error);
             await interaction.reply({
-                flags: MessageFlags.IsComponentsV2,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
                 components: [
                     new TextDisplayBuilder().setContent('## Cache Stats Failed'),
                     new TextDisplayBuilder().setContent('An error occurred while fetching cache statistics.')
-                ],
-                ephemeral: true
+                ]
             });
         }
     }

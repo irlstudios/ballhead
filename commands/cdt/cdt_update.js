@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { updateCdtDesign, commitCdtFileVersion } = require('../../db');
@@ -42,7 +42,7 @@ module.exports = {
             .setDescription('Message link or attachment link(s) with the new files (replaces all served files)')),
     autocomplete: respondDesignAutocomplete,
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         if (await rejectNonLead(interaction)) {
             return;
         }
@@ -64,7 +64,6 @@ module.exports = {
                         'Provide at least one of: title, description, credit, or files.',
                         { title: 'Nothing To Update', subtitle: SUBTITLE }
                     ),
-                    ephemeral: true,
                 });
                 return;
             }
@@ -76,7 +75,6 @@ module.exports = {
                 if (filesResult.error) {
                     await interaction.editReply({
                         ...noticePayload(filesResult.error, { title: 'Bad Files Link', subtitle: SUBTITLE }),
-                        ephemeral: true,
                     });
                     return;
                 }
@@ -95,7 +93,6 @@ module.exports = {
                             'Someone else updated this design\'s files at the same time. Re-run the command to apply yours.',
                             { title: 'Update Conflict', subtitle: SUBTITLE }
                         ),
-                        ephemeral: true,
                     });
                     return;
                 }
@@ -150,7 +147,6 @@ module.exports = {
                     ],
                     { title: 'Design Updated', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             });
         } catch (error) {
             logger.error('Error updating CDT design:', error);
@@ -159,7 +155,6 @@ module.exports = {
                     'There was an error updating the design. Please try again.',
                     { title: 'Update Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
             }).catch(() => {});
         }
     },

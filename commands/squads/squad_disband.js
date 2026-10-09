@@ -112,7 +112,7 @@ module.exports = {
         ),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.user.id;
         const userTag = interaction.user.tag;
@@ -128,7 +128,7 @@ module.exports = {
                     subtitle: 'Squad Selection',
                     lines: [error],
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
             }
 
             // A Casual+Competitive pair shares its name and disbands together,
@@ -145,7 +145,7 @@ module.exports = {
                     subtitle: 'Disband Squad',
                     lines: ['Your squad no longer exists. No changes were made.'],
                 });
-                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer], ephemeral: true });
+                return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [infoContainer] });
             }
 
             await teardownDisbandedSquads(interaction.client, guild, disbanded);
@@ -173,7 +173,7 @@ module.exports = {
                 ],
             });
             if (block) successContainer.addTextDisplayComponents(block);
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer], ephemeral: true });
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [successContainer] });
         } catch (error) {
             logger.error('Error during the disband-squad command execution:', error);
             const errorContainer = buildNoticeContainer({
@@ -181,7 +181,7 @@ module.exports = {
                 subtitle: 'Disband Squad',
                 lines: [`An error occurred while disbanding the squad. ${error.message || 'Please try again later.'}`],
             });
-            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer], ephemeral: true }).catch(err => logger.error('Failed to edit reply:', err));
+            return interaction.editReply({ flags: MessageFlags.IsComponentsV2, components: [errorContainer] }).catch(err => logger.error('Failed to edit reply:', err));
         }
     },
 };

@@ -45,7 +45,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'You have already submitted an application. Please wait for it to be reviewed.',
                     { title: 'Application Already Submitted', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -60,7 +60,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'Failed to fetch your member data.',
                     { title: 'Member Lookup Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -71,7 +71,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'You are already an EMH and cannot submit another application.',
                     { title: 'Already an EMH', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -90,7 +90,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'There was an issue processing your form submission.',
                     { title: 'Form Error', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -101,7 +101,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'The video link must be a full YouTube URL (youtube.com or youtu.be). Please run /apply emh again with a valid link.',
                     { title: 'Invalid YouTube Link', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -114,7 +114,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                     'There was an issue submitting your application.',
                     { title: 'Submission Failed', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -167,7 +167,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
                 'Thank you for submitting your EMH application!',
                 { title: 'Application Submitted', subtitle: SUBTITLE }
             ),
-            ephemeral: true,
+            flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
         });
     } catch (error) {
         logger.error('Unexpected error in handleEmhApplicationSubmission:', error);
@@ -176,7 +176,7 @@ const handleEmhApplicationSubmission = async (interaction) => {
 
 const handleEmhApplicationApprove = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -186,7 +186,6 @@ const handleEmhApplicationApprove = async (interaction) => {
                     'This applicant has left the server, so the application cannot be accepted. Use Deny to close it.',
                     { title: 'Applicant Left', subtitle: 'EMH Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -199,7 +198,6 @@ const handleEmhApplicationApprove = async (interaction) => {
                     'The EMH host role could not be found, so the application was left untouched.',
                     { title: 'Approval Failed', subtitle: 'EMH Program' }
                 ),
-                ephemeral: true,
             });
             return;
         }
@@ -243,7 +241,6 @@ const handleEmhApplicationApprove = async (interaction) => {
                 'The application has been successfully accepted!',
                 { title: 'Application Accepted', subtitle: 'EMH Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error approving EMH application:', error);
@@ -254,7 +251,6 @@ const handleEmhApplicationApprove = async (interaction) => {
                     'There was an error while accepting the application. Please try again later.',
                     { title: 'Approval Failed', subtitle: 'EMH Program' }
                 ),
-                ephemeral: true,
             });
         }
     }
@@ -262,7 +258,7 @@ const handleEmhApplicationApprove = async (interaction) => {
 
 const handleEmhApplicationReject = async (interaction) => {
     try {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -304,7 +300,6 @@ const handleEmhApplicationReject = async (interaction) => {
                     : 'The application has been denied. The applicant had already left the server, so no DM was sent.',
                 { title: 'Application Denied', subtitle: 'EMH Program' }
             ),
-            ephemeral: true,
         });
     } catch (error) {
         logger.error('Error denying EMH application:', error);
@@ -315,7 +310,6 @@ const handleEmhApplicationReject = async (interaction) => {
                     'There was an error while denying the application. Please try again later.',
                     { title: 'Denial Failed', subtitle: 'EMH Program' }
                 ),
-                ephemeral: true,
             });
         }
     }

@@ -127,7 +127,7 @@ module.exports = {
         .setDescription('Disband a league you own. This cannot be undone.'),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const callerId = interaction.user.id;

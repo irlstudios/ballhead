@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const { createModal } = require('../../modals/modalFactory');
 const { noticePayload } = require('../../utils/ui');
 const { HOST_ROLE_ID } = require('../../config/constants');
@@ -18,7 +18,7 @@ module.exports = {
                     'You are already an EMH and cannot submit another application.',
                     { title: 'Already an EMH', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
             return;
         }
@@ -32,7 +32,7 @@ module.exports = {
                     'Error loading the application form. Please try again soon.',
                     { title: 'Form Unavailable', subtitle: SUBTITLE }
                 ),
-                ephemeral: true,
+                flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
         }
     }

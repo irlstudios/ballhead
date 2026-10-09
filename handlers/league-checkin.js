@@ -1,5 +1,7 @@
 'use strict';
 
+const { MessageFlags } = require('discord.js');
+
 const logger = require('../utils/logger');
 const { noticePayload } = require('../utils/ui');
 const {
@@ -51,7 +53,7 @@ async function restoreCoOwnerRoles(client, league) {
 }
 
 const handleLeagueCheckinModal = async (interaction) => {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     try {
         const activityNotes = interaction.fields.getTextInputValue('activity-notes') || '';

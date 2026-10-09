@@ -1,6 +1,6 @@
 'use strict';
 
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const logger = require('../../utils/logger');
 const { noticePayload } = require('../../utils/ui');
 const { fetchLeaguesByOwner, fetchLeaguesByCoOwner, updateLeagueContentSettings } = require('../../db');
@@ -16,7 +16,7 @@ module.exports = {
         .addStringOption((o) => o.setName('hashtag').setDescription('Content hashtag, must start with #gc (e.g. #gcskyballers)').setRequired(false).setMaxLength(31)),
 
     async execute(interaction) {
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         try {
             const sport = interaction.options.getString('sport');
