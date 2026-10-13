@@ -152,6 +152,10 @@ const TOP_EVENT_WINNER_ROLE_ID = process.env.TOP_EVENT_WINNER_ROLE_ID ?? '128463
 // steps from here, which is what makes "bi-weekly" a fixed calendar and not
 // whenever the job happened to last run.
 const EVENT_WINNER_CYCLE_ANCHOR = process.env.EVENT_WINNER_CYCLE_ANCHOR || '2026-09-14';
+// EMH leads hand out EMH T2 off each cycle's result and the all-time tally,
+// which is a formula tab over Session Stats in the EMH sheet.
+const EMH_LEADS_CHANNEL_ID = process.env.EMH_LEADS_CHANNEL_ID || '1372594741761544373';
+const EVENT_WINNER_TALLY_URL = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_HOST_SESSIONS}/edit#gid=2055652839`;
 
 // Role IDs - Squads
 const SQUAD_LEADER_ROLE_ID = '1218468103382499400';
@@ -350,6 +354,8 @@ module.exports = {
     EVENT_WINNER_CHANNEL_ID,
     TOP_EVENT_WINNER_ROLE_ID,
     EVENT_WINNER_CYCLE_ANCHOR,
+    EMH_LEADS_CHANNEL_ID,
+    EVENT_WINNER_TALLY_URL,
     SQUAD_LEADER_ROLE_ID,
     COMPETITIVE_SQUAD_OWNER_ROLE_ID,
     SQUAD_OWNER_ROLES,

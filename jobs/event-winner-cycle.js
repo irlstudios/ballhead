@@ -1,8 +1,8 @@
 'use strict';
 
 // Bi-weekly Top Event Winner cycle: counts the session wins EMH hosts recorded
-// with /room event winner, announces the standings, and moves the role to
-// whoever led the closed cycle.
+// with /room event winner, announces the standings (publicly and to the EMH
+// leads), and moves the role to whoever led the closed cycle.
 //
 // Runs daily and does nothing until a cycle has closed and not yet been
 // claimed, so the schedule is a fixed 14-day calendar rather than a function of
@@ -15,6 +15,8 @@ const {
     GYM_CLASS_GUILD_ID,
     EVENT_WINNER_CHANNEL_ID,
     TOP_EVENT_WINNER_ROLE_ID,
+    EMH_LEADS_CHANNEL_ID,
+    EVENT_WINNER_TALLY_URL,
 } = require('../config/constants');
 
 const ROLE_REASON = 'Top Event Winner cycle';
@@ -75,6 +77,20 @@ const moveRole = async ({ guild, championId, previousWinnerId }) => {
     }
 };
 
+// Never throws, for the same reason as moveRole. Nobody is pinged: the leads
+// only need to know who won, not to notify the winner a second time.
+const postToLeads = async (client, announcement) => {
+    const channel = await client.channels.fetch(EMH_LEADS_CHANNEL_ID).catch(() => null);
+    if (!channel?.isTextBased?.()) {
+        logger.error(`[Event Winner] EMH leads channel ${EMH_LEADS_CHANNEL_ID} is missing or the bot cannot see it; the leads were not told.`);
+        return;
+    }
+    await channel.send({
+        content: `${announcement}\n\nAll-time event win tally: <${EVENT_WINNER_TALLY_URL}>`,
+        allowedMentions: { parse: [] },
+    }).catch((error) => logger.error('[Event Winner] Failed to post the result to the EMH leads channel:', error.message));
+};
+
 const runEventWinnerCycle = async (client, { todayISO = todayLocal() } = {}) => {
     const cycle = completedCycle(todayISO);
     if (!cycle) return null;
@@ -116,6 +132,7 @@ const runEventWinnerCycle = async (client, { todayISO = todayLocal() } = {}) => 
     // The cycle is already claimed and will not be retried, so the post is
     // logged in full and can be pasted by hand.
     }).catch((error) => logger.error(`[Event Winner] Failed to post the announcement, send it manually:\n${content}`, error.message));
+    await postToLeads(client, content);
 
     const guild = await client.guilds.fetch(GYM_CLASS_GUILD_ID).catch(() => null);
     if (guild) {

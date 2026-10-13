@@ -19,6 +19,7 @@ function resetState() {
     state.roleMemberIds = [];
     state.posts = [];
     state.channelMissing = false;
+    state.leadsMissing = false;
     state.sendFails = false;
     state.grantFails = false;
     state.roleAboveBot = false;
@@ -37,6 +38,9 @@ installMock('../utils/event_winner_queries', {
 });
 
 const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
+const { EVENT_WINNER_CHANNEL_ID, EMH_LEADS_CHANNEL_ID } = require('../config/constants');
+
+const postsTo = (channelId) => state.posts.filter((post) => post.channelId === channelId);
 
 const roleRemovals = [];
 const roleAdds = [];
@@ -57,11 +61,11 @@ const makeMember = (id) => ({
 
 const clientStub = () => ({
     channels: {
-        fetch: async () => (state.channelMissing ? null : {
+        fetch: async (channelId) => (state.channelMissing || (state.leadsMissing && channelId === EMH_LEADS_CHANNEL_ID) ? null : {
             isTextBased: () => true,
             send: async (payload) => {
                 if (state.sendFails) throw new Error('nope');
-                state.posts.push(payload);
+                state.posts.push({ channelId, ...payload });
             },
         }),
     },
@@ -103,11 +107,32 @@ test('the top winner is announced and the cycle is claimed', async () => {
     const result = await run('2026-09-28');
     assert.strictEqual(result.champion.userId, '111');
     assert.deepStrictEqual(calls.find((c) => c[0] === 'claim'), ['claim', '2026-09-14', '111', 3]);
-    assert.strictEqual(state.posts.length, 1);
-    assert.match(state.posts[0].content, /<@111>/);
+    const [post] = postsTo(EVENT_WINNER_CHANNEL_ID);
+    assert.match(post.content, /<@111>/);
     // Only the listed members may be pinged, so a stray role or everyone in the
     // text cannot turn the post into a mass mention.
-    assert.deepStrictEqual(state.posts[0].allowedMentions, { users: ['111', '222'] });
+    assert.deepStrictEqual(post.allowedMentions, { users: ['111', '222'] });
+});
+
+test('the EMH leads get the result and the tally link without anyone being pinged', async () => {
+    resetState();
+    state.standings = [{ userId: '111', userName: 'cented', wins: 3 }, { userId: '222', wins: 1 }];
+    await run('2026-09-28');
+    const leadPosts = postsTo(EMH_LEADS_CHANNEL_ID);
+    assert.strictEqual(leadPosts.length, 1);
+    assert.match(leadPosts[0].content, /<@111>/);
+    assert.match(leadPosts[0].content, /docs\.google\.com\/spreadsheets/);
+    assert.deepStrictEqual(leadPosts[0].allowedMentions, { parse: [] });
+});
+
+test('a leads channel the bot cannot see still lets the public post and the role go through', async () => {
+    resetState();
+    state.standings = [{ userId: '111', wins: 2 }];
+    state.leadsMissing = true;
+    const result = await run('2026-09-28');
+    assert.strictEqual(result.champion.userId, '111');
+    assert.strictEqual(postsTo(EVENT_WINNER_CHANNEL_ID).length, 1);
+    assert.ok(calls.some((c) => c[0] === 'error' && c[1].includes('leads')));
 });
 
 // The claim happens before the post, so a retry after a failed send cannot
@@ -222,6 +247,6 @@ test('a role the bot cannot manage is reported as a hierarchy problem', async ()
     assert.deepStrictEqual(roleRemovals, []);
     assert.ok(calls.some((c) => c[0] === 'error' && c[1].includes('above the bot')));
     // The post still goes out: the standings do not depend on the role.
-    assert.strictEqual(state.posts.length, 1);
+    assert.strictEqual(postsTo(EVENT_WINNER_CHANNEL_ID).length, 1);
     delete process.env.TOP_EVENT_WINNER_ROLE_ID;
 });
