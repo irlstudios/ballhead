@@ -3,7 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant } = require('../utils/applications');
+const { fetchApplicant, isHttpUrl } = require('../utils/applications');
 const {
     ensureEmhApplicationsTable,
     findEmhApplication,
@@ -17,20 +17,6 @@ const {
 
 const SUBTITLE = 'EMH Application';
 const isYes = (value) => value.trim().toLowerCase().startsWith('y');
-
-const isYoutubeLink = (value) => {
-    let url;
-    try {
-        url = new URL(value.trim());
-    } catch {
-        return false;
-    }
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
-        return false;
-    }
-    const host = url.hostname.toLowerCase();
-    return host === 'youtu.be' || host === 'youtube.com' || host.endsWith('.youtube.com');
-};
 
 const handleEmhApplicationSubmission = async (interaction) => {
     try {
@@ -95,11 +81,11 @@ const handleEmhApplicationSubmission = async (interaction) => {
             return;
         }
 
-        if (!isYoutubeLink(youtubeLink)) {
+        if (!isHttpUrl(youtubeLink)) {
             await interaction.reply({
                 ...noticePayload(
-                    'The video link must be a full YouTube URL (youtube.com or youtu.be). Please run /apply emh again with a valid link.',
-                    { title: 'Invalid YouTube Link', subtitle: SUBTITLE }
+                    'The video link must be a full URL (starting with http:// or https://), such as a YouTube or Meta link. Please run /apply emh again with a valid link.',
+                    { title: 'Invalid Video Link', subtitle: SUBTITLE }
                 ),
                 flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
             });
@@ -316,7 +302,6 @@ const handleEmhApplicationReject = async (interaction) => {
 };
 
 module.exports = {
-    isYoutubeLink,
     handleEmhApplicationSubmission,
     handleEmhApplicationApprove,
     handleEmhApplicationReject,

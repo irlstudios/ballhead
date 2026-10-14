@@ -73,10 +73,23 @@ const handleApplyBaseLeagueModal = async (interaction) => {
         }
         const inviteCode = inviteCodeMatch[1];
 
+        // Discord answers 404 for an invite that was revoked, expired or
+        // mistyped: that is the applicant's link to fix, not a bot failure.
         const inviteResponse = await axios.get(`https://discord.com/api/v10/invites/${inviteCode}`, {
             params: { with_counts: true, with_expiration: true, with_metadata: true },
             headers: { Authorization: `Bot ${process.env.TOKEN}` },
+        }).catch((error) => {
+            if (error.response?.status === 404) return null;
+            throw error;
         });
+        if (!inviteResponse) {
+            return await interaction.editReply(
+                noticePayload(
+                    'That invite link does not exist or has expired. Create a new invite set to never expire and apply again.',
+                    { title: 'Invite Invalid', subtitle: 'Base League' }
+                )
+            );
+        }
 
         const inviteData = inviteResponse.data;
 

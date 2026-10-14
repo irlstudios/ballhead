@@ -5,7 +5,7 @@ const assert = require('node:assert');
 
 const modalConfig = require('../modals/modalConfig');
 const applyCommand = require('../commands/general_applications/apply_design_team');
-const { isHttpUrl } = require('../handlers/cdt_applications');
+const { isHttpUrl } = require('../utils/applications');
 
 const modal = modalConfig.communityDesignerApplicationModal;
 

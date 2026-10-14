@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const modalConfig = require('../modals/modalConfig');
 const applyCommand = require('../commands/general_applications/apply_emh');
 const ffApplyCommand = require('../commands/general_applications/apply_ff_official');
-const { isYoutubeLink } = require('../handlers/emh_applications');
+const { isHttpUrl } = require('../utils/applications');
 const { OFFICIAL_ACTIVE_ROLE_ID, FF_OFFICIAL_ROLE_ID } = require('../config/constants');
 
 const modal = modalConfig.emhApplicationModal;
@@ -50,16 +50,21 @@ test('every EMH field caps its length so the review card stays sendable', () => 
     assert.ok(total < 3500, 'combined answers must fit a 4000-char text display with headers');
 });
 
-test('isYoutubeLink accepts real YouTube URLs and rejects everything else', () => {
-    assert.ok(isYoutubeLink('https://www.youtube.com/watch?v=abc123'));
-    assert.ok(isYoutubeLink('https://youtu.be/abc123'));
-    assert.ok(isYoutubeLink('  https://m.youtube.com/watch?v=abc123  '));
-    assert.ok(!isYoutubeLink('https://twitch.tv/somestream'));
-    assert.ok(!isYoutubeLink('https://notyoutube.com/watch?v=phish'));
-    assert.ok(!isYoutubeLink('https://evil.example/youtube.com/watch?v=phish'));
-    assert.ok(!isYoutubeLink('javascript:youtube.com/'));
-    assert.ok(!isYoutubeLink('my video is on youtube'));
-    assert.ok(!isYoutubeLink(''));
+// Hosts record on Quest, so a Meta share link is as valid as YouTube; leads
+// watch the video either way.
+test('the video link accepts any full http(s) URL, not only YouTube', () => {
+    assert.ok(isHttpUrl('https://www.youtube.com/watch?v=abc123'));
+    assert.ok(isHttpUrl('  https://youtu.be/abc123  '));
+    assert.ok(isHttpUrl('https://fb.watch/abc123/'));
+    assert.ok(isHttpUrl('https://www.meta.com/horizon/video/123'));
+    assert.ok(!isHttpUrl('javascript:youtube.com/'));
+    assert.ok(!isHttpUrl('my video is on youtube'));
+    assert.ok(!isHttpUrl(''));
+});
+
+test('the video field does not tell applicants it must be YouTube', () => {
+    const field = modal.fields.find((f) => f.id === 'emhYoutubeLink');
+    assert.doesNotMatch(field.label, /youtube/i);
 });
 
 const ffInteractionMock = (roleIds = []) => {

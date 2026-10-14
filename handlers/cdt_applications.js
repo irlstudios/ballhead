@@ -3,7 +3,7 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant } = require('../utils/applications');
+const { fetchApplicant, isHttpUrl } = require('../utils/applications');
 const {
     ensureCdtApplicationsTable,
     findCdtApplication,
@@ -18,16 +18,6 @@ const {
 const SUBTITLE = 'Community Design Team Application';
 const PROGRAM = 'Community Design Team';
 const isYes = (value) => value.trim().toLowerCase().startsWith('y');
-
-const isHttpUrl = (value) => {
-    let url;
-    try {
-        url = new URL(value.trim());
-    } catch {
-        return false;
-    }
-    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.');
-};
 
 const handleCdtApplicationSubmission = async (interaction) => {
     try {
@@ -318,7 +308,6 @@ const handleCdtApplicationReject = async (interaction) => {
 };
 
 module.exports = {
-    isHttpUrl,
     handleCdtApplicationSubmission,
     handleCdtApplicationApprove,
     handleCdtApplicationReject,

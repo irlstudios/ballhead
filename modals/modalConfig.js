@@ -387,8 +387,8 @@ const modalConfig = {
             },
             {
                 id: 'emhYoutubeLink',
-                label: 'YouTube link to your last hosted Mini-Game',
-                placeholder: 'https://youtube.com/... of your most recently hosted Mini-Game',
+                label: 'Video link to your last hosted Mini-Game',
+                placeholder: 'YouTube, Meta, or any video link of your most recent Mini-Game',
                 style: 'Short',
                 required: true,
                 maxLength: 200,

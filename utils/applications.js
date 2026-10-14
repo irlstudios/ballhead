@@ -19,4 +19,16 @@ const fetchApplicant = async (guild, userId) => {
     }
 };
 
-module.exports = { fetchApplicant };
+// Format-only check for links applicants paste into a form: a full http(s) URL
+// with a real hostname. Reviewers open the link, so that is the real check.
+const isHttpUrl = (value) => {
+    let url;
+    try {
+        url = new URL(String(value ?? '').trim());
+    } catch {
+        return false;
+    }
+    return (url.protocol === 'http:' || url.protocol === 'https:') && url.hostname.includes('.');
+};
+
+module.exports = { fetchApplicant, isHttpUrl };
