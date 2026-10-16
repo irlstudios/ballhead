@@ -127,16 +127,9 @@ if (!token) {
 const { startCacheWarmer } = require('./utils/cache_warmer');
 const { ensureLfgTable, ensureProgramRoleSnapshotTable, ensureAnalyticsEventsTable } = require('./db');
 const { ensurePlayerReportsSchema } = require('./utils/reports_queries');
-const { startWorkers, stopWorkers } = require('./utils/voice_moderation/worker_pool');
 
 client.login(token).then(async () => {
     logger.info('Bot logged in successfully.');
-
-    // Voice capture workers: extra bot users so parallel sessions can all be
-    // captured. Failure here degrades to the main bot's single slot.
-    startWorkers().catch(error => {
-        logger.error('[Voice Mod] Error starting capture workers:', error);
-    });
 
     // Run DB migrations
     try {
@@ -187,7 +180,6 @@ async function gracefulShutdown(signal) {
     try {
         // Stop accepting new interactions
         client.destroy();
-        stopWorkers();
         logger.info('[Shutdown] Discord client destroyed');
 
         // Stop cache warming

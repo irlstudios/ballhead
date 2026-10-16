@@ -19,7 +19,6 @@ const reply = (interaction, body) => {
 const FAILURE_LINES = {
     unconfigured: 'Text-to-speech is not configured on the host (PIPER_BIN / PIPER_MODEL).',
     busy: 'The bot is already speaking; try again in a moment.',
-    'capturing-elsewhere': 'The bot is capturing a live event in another channel and cannot leave it.',
     'stage-suppressed': 'The bot joined the stage but could not become a speaker. Give it Mute Members on that stage channel.',
     failed: 'Speech synthesis failed; check the bot log.',
 };

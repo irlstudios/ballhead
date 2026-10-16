@@ -3,10 +3,7 @@ const { pool } = require('../../db');
 const { MODERATOR_ROLES } = require('../../config/constants');
 const logger = require('../../utils/logger');
 const { handleRoomEventStart, handleRoomEventStatus, handleRoomEventWinner } = require('../../handlers/room_event');
-const { handleRoomEventClip, handleRoomEventMonitor } = require('../../handlers/room_event_voice');
 const { getSessionByChannel } = require('../../utils/host_session_manager');
-const { gateUnlock, onRoomLocked } = require('../../utils/voice_moderation/room_glue');
-const { onCycleOutcome } = require('../../utils/voice_moderation/outage');
 
 // Subcommands a host may not use on their own lobby while an event session runs.
 const LOCKED_DURING_EVENT = new Set(['lock', 'rename']);
@@ -194,30 +191,12 @@ module.exports = {
                         .setDescription('Record who won your event, saved to the sheet with the session stats.')
                         .addUserOption(option => option.setName('user').setDescription('The member who won').setRequired(true))
                 )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('clip')
-                        .setDescription('Capture the recent audio of a live event as moderation evidence.')
-                        .addIntegerOption(option => option.setName('duration').setDescription('Seconds to capture (15-100, default 60)').setMinValue(15).setMaxValue(100))
-                        .addStringOption(option => option.setName('note').setDescription('What happened').setMaxLength(500))
-                        .addChannelOption(option => option.setName('channel').setDescription('Session channel (moderators only)'))
-                )
-                .addSubcommand(subcommand =>
-                    subcommand
-                        .setName('monitor')
-                        .setDescription('Start or stop live transcription of an event (moderators only).')
-                        .addStringOption(option => option.setName('action').setDescription('start or stop').setRequired(true)
-                            .addChoices({ name: 'start', value: 'start' }, { name: 'stop', value: 'stop' }))
-                        .addChannelOption(option => option.setName('channel').setDescription('Session channel (defaults to your voice channel)'))
-                )
         ),
     async execute(interaction) {
         if (interaction.options.getSubcommandGroup(false) === 'event') {
             switch (interaction.options.getSubcommand()) {
             case 'status': return handleRoomEventStatus(interaction);
             case 'winner': return handleRoomEventWinner(interaction);
-            case 'clip': return handleRoomEventClip(interaction);
-            case 'monitor': return handleRoomEventMonitor(interaction);
             default: return handleRoomEventStart(interaction);
             }
         }
@@ -649,13 +628,10 @@ module.exports = {
             await applyBlacklistPermissions(roomChannel);
             await roomChannel.permissionOverwrites.edit(roomChannel.guild.roles.everyone, { Connect: false });
             await applyBlacklistPermissions(roomChannel);
-            // Locked rooms are private: monitoring stops and the capture bot
-            // leaves, discarding its buffers.
-            onRoomLocked(roomChannel.id);
             return replyRoomNotice(interaction, {
                 title: 'Room Locked',
                 subtitle: 'Lock Room',
-                lines: ['Room locked. Voice monitoring is off while the room is locked.']
+                lines: ['Room locked.']
             });
         }
         case 'unlock': {
@@ -685,16 +661,6 @@ module.exports = {
                     title: 'Access Denied',
                     subtitle: 'Unlock Room',
                     lines: ['Only the room host or moderators can execute this command.']
-                });
-            }
-            const gate = await gateUnlock({
-                channel: roomChannel, hostId, client: interaction.client, onCycleOutcome,
-            });
-            if (!gate.ok) {
-                return replyRoomNotice(interaction, {
-                    title: 'Cannot Unlock',
-                    subtitle: 'Unlock Room',
-                    lines: ['Public rooms are temporarily unavailable. Your room stays invite only for now.']
                 });
             }
             await applyBlacklistPermissions(roomChannel);

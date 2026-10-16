@@ -29,11 +29,7 @@ const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
 const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
-const { ensureVoiceIncidentsSchema } = require('../utils/voice_moderation/incidents');
-const { ensureVcSystemLocksSchema } = require('../utils/voice_moderation/system_locks');
-const { initOutageWatch, isHealthy } = require('../utils/voice_moderation/outage');
-const { initRoomModeration, resumeRoomCaptures } = require('../utils/voice_moderation/room_glue');
-const { onCycleOutcome } = require('../utils/voice_moderation/outage');
+const { adoptOrphanRooms } = require('../utils/room_orphans');
 
 const ensureRoleTimeoutsTable = async () => {
     await executeQuery(`
@@ -181,8 +177,6 @@ module.exports = {
             ['event_winner_cycles', ensureEventWinnerSchema],
             ['emh_bookings', ensureEmhScheduleSchema],
             ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
-            ['voice_incidents', ensureVoiceIncidentsSchema],
-            ['vc_system_locks', ensureVcSystemLocksSchema],
         ];
         for (const [name, ensure] of migrations) {
             try {
@@ -200,14 +194,10 @@ module.exports = {
             logger.error('[Host Session] Failed to resume sessions:', error);
         }
 
-        // Public room moderation: the gate asks the outage watcher for PC
-        // health, and the watcher probes while no room monitors are running.
-        initRoomModeration({ isHealthy, client, onCycleOutcome });
-        initOutageWatch(client);
         try {
-            await resumeRoomCaptures();
+            await adoptOrphanRooms(client);
         } catch (error) {
-            logger.error('[Voice Mod] Room capture resume failed:', error);
+            logger.error('[Rooms] Orphan sweep failed:', error);
         }
 
         // One-time poll catalog catch-up: if poll_posts is empty (e.g. first run

@@ -1,10 +1,6 @@
 const { ChannelType, PermissionFlagsBits, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { pool } = require('../db');
-const logger = require('../utils/logger');
 const { MODERATOR_ROLES, VC_ACTIVITY_ALLOWED_ROLE_IDS } = require('../config/constants');
-const { gateNewRoom, onRoomGone, makeRoomMonitored } = require('../utils/voice_moderation/room_glue');
-const { getReadyWorkers } = require('../utils/voice_moderation/worker_pool');
-const { onCycleOutcome } = require('../utils/voice_moderation/outage');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const retryAction = async (action, check, retries = 3, delayMs = 500) => {
     for (let i = 0; i < retries; i++) {
@@ -82,13 +78,6 @@ module.exports = {
             return;
         }
 
-        // Someone joined a managed room: make sure its capture exists. Cheap
-        // no-op when the room is already covered, locked, or being created.
-        if (newState.channelId && newState.channelId !== oldState.channelId
-            && client.vcHosts.has(newState.channelId) && !newState.member.user.bot) {
-            void makeRoomMonitored(newState.channelId).catch(() => {});
-        }
-
         if (oldState.channelId !== specificVCID && newState.channelId === specificVCID) {
             const now = Date.now();
             const last = client.vcCooldowns.get(newState.member.id) || 0;
@@ -124,10 +113,9 @@ module.exports = {
                     },
                     {
                         id: newState.member.id,
-                        // No ManageChannels or MoveMembers for hosts: raw channel
-                        // admin let hosts kick the moderation bot or cap the user
-                        // limit to keep it out. Room management goes through the
-                        // /room commands, which enforce policy.
+                        // No ManageChannels or MoveMembers for hosts: room
+                        // management goes through the /room commands, which
+                        // enforce policy.
                         allow: [
                             PermissionFlagsBits.Connect,
                             PermissionFlagsBits.Speak,
@@ -142,22 +130,9 @@ module.exports = {
                             ...(creatorCanStartActivities ? [] : [PermissionFlagsBits.UseEmbeddedActivities])
                         ]
                     },
-                    ...getReadyWorkers().map((worker) => ({
-                        id: worker.user.id,
-                        allow: [
-                            PermissionFlagsBits.ViewChannel,
-                            PermissionFlagsBits.Connect,
-                            // MoveMembers lets a worker join even if a user limit
-                            // somehow gets set on the room.
-                            PermissionFlagsBits.MoveMembers
-                        ]
-                    })),
                     {
                         id: client.user.id,
-                        // SendMessages: rooms deny it for everyone, but the voice
-                        // moderation consent notice must be postable or capture
-                        // refuses to start (it fails closed without the notice).
-                        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers, PermissionFlagsBits.SendMessages]
+                        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ManageChannels, PermissionFlagsBits.MoveMembers]
                     },
                     {
                         id: MOD_ROLE_ID,
@@ -222,22 +197,6 @@ module.exports = {
                  DO UPDATE SET host_id = EXCLUDED.host_id, created_at = now()`,
                 [newChannel.id, newState.member.id]
             );
-
-            try {
-                const gate = await gateNewRoom({
-                    channel: newChannel, hostId: newState.member.id, client, onCycleOutcome,
-                });
-                if (!gate.public) {
-                    await newChannel.permissionOverwrites.edit(guild.roles.everyone, { Connect: false });
-                    const lockedNotice = new ContainerBuilder();
-                    lockedNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent('## Room Is Invite Only'));
-                    lockedNotice.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-                        'Public rooms are temporarily unavailable, so your room was created invite only. Use /room invite to bring people in.'));
-                    await newChannel.send({ flags: MessageFlags.IsComponentsV2, components: [lockedNotice] }).catch(() => {});
-                }
-            } catch (error) {
-                logger.error(`[Voice Mod] Room gate failed for ${newChannel.id}:`, error);
-            }
         }
 
         if (oldState.channelId && oldState.channelId !== newState.channelId) {
@@ -274,14 +233,12 @@ module.exports = {
             };
 
             if (oldState.member.id === hostId) {
-                onRoomGone(channel.id);
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 await pool.query('DELETE FROM vc_hosts WHERE channel_id = $1', [channel.id]);
                 if (client.vcCreated) client.vcCreated.delete(channel.id);
-            // Capture bots occupy the room; only humans keep it alive.
+            // Only humans keep a room alive; a bot speaking via /say does not.
             } else if ((client.vcHosts.has(channel.id) || (client.vcCreated && client.vcCreated.has(channel.id))) && channel.members.filter((member) => !member.user.bot).size === 0) {
-                onRoomGone(channel.id);
                 await safeDelete(channel);
                 client.vcHosts.delete(channel.id);
                 if (client.vcCreated) client.vcCreated.delete(channel.id);

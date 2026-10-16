@@ -243,33 +243,13 @@ const INGAME_BAN_BOT_ID = '853391399109132288';
 // Channel where the ban bot posts its ban announcements (the source we watch).
 const INGAME_BAN_CHANNEL_ID = '862387103656706049';
 
-// Voice moderation for EMH sessions. Evidence lands in this channel; until a
-// dedicated evidence channel exists it reuses the program-moderation channel.
-const VOICE_EVIDENCE_CHANNEL_ID = '828618109794385970';
-const VOICE_BUFFER_MINUTES = 5;
-const VOICE_CLIP_DEFAULT_SECONDS = 60;
-const VOICE_CLIP_MIN_SECONDS = 15;
-// Mono 48kHz 16-bit WAV is 96,000 bytes/second; 100s stays under Discord's
-// 10MiB default upload limit without relying on the guild's boost tier.
-const VOICE_CLIP_MAX_SECONDS = 100;
-const VOICE_MONITOR_MAX_SPEAKERS = 8;
-const VOICE_TRANSCRIPT_FLUSH_SECONDS = 10;
-// Public room monitoring: cadence of the transcription cycle, consecutive
-// failed cycles before the PC counts as down, and the minimum packets
-// (~20ms each) a speaker needs in a cycle to be worth transcribing.
-const VOICE_CHUNK_CYCLE_SECONDS = 120;
-const WHISPER_FAILURE_THRESHOLD = 3;
-const VOICE_CHUNK_MIN_PACKETS = 25;
-// Role the room system already denies Connect/Speak in every room; assigning
-// it is the automated vc blacklist action on tier 1 hits.
+// Role the room system denies Connect/Speak in every room.
 const VC_BLACKLIST_ROLE_ID = '1125497495678615582';
 // Manual room blacklist role; rooms deny it the same way as the vc blacklist.
 const ROOM_BLACKLIST_ROLE_ID = '847977550731149364';
 // Join-to-create trigger channel for personal rooms; its category is the
 // rooms category (used to find orphaned room channels).
 const VC_CREATE_CHANNEL_ID = '1321321682891178074';
-// Voice moderation alerts go to this user's DMs, not a staff channel.
-const VOICE_ALERT_DM_USER_ID = '781397829808553994';
 
 // Pagination
 const ITEMS_PER_PAGE = 10;
@@ -370,20 +350,9 @@ module.exports = {
     PROGRAM_MODERATION_ALERT_CHANNEL_ID,
     INGAME_BAN_BOT_ID,
     INGAME_BAN_CHANNEL_ID,
-    VOICE_EVIDENCE_CHANNEL_ID,
-    VOICE_BUFFER_MINUTES,
-    VOICE_CLIP_DEFAULT_SECONDS,
-    VOICE_CLIP_MIN_SECONDS,
-    VOICE_CLIP_MAX_SECONDS,
-    VOICE_MONITOR_MAX_SPEAKERS,
-    VOICE_TRANSCRIPT_FLUSH_SECONDS,
-    VOICE_CHUNK_CYCLE_SECONDS,
-    WHISPER_FAILURE_THRESHOLD,
-    VOICE_CHUNK_MIN_PACKETS,
     VC_BLACKLIST_ROLE_ID,
     ROOM_BLACKLIST_ROLE_ID,
     VC_CREATE_CHANNEL_ID,
-    VOICE_ALERT_DM_USER_ID,
     ITEMS_PER_PAGE,
     MAX_SQUAD_MEMBERS,
     SL_SQUAD_NAME,
