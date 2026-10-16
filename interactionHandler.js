@@ -25,7 +25,7 @@ const { handleBrowseButton, handleBrowseSelect, handleApplicationModal, handleAp
 const { handlePracticeButton } = require('./handlers/squad_practices');
 const { handleAppealsButton, handleAppealsModal } = require('./handlers/league-appeals');
 const { handleRewardsButton, handleRewardsModal } = require('./handlers/league-rewards');
-const { handleNext2, handlePrev2, handlePagination1 } = require('./handlers/pagination');
+const { handlePagination1 } = require('./handlers/pagination');
 const { handleLfgButton } = require('./handlers/lfg');
 const {
     buildFriendlyFireLeaderboardPayload,
@@ -345,8 +345,6 @@ const handleButton = async (interaction, client) => {
         const buttonRoutes = {
             'invite': () => handleInviteButton(interaction, customId),
             'pagination1': () => handlePagination1(interaction, customId),
-            'next2': () => handleNext2(interaction),
-            'prev2': () => handlePrev2(interaction),
             'approve': () => handleOfficialsApplicationApprove(interaction, client),
             'reject': () => handleOfficialsApplicationReject(interaction, client),
             'ffApprove': () => handleFfOfficialApplicationApprove(interaction, client),

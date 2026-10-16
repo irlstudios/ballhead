@@ -124,7 +124,6 @@ if (!token) {
     process.exit(1);
 }
 
-const { startCacheWarmer } = require('./utils/cache_warmer');
 const { ensureLfgTable, ensureProgramRoleSnapshotTable, ensureAnalyticsEventsTable } = require('./db');
 const { ensurePlayerReportsSchema } = require('./utils/reports_queries');
 
@@ -160,10 +159,8 @@ client.login(token).then(async () => {
         logger.error('[DB] Failed to ensure player reports table:', error);
     }
 
-    // Start cache warming system
-    startCacheWarmer().catch(error => {
-        logger.error('[Cache Warmer] Error starting cache warmer:', error);
-    });
+    // Expire stale Google Sheets cache entries
+    startCacheMaintenance();
 }).catch(error => {
     logger.error('Failed to login:', error);
     process.exit(1);
@@ -171,8 +168,7 @@ client.login(token).then(async () => {
 
 // Graceful shutdown handling
 const { closePool } = require('./db');
-const { stopCacheWarmer } = require('./utils/cache_warmer');
-const { stopCacheMaintenance } = require('./utils/sheets_cache');
+const { startCacheMaintenance, stopCacheMaintenance } = require('./utils/sheets_cache');
 
 async function gracefulShutdown(signal) {
     logger.info(`\n[Shutdown] Received ${signal}. Starting graceful shutdown...`);
@@ -181,9 +177,6 @@ async function gracefulShutdown(signal) {
         // Stop accepting new interactions
         client.destroy();
         logger.info('[Shutdown] Discord client destroyed');
-
-        // Stop cache warming
-        stopCacheWarmer();
 
         // Stop cache maintenance
         stopCacheMaintenance();
