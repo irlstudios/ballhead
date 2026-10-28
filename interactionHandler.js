@@ -16,6 +16,7 @@ const { handleFfOfficialApplicationSubmission, handleFfOfficialApplicationApprov
 const { handleBugSquasherApplicationSubmission, handleBugSquasherApplicationApprove, handleBugSquasherApplicationReject } = require('./handlers/bug_squasher');
 const { handleEmhApplicationSubmission, handleEmhApplicationApprove, handleEmhApplicationReject } = require('./handlers/emh_applications');
 const { handleCdtApplicationSubmission, handleCdtApplicationApprove, handleCdtApplicationReject } = require('./handlers/cdt_applications');
+const { handleTbProCcApplicationSubmission, handleTbProCcApplicationApprove, handleTbProCcApplicationReject } = require('./handlers/tb_pro_cc_applications');
 const { handleCdtDownloadButton } = require('./handlers/cdt_designs');
 const { handleApplyBaseLeagueModal, handleApproveLeague, handleDenyLeagueModal, handleDenyLeagueButton } = require('./handlers/leagues');
 const { handleLeagueCheckinModal } = require('./handlers/league-checkin');
@@ -260,6 +261,7 @@ const handleModalSubmit = async (interaction) => {
         'bugSquasherApplicationModal': () => handleBugSquasherApplicationSubmission(interaction),
         'emhApplicationModal': () => handleEmhApplicationSubmission(interaction),
         'communityDesignerApplicationModal': () => handleCdtApplicationSubmission(interaction),
+        'tbProCcApplicationModal': () => handleTbProCcApplicationSubmission(interaction),
         'generateTemplateModal_kotc': () => handleGenerateTemplateModal(interaction),
         'generateTemplateModal_gc': () => handleGenerateTemplateModal(interaction),
         'apply-base-league-modal': () => handleApplyBaseLeagueModal(interaction),
@@ -355,6 +357,8 @@ const handleButton = async (interaction, client) => {
             'emhReject': () => handleEmhApplicationReject(interaction, client),
             'cdtApprove': () => handleCdtApplicationApprove(interaction, client),
             'cdtReject': () => handleCdtApplicationReject(interaction, client),
+            'tbpccApprove': () => handleTbProCcApplicationApprove(interaction, client),
+            'tbpccReject': () => handleTbProCcApplicationReject(interaction, client),
             'cdtDownload': () => handleCdtDownloadButton(interaction),
             'officialsQna': () => handleQnAInteraction(interaction),
             'officialsQnaReject': () => handleNextStepsInteraction(interaction),

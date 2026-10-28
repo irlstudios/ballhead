@@ -395,6 +395,43 @@ const modalConfig = {
             },
         ],
     },
+    'tbProCcApplicationModal': {
+        title: 'TB PRO CC Application',
+        fields: [
+            {
+                id: 'tbpccMainLink',
+                label: 'Link to your main content channel',
+                placeholder: 'TikTok, YouTube, or Instagram profile link',
+                style: 'Short',
+                required: true,
+                maxLength: 200,
+            },
+            {
+                id: 'tbpccBestClip',
+                label: 'Link to your best Gym Class video',
+                placeholder: 'The video you are most proud of',
+                style: 'Short',
+                required: true,
+                maxLength: 200,
+            },
+            {
+                id: 'tbpccMotivation',
+                label: 'Why do you want TB PRO CC?',
+                placeholder: 'Share your motivation',
+                style: 'Paragraph',
+                required: true,
+                maxLength: 900,
+            },
+            {
+                id: 'tbpccCommunity',
+                label: 'How do you help the Gym Class community?',
+                placeholder: 'In game, in Discord, or through your content',
+                style: 'Paragraph',
+                required: true,
+                maxLength: 900,
+            },
+        ],
+    },
 };
 
 module.exports = modalConfig;

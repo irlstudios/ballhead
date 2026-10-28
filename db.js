@@ -239,6 +239,46 @@ const deleteEmhApplication = async (discordId) => {
     );
 };
 
+const ensureTbProCcApplicationsTable = async () => {
+    await executeQuery(`
+        CREATE TABLE IF NOT EXISTS tb_pro_cc_applications (
+            discord_id TEXT PRIMARY KEY,
+            discord_username TEXT NOT NULL,
+            main_link TEXT NOT NULL,
+            best_clip TEXT NOT NULL,
+            motivation TEXT NOT NULL,
+            community TEXT NOT NULL,
+            application_url TEXT NOT NULL,
+            submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+};
+
+const findTbProCcApplication = async (discordId) => {
+    const result = await executeQuery(
+        'SELECT * FROM tb_pro_cc_applications WHERE discord_id = $1',
+        [discordId]
+    );
+    return result.rows;
+};
+
+const insertTbProCcApplication = async (params) => {
+    const { discordId, username, mainLink, bestClip, motivation, community, applicationUrl } = params;
+    await executeQuery(
+        `INSERT INTO tb_pro_cc_applications
+         (discord_id, discord_username, main_link, best_clip, motivation, community, application_url, submitted_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+        [discordId, username, mainLink, bestClip, motivation, community, applicationUrl]
+    );
+};
+
+const deleteTbProCcApplication = async (discordId) => {
+    await executeQuery(
+        'DELETE FROM tb_pro_cc_applications WHERE discord_id = $1',
+        [discordId]
+    );
+};
+
 const ensureCdtApplicationsTable = async () => {
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS cdt_applications (
@@ -2414,6 +2454,10 @@ module.exports = {
     findEmhApplication,
     insertEmhApplication,
     deleteEmhApplication,
+    ensureTbProCcApplicationsTable,
+    findTbProCcApplication,
+    insertTbProCcApplication,
+    deleteTbProCcApplication,
     ensureCdtApplicationsTable,
     findCdtApplication,
     insertCdtApplication,

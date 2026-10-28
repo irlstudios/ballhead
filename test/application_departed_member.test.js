@@ -75,6 +75,7 @@ test('every approve handler tells the reviewer when the applicant left instead o
         ['../handlers/officials', 'handleOfficialsApplicationApprove', 'officialsApprove_42', 'reviewer'],
         ['../handlers/ff_officials', 'handleFfOfficialApplicationApprove', 'ffOfficialApprove_42', constants.FF_APPLICATION_MANAGERS[0]],
         ['../handlers/bug_squasher', 'handleBugSquasherApplicationApprove', 'bugSquasherApprove_42', 'reviewer'],
+        ['../handlers/tb_pro_cc_applications', 'handleTbProCcApplicationApprove', 'tbpccApprove_42', 'reviewer'],
     ];
 
     for (const [modulePath, handlerName, customId, reviewerId] of cases) {

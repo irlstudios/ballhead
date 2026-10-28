@@ -11,6 +11,7 @@ const PROGRAMS = [
     { name: 'Community Bug Squasher', find: db.findBugSquasherApplication },
     { name: 'Extra Modes Host (EMH)', find: db.findEmhApplication },
     { name: 'Community Design Team', find: db.findCdtApplication },
+    { name: 'TB PRO CC', find: db.findTbProCcApplication },
 ];
 
 const buildStatusLines = (entries) => {
