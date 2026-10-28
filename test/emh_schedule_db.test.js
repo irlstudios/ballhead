@@ -69,3 +69,26 @@ test('other errors are not swallowed', async () => {
     resultQueue.push({ rows: [] }, Object.assign(new Error('boom'), { code: '08006' }));
     await assert.rejects(store.createBooking(INPUT), /boom/);
 });
+
+test('the schema adds reminder_sent_at idempotently', async () => {
+    await store.ensureEmhScheduleSchema();
+    assert.ok(captured.some((c) => /ALTER TABLE emh_bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ/.test(c.text)));
+});
+
+test('reminder candidates are scheduled, unreminded and inside the window, by parameter', async () => {
+    const from = new Date('2026-10-07T00:00:00Z');
+    const to = new Date('2026-10-07T00:05:00Z');
+    resultQueue.push({ rows: [row({ reminder_sent_at: null })] });
+    const [booking] = await store.listReminderCandidates(from, to);
+    assert.strictEqual(booking.reminderSentAt, null);
+    assert.match(captured[0].text, /status = 'scheduled' AND reminder_sent_at IS NULL AND starts_at > \$1 AND starts_at <= \$2/);
+    assert.deepStrictEqual(captured[0].params, [from, to]);
+});
+
+test('marking a reminder is a claim that only succeeds once', async () => {
+    resultQueue.push({ rows: [{ id: '7' }] }, { rows: [] });
+    assert.strictEqual(await store.markReminderSent(7), true);
+    assert.strictEqual(await store.markReminderSent(7), false);
+    assert.match(captured[0].text, /reminder_sent_at IS NULL/);
+    assert.deepStrictEqual(captured[0].params, [7]);
+});

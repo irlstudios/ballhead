@@ -20,6 +20,21 @@ const PRIVACY_STEPS = [
     '- Leaving the lobby ends the session, even for a moment.',
 ];
 
+const sessionReminderNotice = ({ startsAt } = {}) => {
+    const unix = Math.floor(new Date(startsAt).getTime() / 1000);
+    return {
+        title: 'Session Reminder',
+        subtitle: SUBTITLE,
+        lines: [
+            `Your scheduled EMH session starts at <t:${unix}:t> (<t:${unix}:R>). To get ready:`,
+            '- Discord Settings -> Activity Privacy -> turn ON **Share your detected activities with others**.',
+            '- Join **JOIN TO MAKE PERSONAL VC** to open your lobby.',
+            '- Run `/room event start` and press **Start Session**.',
+            '- Record the winner with `/room event winner` before you leave.',
+        ],
+    };
+};
+
 const minutesBetween = (from, to) => toMinutes((new Date(to).getTime() - new Date(from).getTime()) / 1000);
 
 const trackingStartedNotice = ({ activityName } = {}) => ({
@@ -136,5 +151,6 @@ module.exports = {
     wrapUpNotice,
     endedWithoutTrackingNotice,
     statusNotice,
+    sessionReminderNotice,
     sendHostDm,
 };

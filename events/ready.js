@@ -27,6 +27,7 @@ const { ensureEventWinnerSchema } = require('../utils/event_winner_queries');
 const { ensureEmhScheduleSchema } = require('../utils/emh_schedule_queries');
 const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
 const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
+const { runEmhSessionReminders } = require('../jobs/emh-session-reminder');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
 const { adoptOrphanRooms } = require('../utils/room_orphans');
@@ -346,6 +347,15 @@ module.exports = {
                 await runEmhScheduleSync();
             } catch (error) {
                 logger.error('[Cron] EMH schedule sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Every minute: DM EMH hosts whose slot starts within 5 minutes.
+        cron.schedule('* * * * *', async () => {
+            try {
+                await runEmhSessionReminders(client);
+            } catch (error) {
+                logger.error('[Cron] EMH session reminders failed:', error);
             }
         }, { timezone: 'America/Chicago' });
 

@@ -12,6 +12,7 @@ const LENGTH_CHOICES = [30, 60, 90, 120];
 const DEFAULT_LENGTH = 60;
 // A host who opens their room shortly before the slot still hosted it.
 const EARLY_GRACE_MINUTES = 15;
+const REMINDER_LEAD_MINUTES = 5;
 const MINUTE_MS = 60 * 1000;
 
 const TIME_PATTERN = /^\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*$/i;
@@ -95,6 +96,16 @@ const resolveStatus = (booking, sessions, now = new Date()) => {
     return hosted ? 'hosted' : 'no_show';
 };
 
+// A slot booked inside the lead window still gets its one reminder as long as
+// it has not started.
+const isReminderDue = (booking, now = new Date()) => {
+    const untilStart = new Date(booking.startsAt).getTime() - new Date(now).getTime();
+    return booking.status === 'scheduled'
+        && !booking.reminderSentAt
+        && untilStart > 0
+        && untilStart <= REMINDER_LEAD_MINUTES * MINUTE_MS;
+};
+
 const isLead = (userId, leadIds, ownerId) => leadIds.includes(userId) || (Boolean(ownerId) && userId === ownerId);
 
 module.exports = {
@@ -102,6 +113,7 @@ module.exports = {
     LENGTH_CHOICES,
     DEFAULT_LENGTH,
     EARLY_GRACE_MINUTES,
+    REMINDER_LEAD_MINUTES,
     weekBounds,
     bookableDays,
     parseTime,
@@ -113,5 +125,6 @@ module.exports = {
     slotLabel,
     rangeLabel,
     resolveStatus,
+    isReminderDue,
     isLead,
 };

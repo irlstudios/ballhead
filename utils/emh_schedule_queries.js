@@ -35,6 +35,7 @@ const bookingsTableSql = (table = 'emh_bookings') => `
 const ensureEmhScheduleSchema = async () => {
     await executeQuery(bookingsTableSql());
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_emh_bookings_host_start ON emh_bookings (host_id, starts_at)');
+    await executeQuery('ALTER TABLE emh_bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ');
 };
 
 const mapBooking = (row) => (row ? {
@@ -45,6 +46,7 @@ const mapBooking = (row) => (row ? {
     endsAt: row.ends_at,
     status: row.status,
     statusSource: row.status_source,
+    reminderSentAt: row.reminder_sent_at ?? null,
 } : null);
 
 const findConflict = async ({ startsAt, endsAt, excludeId = null }) => {
@@ -156,6 +158,28 @@ const setBookingStatus = async (id, status) => {
     );
 };
 
+const listReminderCandidates = async (from, to) => {
+    const result = await executeQuery(
+        `SELECT * FROM emh_bookings
+          WHERE status = 'scheduled' AND reminder_sent_at IS NULL AND starts_at > $1 AND starts_at <= $2
+          ORDER BY starts_at`,
+        [from, to]
+    );
+    return result.rows.map(mapBooking);
+};
+
+// The guard makes this a claim: only one caller ever gets true for a slot,
+// so a restart or an overlapping run cannot send the reminder twice.
+const markReminderSent = async (id) => {
+    const result = await executeQuery(
+        `UPDATE emh_bookings SET reminder_sent_at = NOW()
+          WHERE id = $1 AND status = 'scheduled' AND reminder_sent_at IS NULL
+          RETURNING id`,
+        [id]
+    );
+    return result.rows.length > 0;
+};
+
 const bookingExists = async ({ hostId, startsAt }) => {
     const result = await executeQuery(
         'SELECT 1 FROM emh_bookings WHERE host_id = $1 AND starts_at = $2 LIMIT 1',
@@ -178,5 +202,7 @@ module.exports = {
     listDueBookings,
     listSessionsForHosts,
     setBookingStatus,
+    listReminderCandidates,
+    markReminderSent,
     bookingExists,
 };
