@@ -16,6 +16,9 @@ db.deleteEmhApplication = async (id) => { deletedEmhApplications.push(id); };
 const deniedLeagueApplications = [];
 db.findLeagueApplication = async () => [{ applicant_id: '42', league_name: 'Test League' }];
 db.updateLeagueApplicationDenial = async (messageId) => { deniedLeagueApplications.push(messageId); return true; };
+// Decisions are claimed through the queries module; stub the insert so no
+// real database is touched.
+require('../utils/application_decision_queries').insertApplicationDecision = async () => 1;
 
 const unknownMemberError = () => Object.assign(new Error('Unknown Member'), { code: 10007 });
 

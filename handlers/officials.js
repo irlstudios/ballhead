@@ -3,7 +3,11 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder, PermissionsBitField } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant } = require('../utils/applications');
+const {
+    fetchApplicant,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const { getSheetsClient } = require('../utils/sheets_cache');
 const {
     findOfficialApplication,
@@ -177,6 +181,7 @@ const updateOfficialApplicationStatus = async (sheets, applicationUrl, newStatus
 };
 
 const handleOfficialsApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -198,6 +203,9 @@ const handleOfficialsApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'officials', applicantId: userId, decision: 'Accepted' }, 'Officials Program');
+        if (!claimId) return;
 
         const qaButton = new ButtonBuilder()
             .setCustomId('officialsQna')
@@ -252,6 +260,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         await user.roles.add(officialRole);
     } catch (error) {
         logger.error('Error approving application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
@@ -265,6 +274,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
 };
 
 const handleOfficialsApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -277,6 +287,9 @@ const handleOfficialsApplicationReject = async (interaction) => {
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'officials', applicantId: userId, decision: 'Denied' }, 'Officials Program');
+        if (!claimId) return;
 
         if (user) {
             const nextStepsButton = new ButtonBuilder()
@@ -332,6 +345,7 @@ const handleOfficialsApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error rejecting application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({

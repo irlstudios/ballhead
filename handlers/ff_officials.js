@@ -3,7 +3,11 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant } = require('../utils/applications');
+const {
+    fetchApplicant,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const {
     ensureFfOfficialApplicationsTable,
     findFfOfficialApplication,
@@ -188,6 +192,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
 };
 
 const handleFfOfficialApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -225,6 +230,10 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'ff_official', applicantId: userId, decision: 'Accepted' }, 'FF Official Program');
+        if (!claimId) return;
+
         await user.roles.add(ffOfficialRole);
 
         try {
@@ -263,6 +272,7 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error approving FF official application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
@@ -276,6 +286,7 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
 };
 
 const handleFfOfficialApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -288,6 +299,9 @@ const handleFfOfficialApplicationReject = async (interaction) => {
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'ff_official', applicantId: userId, decision: 'Denied' }, 'FF Official Program');
+        if (!claimId) return;
 
         if (user) {
             try {
@@ -329,6 +343,7 @@ const handleFfOfficialApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error denying FF official application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({

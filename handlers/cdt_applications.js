@@ -3,7 +3,13 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant, isHttpUrl } = require('../utils/applications');
+const {
+    fetchApplicant,
+    isHttpUrl,
+    refuseUnlessReviewer,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const {
     ensureCdtApplicationsTable,
     findCdtApplication,
@@ -13,6 +19,7 @@ const {
 const {
     CDT_APPLICATIONS_CHANNEL_ID,
     MAKES_COOL_THINGS_ROLE_ID,
+    CDT_LEAD_ROLE_ID,
 } = require('../config/constants');
 
 const SUBTITLE = 'Community Design Team Application';
@@ -162,8 +169,11 @@ const handleCdtApplicationSubmission = async (interaction) => {
 };
 
 const handleCdtApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (await refuseUnlessReviewer(interaction, { roleIds: [CDT_LEAD_ROLE_ID] }, PROGRAM)) return;
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -188,6 +198,10 @@ const handleCdtApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'cdt', applicantId: userId, decision: 'Accepted' }, PROGRAM);
+        if (!claimId) return;
+
         await user.roles.add(designerRole);
 
         try {
@@ -236,6 +250,7 @@ const handleCdtApplicationApprove = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error approving CDT application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
@@ -249,11 +264,17 @@ const handleCdtApplicationApprove = async (interaction) => {
 };
 
 const handleCdtApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        if (await refuseUnlessReviewer(interaction, { roleIds: [CDT_LEAD_ROLE_ID] }, PROGRAM)) return;
+
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'cdt', applicantId: userId, decision: 'Denied' }, PROGRAM);
+        if (!claimId) return;
 
         if (user) {
             try {
@@ -295,6 +316,7 @@ const handleCdtApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error denying CDT application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({

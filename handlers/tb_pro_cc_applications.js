@@ -3,7 +3,13 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant, isHttpUrl } = require('../utils/applications');
+const {
+    fetchApplicant,
+    isHttpUrl,
+    refuseUnlessReviewer,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const {
     ensureTbProCcApplicationsTable,
     findTbProCcApplication,
@@ -150,8 +156,11 @@ const closeApplicationCard = async (interaction, title, verb) => {
 };
 
 const handleTbProCcApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (await refuseUnlessReviewer(interaction, {}, PROGRAM)) return;
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -164,6 +173,9 @@ const handleTbProCcApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'tb_pro_cc', applicantId: userId, decision: 'Accepted' }, PROGRAM);
+        if (!claimId) return;
 
         await sendDecisionDm(
             user,
@@ -187,6 +199,7 @@ const handleTbProCcApplicationApprove = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error approving TB PRO CC application:', error);
+        await releaseApplicationDecision(claimId);
         await interaction.editReply({
             ...noticePayload(
                 'There was an error while accepting the application. Please try again later.',
@@ -197,11 +210,17 @@ const handleTbProCcApplicationApprove = async (interaction) => {
 };
 
 const handleTbProCcApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        if (await refuseUnlessReviewer(interaction, {}, PROGRAM)) return;
+
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'tb_pro_cc', applicantId: userId, decision: 'Denied' }, PROGRAM);
+        if (!claimId) return;
 
         if (user) {
             await sendDecisionDm(
@@ -225,6 +244,7 @@ const handleTbProCcApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error denying TB PRO CC application:', error);
+        await releaseApplicationDecision(claimId);
         await interaction.editReply({
             ...noticePayload(
                 'There was an error while denying the application. Please try again later.',

@@ -8,6 +8,9 @@ const assert = require('node:assert');
 const db = require('../db');
 const deleted = [];
 db.deleteFfOfficialApplication = async (discordId) => { deleted.push(discordId); };
+// Decisions are claimed through the queries module; stub the insert so no
+// real database is touched.
+require('../utils/application_decision_queries').insertApplicationDecision = async () => 1;
 
 const { handleFfOfficialApplicationApprove } = require('../handlers/ff_officials');
 const { FF_APPLICATION_MANAGERS, FF_OFFICIAL_ROLE_ID } = require('../config/constants');

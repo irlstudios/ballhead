@@ -3,7 +3,12 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant } = require('../utils/applications');
+const {
+    fetchApplicant,
+    refuseUnlessReviewer,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const {
     ensureBugSquasherApplicationsTable,
     findBugSquasherApplication,
@@ -150,8 +155,11 @@ const handleBugSquasherApplicationSubmission = async (interaction) => {
 };
 
 const handleBugSquasherApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (await refuseUnlessReviewer(interaction, {}, 'Community Bug Squasher Program')) return;
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -164,6 +172,9 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'bug_squasher', applicantId: userId, decision: 'Accepted' }, 'Community Bug Squasher Program');
+        if (!claimId) return;
 
         try {
             const dmContainer = new ContainerBuilder();
@@ -208,6 +219,7 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error approving bug squasher application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
@@ -221,11 +233,17 @@ const handleBugSquasherApplicationApprove = async (interaction) => {
 };
 
 const handleBugSquasherApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        if (await refuseUnlessReviewer(interaction, {}, 'Community Bug Squasher Program')) return;
+
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'bug_squasher', applicantId: userId, decision: 'Denied' }, 'Community Bug Squasher Program');
+        if (!claimId) return;
 
         if (user) {
             try {
@@ -267,6 +285,7 @@ const handleBugSquasherApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error denying bug squasher application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({

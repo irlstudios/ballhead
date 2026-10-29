@@ -29,6 +29,7 @@ const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
 const { runEmhSessionReminders } = require('../jobs/emh-session-reminder');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
+const { ensureApplicationDecisionsTable } = require('../utils/application_decision_queries');
 const { adoptOrphanRooms } = require('../utils/room_orphans');
 
 const ensureRoleTimeoutsTable = async () => {
@@ -177,6 +178,7 @@ module.exports = {
             ['event_winner_cycles', ensureEventWinnerSchema],
             ['emh_bookings', ensureEmhScheduleSchema],
             ['mod_ping_subscriptions', ensureModPingSubscriptionsTable],
+            ['application_decisions', ensureApplicationDecisionsTable],
         ];
         for (const [name, ensure] of migrations) {
             try {

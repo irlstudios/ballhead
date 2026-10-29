@@ -3,7 +3,13 @@
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, ContainerBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 const { buildTextBlock, noticePayload } = require('../utils/ui');
-const { fetchApplicant, isHttpUrl } = require('../utils/applications');
+const {
+    fetchApplicant,
+    isHttpUrl,
+    refuseUnlessReviewer,
+    claimOrReport,
+    releaseApplicationDecision,
+} = require('../utils/applications');
 const {
     ensureEmhApplicationsTable,
     findEmhApplication,
@@ -13,6 +19,7 @@ const {
 const {
     EMH_APPLICATIONS_CHANNEL_ID,
     HOST_ROLE_ID,
+    EMH_LEAD_IDS,
 } = require('../config/constants');
 
 const SUBTITLE = 'EMH Application';
@@ -161,8 +168,11 @@ const handleEmhApplicationSubmission = async (interaction) => {
 };
 
 const handleEmhApplicationApprove = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+        if (await refuseUnlessReviewer(interaction, { userIds: EMH_LEAD_IDS }, 'EMH Program')) return;
 
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
@@ -187,6 +197,10 @@ const handleEmhApplicationApprove = async (interaction) => {
             });
             return;
         }
+
+        claimId = await claimOrReport(interaction, { program: 'emh', applicantId: userId, decision: 'Accepted' }, 'EMH Program');
+        if (!claimId) return;
+
         await user.roles.add(hostRole);
 
         try {
@@ -230,6 +244,7 @@ const handleEmhApplicationApprove = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error approving EMH application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
@@ -243,11 +258,17 @@ const handleEmhApplicationApprove = async (interaction) => {
 };
 
 const handleEmhApplicationReject = async (interaction) => {
+    let claimId = null;
     try {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        if (await refuseUnlessReviewer(interaction, { userIds: EMH_LEAD_IDS }, 'EMH Program')) return;
+
         const userId = interaction.customId.split('_')[1];
         const user = await fetchApplicant(interaction.guild, userId);
+
+        claimId = await claimOrReport(interaction, { program: 'emh', applicantId: userId, decision: 'Denied' }, 'EMH Program');
+        if (!claimId) return;
 
         if (user) {
             try {
@@ -289,6 +310,7 @@ const handleEmhApplicationReject = async (interaction) => {
         });
     } catch (error) {
         logger.error('Error denying EMH application:', error);
+        await releaseApplicationDecision(claimId);
 
         if (!interaction.replied) {
             await interaction.editReply({
