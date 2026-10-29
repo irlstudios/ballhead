@@ -263,6 +263,7 @@ const handleFfOfficialApplicationApprove = async (interaction) => {
             flags: MessageFlags.IsComponentsV2,
             components: [approvedContainer],
         });
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload(
@@ -332,6 +333,7 @@ const handleFfOfficialApplicationReject = async (interaction) => {
             flags: MessageFlags.IsComponentsV2,
             components: [rejectedContainer],
         });
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload(

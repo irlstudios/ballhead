@@ -81,12 +81,19 @@ function reset(claimResult = 1) {
     state.claimResult = claimResult;
 }
 
-function fakeInteraction(customId, { userId = 'reviewer', manageRoles = true, roleIds = [], failCardEdit = false } = {}) {
+function fakeInteraction(customId, { userId = 'reviewer', manageRoles = true, roleIds = [], failCardEdit = false, failRoleAdd = false, failReplyAfterClose = false } = {}) {
     const seen = { replies: [], rolesAdded: [], dms: 0, cardEdits: 0 };
     const applicant = {
         id: '42',
         user: { id: '42', tag: 'applicant#0001' },
-        roles: { add: async (role) => { seen.rolesAdded.push(role && role.id); }, remove: async () => {}, cache: new Map() },
+        roles: {
+            add: async (role) => {
+                if (failRoleAdd) throw new Error('missing permissions');
+                seen.rolesAdded.push(role && role.id);
+            },
+            remove: async () => {},
+            cache: new Map(),
+        },
         send: async () => { seen.dms += 1; },
     };
     const interaction = {
@@ -102,7 +109,10 @@ function fakeInteraction(customId, { userId = 'reviewer', manageRoles = true, ro
         },
         replied: false,
         deferReply: async () => {},
-        editReply: async (payload) => { seen.replies.push(JSON.stringify(payload)); },
+        editReply: async (payload) => {
+            if (failReplyAfterClose && seen.cardEdits > 0) throw new Error('interaction token expired');
+            seen.replies.push(JSON.stringify(payload));
+        },
         message: {
             id: 'card-1',
             url: CARD_URL,
@@ -174,6 +184,30 @@ for (const d of DECISIONS) {
         assert.deepStrictEqual(state.released, [5]);
         assert.match(seen.replies.join(), /error|try again/i);
     });
+    test(`${d.handlerName}: once the card is closed, a failed reply keeps the decision record`, async () => {
+        reset(5);
+        const { seen, interaction } = fakeInteraction(d.customId, { ...allowed(d), failReplyAfterClose: true });
+
+        // The handler's own error reply hits the same dead token and may
+        // rethrow; interactionHandler catches that, so only the record matters.
+        await d.handler(interaction).catch(() => {});
+
+        assert.strictEqual(seen.cardEdits, 1);
+        assert.deepStrictEqual(state.released, [], 'the decision happened, so its record must stay');
+    });
+
+    if (d.decision === 'Accepted') {
+        test(`${d.handlerName}: a failed role grant leaves the card open for a retry`, async () => {
+            reset(5);
+            const { seen, interaction } = fakeInteraction(d.customId, { ...allowed(d), failRoleAdd: true });
+
+            await d.handler(interaction);
+
+            assert.strictEqual(seen.cardEdits, 0, 'the card must not be closed as accepted');
+            assert.deepStrictEqual(state.deleted, [], 'the application must survive a failed grant');
+            assert.deepStrictEqual(state.released, [5]);
+        });
+    }
 }
 
 test('EMH leads and CDT leads can review without Manage Roles', async () => {

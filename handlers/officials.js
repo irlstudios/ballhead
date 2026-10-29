@@ -207,6 +207,9 @@ const handleOfficialsApplicationApprove = async (interaction) => {
         claimId = await claimOrReport(interaction, { program: 'officials', applicantId: userId, decision: 'Accepted' }, 'Officials Program');
         if (!claimId) return;
 
+        const officialRole = interaction.guild.roles.cache.get(OFFICIAL_PROSPECT_ROLE_ID);
+        await user.roles.add(officialRole);
+
         const qaButton = new ButtonBuilder()
             .setCustomId('officialsQna')
             .setLabel('Help!')
@@ -248,6 +251,7 @@ const handleOfficialsApplicationApprove = async (interaction) => {
             flags: MessageFlags.IsComponentsV2,
             components: [approvedContainer],
         });
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload(
@@ -256,8 +260,6 @@ const handleOfficialsApplicationApprove = async (interaction) => {
             ),
         });
 
-        const officialRole = interaction.guild.roles.cache.get(OFFICIAL_PROSPECT_ROLE_ID);
-        await user.roles.add(officialRole);
     } catch (error) {
         logger.error('Error approving application:', error);
         await releaseApplicationDecision(claimId);
@@ -334,6 +336,7 @@ const handleOfficialsApplicationReject = async (interaction) => {
             flags: MessageFlags.IsComponentsV2,
             components: [rejectedContainer],
         });
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload(

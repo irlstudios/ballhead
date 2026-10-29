@@ -193,6 +193,7 @@ const handleTbProCcApplicationApprove = async (interaction) => {
 
         await deleteTbProCcApplication(userId);
         await closeApplicationCard(interaction, 'Application Accepted', 'accepted');
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload('The application has been successfully accepted!', { title: 'Application Accepted', subtitle: PROGRAM }),
@@ -233,6 +234,7 @@ const handleTbProCcApplicationReject = async (interaction) => {
 
         await deleteTbProCcApplication(userId);
         await closeApplicationCard(interaction, 'Application Denied', 'denied');
+        claimId = null; // decided: keep the record even if the reply below fails
 
         await interaction.editReply({
             ...noticePayload(
