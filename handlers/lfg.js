@@ -108,15 +108,15 @@ const generateQueueImage = async (queue, members) => {
         ctx.fillRect(0, 0, 800, 400);
     }
     const txt = `${members.size}/${queue.size}`;
-    const fs = Math.floor(bg.height * 0.12);
+    const fs = Math.floor(canvas.height * 0.12);
     ctx.font = `bold ${fs}px Sans-Serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#ffffff';
     ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth = Math.max(6, Math.floor(bg.height * 0.01));
-    const tx = Math.floor(bg.width / 2);
-    const ty = Math.floor(bg.height * 0.8);
+    ctx.lineWidth = Math.max(6, Math.floor(canvas.height * 0.01));
+    const tx = Math.floor(canvas.width / 2);
+    const ty = Math.floor(canvas.height * 0.8);
     const textWidth = ctx.measureText(txt).width;
     const headR = Math.floor(fs * 0.22);
     const iconGap = Math.floor(fs * 0.35);
