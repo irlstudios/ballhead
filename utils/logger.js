@@ -19,9 +19,19 @@ const formatMeta = (meta) => {
     }
 };
 
+// logger.error('msg:', error.message) passes the reason as a plain extra
+// argument, which winston keeps only under the splat symbol and never prints.
+// Append those to the message; objects and Errors are already handled as meta.
+const SPLAT = Symbol.for('splat');
+const appendPlainArgs = winston.format((info) => {
+    const plain = (info[SPLAT] || []).filter((arg) => arg === null || typeof arg !== 'object');
+    return plain.length ? { ...info, message: [info.message, ...plain].join(' ') } : info;
+});
+
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
     format: winston.format.combine(
+        appendPlainArgs(),
         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
         winston.format.errors({ stack: true }),
         winston.format.printf(({ timestamp, level, message, stack, ...meta }) => {
