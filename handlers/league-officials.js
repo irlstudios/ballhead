@@ -19,8 +19,6 @@ const {
     ContainerBuilder,
 } = require('discord.js');
 const logger = require('../utils/logger');
-const tourny = require('../utils/tourny_client');
-const { parseScore, dashboardGameLink } = require('../utils/tourny_sync');
 const { noticePayload, buildTextBlock } = require('../utils/ui');
 const { LEAGUE_OFFICIALS_CHANNEL_ID, GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 const {
@@ -186,15 +184,6 @@ async function handleRequesterCancel(interaction, requestId) {
         return editNotice(interaction, 'This request was already assigned or closed.', 'Already Handled');
     }
 
-    if (cancelled.tourny_game_id && tourny.enabled()) {
-        // Fire-and-forget: requestsToClear (utils/tourny_sync.js) repairs a
-        // missed push on the next sweep off this now-Denied row, and clearing
-        // resets officialRequested in tourny so the manager can re-request --
-        // identical contract to handleDenySubmit's push.
-        tourny.clearOfficial(cancelled.tourny_guild_id, cancelled.tourny_game_id, cancelled.tourny_season_id)
-            .catch((e) => logger.error('[TournySync] cancel push (sweep will repair):', e.message));
-    }
-
     logger.info(`[Officials] Request ${requestId} cancelled by requester ${interaction.user.id}`);
     const league = await fetchLeagueById(cancelled.league_id);
     await updateOpsCard(interaction.client, cancelled, league?.league_name);
@@ -286,28 +275,16 @@ async function showReportModal(interaction, requestId) {
         .setCustomId('notes').setLabel('Notes (optional)')
         .setStyle(TextInputStyle.Paragraph).setRequired(false);
 
-    // Linked requests swap the free-text score for two numeric inputs so the
-    // tourny game can be settled with a real result. 5 rows is the modal cap
-    // (proof, rules, home_score, away_score, notes), so unlinked requests
-    // keep the original free-text score field instead.
-    const rows = [new ActionRowBuilder().addComponents(proof), new ActionRowBuilder().addComponents(rules)];
-    if (request.tourny_game_id) {
-        const homeScore = new TextInputBuilder()
-            .setCustomId('home_score').setLabel('Home team score')
-            .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4);
-        const awayScore = new TextInputBuilder()
-            .setCustomId('away_score').setLabel('Away team score')
-            .setStyle(TextInputStyle.Short).setRequired(true).setMaxLength(4);
-        rows.push(new ActionRowBuilder().addComponents(homeScore), new ActionRowBuilder().addComponents(awayScore));
-    } else {
-        const score = new TextInputBuilder()
-            .setCustomId('score').setLabel('Final score / result (optional)')
-            .setStyle(TextInputStyle.Short).setRequired(false);
-        rows.push(new ActionRowBuilder().addComponents(score));
-    }
-    rows.push(new ActionRowBuilder().addComponents(notes));
+    const score = new TextInputBuilder()
+        .setCustomId('score').setLabel('Final score / result (optional)')
+        .setStyle(TextInputStyle.Short).setRequired(false);
 
-    modal.addComponents(...rows);
+    modal.addComponents(
+        new ActionRowBuilder().addComponents(proof),
+        new ActionRowBuilder().addComponents(rules),
+        new ActionRowBuilder().addComponents(score),
+        new ActionRowBuilder().addComponents(notes),
+    );
     await interaction.showModal(modal);
 }
 
@@ -349,15 +326,6 @@ async function handleOfficialsSelect(interaction) {
         return editNotice(interaction, 'This request was already assigned or closed.', 'Already Handled');
     }
 
-    if (assigned.tourny_game_id && tourny.enabled()) {
-        // Fire-and-forget: assignmentsToRepair (utils/tourny_sync.js) repairs
-        // a missed push on the next sweep as long as the game has not gone
-        // final, and staff assigning in Discord must never see a tourny
-        // outage as an error.
-        tourny.assignOfficial(assigned.tourny_guild_id, assigned.tourny_game_id, assigned.tourny_season_id, officialId)
-            .catch((e) => logger.error('[TournySync] assign push (sweep will repair):', e.message));
-    }
-
     logger.info(`[Officials] Request ${requestId} assigned to ${officialId} by ${interaction.user.id} (league ${league.league_id})`);
     await updateOpsCard(interaction.client, assigned, league.league_name);
     await dmAssignedOfficial(interaction.client, assigned, league.league_name);
@@ -395,16 +363,6 @@ async function handleDenySubmit(interaction, requestId) {
         return editNotice(interaction, 'This request is no longer open.', 'Already Handled');
     }
 
-    if (denied.tourny_game_id && tourny.enabled()) {
-        // Fire-and-forget: requestsToClear (utils/tourny_sync.js) repairs a
-        // missed push on the next sweep by re-fetching this now-Denied row
-        // via fetchRecentDeniedLinkedRequests and pushing clearOfficial
-        // again. Clearing also resets officialRequested in tourny so the
-        // manager can re-request.
-        tourny.clearOfficial(denied.tourny_guild_id, denied.tourny_game_id, denied.tourny_season_id)
-            .catch((e) => logger.error('[TournySync] deny push (sweep will repair):', e.message));
-    }
-
     logger.info(`[Officials] Request ${requestId} denied by ${interaction.user.id}`);
     const league = await fetchLeagueById(denied.league_id);
     await updateOpsCard(interaction.client, denied, league?.league_name);
@@ -436,33 +394,7 @@ async function handleReportSubmit(interaction, requestId) {
         return editNotice(interaction, 'The rules doc link must be a valid http(s) URL.', 'Invalid Rules Link');
     }
 
-    // The modal shape branches on tourny_game_id (see showReportModal), so
-    // field access must branch the same way -- reading a field that wasn't
-    // rendered throws in discord.js.
-    let score;
-    if (request.tourny_game_id) {
-        const homeScore = parseScore(interaction.fields.getTextInputValue('home_score'));
-        const awayScore = parseScore(interaction.fields.getTextInputValue('away_score'));
-        if (homeScore === null || awayScore === null) {
-            return editNotice(interaction, 'Scores must be whole numbers between 0 and 9999.', 'Invalid Score');
-        }
-        try {
-            await tourny.reportAsOfficial(request.tourny_guild_id, request.tourny_game_id, {
-                seasonId: request.tourny_season_id,
-                actorId: interaction.user.id,
-                homeScore,
-                awayScore,
-            });
-        } catch (error) {
-            // The tourny result is the one that feeds standings; do not
-            // complete the request without it. The official can resubmit.
-            logger.error(`[TournySync] report push for request ${requestId}:`, error.message);
-            return editNotice(interaction, 'Could not deliver the result to the league dashboard. Try again in a minute.', 'Report Not Saved');
-        }
-        score = `${homeScore}-${awayScore}`;
-    } else {
-        score = (interaction.fields.getTextInputValue('score') || '').trim();
-    }
+    const score = (interaction.fields.getTextInputValue('score') || '').trim();
 
     const completed = await completeOfficialRequestWithReport(requestId, interaction.user.id, { proofUrl, rulesDocUrl, score, notes });
     if (!completed) {
@@ -472,19 +404,13 @@ async function handleReportSubmit(interaction, requestId) {
     logger.info(`[Officials] Request ${requestId} completed by ${interaction.user.id} (league ${completed.league_id})`);
     const league = await fetchLeagueById(completed.league_id);
     const summary = await getLeagueGamesSummary(completed.league_id);
-    // null for unlinked requests or an unset TOURNY_DASHBOARD_URL; the
-    // filter(Boolean) inside buildTextBlock drops a null line, so the
-    // notice/DM are byte-for-byte unchanged in that case.
-    const dashboardLink = dashboardGameLink(completed);
-    const statsLine = dashboardLink && `Add player stats on the league dashboard: ${dashboardLink}`;
-    const viewLine = dashboardLink && `See the result and box score: ${dashboardLink}`;
     await updateOpsCard(interaction.client, completed, league?.league_name, [buildGamesSummaryLine(summary)]);
     await dmUser(interaction.client, completed.requested_by, {
         title: 'Game Verified',
         subtitle: league?.league_name,
-        lines: [`Your official request #${requestId} is complete and the game is verified.`, buildGamesSummaryLine(summary), viewLine],
+        lines: [`Your official request #${requestId} is complete and the game is verified.`, buildGamesSummaryLine(summary)],
     });
-    return editNotice(interaction, ['Report recorded. This game is now verified.', buildGamesSummaryLine(summary), statsLine], 'Report Submitted');
+    return editNotice(interaction, ['Report recorded. This game is now verified.', buildGamesSummaryLine(summary)], 'Report Submitted');
 }
 
 module.exports = {

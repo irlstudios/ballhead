@@ -1559,25 +1559,7 @@ const ensureLeagueOfficialsSchema = async () => {
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_status ON league_official_requests (status)').catch(() => {});
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_ops ON league_official_requests (ops_message_id)').catch(() => {});
 
-    // Link a request to the tourny_tool game it covers. Nullable: requests
-    // made purely inside ballhead keep working with all three null.
-    for (const col of ['tourny_guild_id', 'tourny_season_id', 'tourny_game_id']) {
-        await executeQuery(`ALTER TABLE league_official_requests ADD COLUMN IF NOT EXISTS ${col} TEXT`).catch(() => {});
-    }
-    await executeQuery('CREATE INDEX IF NOT EXISTS idx_league_official_requests_tourny_game ON league_official_requests (tourny_game_id)').catch(() => {});
-    // At most one open request per tourny game: the sweep's check-then-insert
-    // and the slash command's game validation both race; this makes the insert
-    // itself the arbiter (loser gets a 23505 and treats it as "already exists").
-    // Logged, not swallowed: a failure means duplicate open rows already exist
-    // and the backstop is not actually in place until they are cleaned up.
-    await executeQuery(`CREATE UNIQUE INDEX IF NOT EXISTS idx_league_official_requests_open_game
-        ON league_official_requests (tourny_guild_id, tourny_game_id)
-        WHERE status IN ('Pending', 'Assigned') AND tourny_game_id IS NOT NULL`)
-        .catch((err) => logger.error('[DB] Could not create unique open-game index (duplicate open requests?):', err.message));
-
-    // Bounds fetchRecentDeniedLinkedRequests to a recent window: Denied is
-    // terminal, so without a timestamp every request ever denied would be
-    // fetched and re-listGames'd forever.
+    // When a request was denied or cancelled; set by both deny paths.
     await executeQuery('ALTER TABLE league_official_requests ADD COLUMN IF NOT EXISTS denied_at TIMESTAMPTZ').catch(() => {});
 
     await executeQuery(`
@@ -1714,15 +1696,12 @@ const countOpenOfficialRequests = async (leagueId) => {
 
 const insertOfficialRequest = async ({
     leagueId, requestedBy, sport, matchDetails, proposedTime,
-    tournyGuildId = null, tournySeasonId = null, tournyGameId = null,
 }) => {
     const result = await executeQuery(
         `INSERT INTO league_official_requests
-            (league_id, requested_by, sport, match_details, proposed_time, status,
-             tourny_guild_id, tourny_season_id, tourny_game_id)
-         VALUES ($1, $2, $3, $4, $5, 'Pending', $6, $7, $8) RETURNING *`,
-        [leagueId, requestedBy, sport || null, matchDetails || null, proposedTime || null,
-            tournyGuildId, tournySeasonId, tournyGameId]
+            (league_id, requested_by, sport, match_details, proposed_time, status)
+         VALUES ($1, $2, $3, $4, $5, 'Pending') RETURNING *`,
+        [leagueId, requestedBy, sport || null, matchDetails || null, proposedTime || null]
     );
     return result.rows[0];
 };
@@ -1748,40 +1727,6 @@ const fetchOfficialRequestById = async (id) => {
 const fetchOfficialRequestByOpsMessage = async (opsMessageId) => {
     const result = await executeQuery('SELECT * FROM league_official_requests WHERE ops_message_id = $1', [opsMessageId]);
     return result.rows[0] || null;
-};
-
-// Open requests linked to a tourny_tool game, for the sync poller.
-const fetchOpenLinkedRequests = async () => {
-    const result = await executeQuery(
-        `SELECT * FROM league_official_requests
-         WHERE status IN ('Pending', 'Assigned') AND tourny_game_id IS NOT NULL`
-    );
-    return result.rows;
-};
-
-const fetchRequestByTournyGame = async (tournyGuildId, tournyGameId) => {
-    const result = await executeQuery(
-        `SELECT * FROM league_official_requests
-         WHERE tourny_guild_id = $1 AND tourny_game_id = $2 AND status IN ('Pending', 'Assigned')`,
-        [tournyGuildId, tournyGameId]
-    );
-    return result.rows[0] || null;
-};
-
-// Denied requests still linked to a tourny game, for the sync sweep's
-// stale-clear pass (a failed clearOfficial push after denial). Bounded to the
-// last 24 hours: Denied is terminal, so without this bound every request
-// ever denied would be re-fetched (and its season re-listGames'd) on every
-// sweep forever. Pre-existing rows with a null denied_at (denied before this
-// column existed) drop out immediately -- their clears either already
-// happened or are stale beyond repair either way.
-const fetchRecentDeniedLinkedRequests = async () => {
-    const result = await executeQuery(
-        `SELECT * FROM league_official_requests
-         WHERE status = 'Denied' AND tourny_game_id IS NOT NULL
-           AND denied_at IS NOT NULL AND denied_at > NOW() - INTERVAL '24 hours'`
-    );
-    return result.rows;
 };
 
 // Atomic assign: only a still-Pending request can be claimed. Two staff racing
@@ -1810,11 +1755,9 @@ const denyOfficialRequest = async (id, reason, deniedBy) => {
 };
 
 // Atomic cancel: only a still-Pending request can be claimed, unlike
-// denyOfficialRequest which also matches Assigned. The sweep's cancel pass
-// (jobs/tourny-sync.js) works off a request snapshot taken once per sweep;
-// if staff assign the request between that snapshot and this call, the
-// WHERE loses the race and returns null instead of denying a request that
-// is now correctly Assigned.
+// denyOfficialRequest which also matches Assigned. If staff assign the
+// request mid-click, the WHERE loses the race and returns null instead of
+// denying a request that is now correctly Assigned.
 const cancelPendingOfficialRequest = async (id, reason, actor) => {
     const result = await executeQuery(
         `UPDATE league_official_requests
@@ -2553,9 +2496,6 @@ module.exports = {
     deleteOfficialRequest,
     fetchOfficialRequestById,
     fetchOfficialRequestByOpsMessage,
-    fetchOpenLinkedRequests,
-    fetchRequestByTournyGame,
-    fetchRecentDeniedLinkedRequests,
     assignOfficialRequest,
     denyOfficialRequest,
     cancelPendingOfficialRequest,

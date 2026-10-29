@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { GYM_CLASS_GUILD_ID, GC_CD_ROLE_ID } = require('../config/constants');
 
-// Mocks db.js, utils/tourny_client.js and utils/logger.js by swapping the
+// Mocks db.js and utils/logger.js by swapping the
 // module cache entry before handlers/league-officials is first required
 // (mirrors test/squad_member_removal.test.js). Covers FIX 8: the assign flow
 // must DM both the assigned official and the requester, not just the
@@ -17,7 +17,7 @@ function installMock(relativePath, mockExports) {
 }
 
 installMock('../db', {
-    fetchOfficialRequestById: async (id) => ({ id, league_id: 7, sport: 'Soccer', status: 'Pending', tourny_game_id: null }),
+    fetchOfficialRequestById: async (id) => ({ id, league_id: 7, sport: 'Soccer', status: 'Pending' }),
     fetchLeagueById: async (id) => ({ league_id: id, league_name: 'Sky Ballers', league_status: 'Active' }),
     fetchAvailableOfficials: async () => [{ discord_id: 'official-9', discord_name: 'Ref Nine', sport: 'Soccer' }],
     assignOfficialRequest: async (id, officialId, assignedBy) => ({
@@ -28,16 +28,10 @@ installMock('../db', {
         assigned_official_id: officialId,
         assigned_by: assignedBy,
         requested_by: 'requester-1',
-        tourny_game_id: null,
         match_details: 'vs Rivals',
         proposed_time: null,
         // ops_message_id intentionally omitted: updateOpsCard no-ops without one.
     }),
-});
-
-installMock('../utils/tourny_client', {
-    enabled: () => false,
-    assignOfficial: async () => {},
 });
 
 installMock('../utils/logger', {

@@ -5,7 +5,7 @@ const assert = require('node:assert');
 
 // Mocks db.js, utils/sheets_cache.js and utils/logger.js by swapping the
 // module cache entry before jobs/leagues-sheet-sync is first required
-// (mirrors test/tourny_sync_job.test.js).
+// (mirrors test/league_officials_cancel.test.js).
 
 function installMock(relativePath, mockExports) {
     const modulePath = require.resolve(relativePath);

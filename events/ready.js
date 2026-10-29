@@ -19,7 +19,6 @@ const { syncRankRoles } = require('../jobs/rank-role-sync');
 const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
 const { runPollNudge } = require('../jobs/poll-nudge');
-const { runTournySync } = require('../jobs/tourny-sync');
 const { runSquadSweep } = require('../jobs/squad-sweep');
 const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
@@ -329,17 +328,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        // Every 5 minutes: tourny officials sync. No-op unless TOURNY_API_URL /
-        // TOURNY_API_KEY are set. TOURNY_DASHBOARD_URL is optional -- proof
-        // links fall back to a fixed sentinel string when it is unset.
-        cron.schedule('*/5 * * * *', async () => {
-            try {
-                await runTournySync(client);
-            } catch (error) {
-                logger.error('[Cron] Tourny sync failed:', error.message);
-            }
-        });
-
         // Every 15 minutes: resolve ended EMH slots to Hosted / No-Show and
         // redraw the booking calendar tab.
         cron.schedule('*/15 * * * *', async () => {
@@ -389,6 +377,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Tourny Sync (every 5min), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT), Event Winner Cycle (daily 11AM CT, acts bi-weekly)');
+        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT), Event Winner Cycle (daily 11AM CT, acts bi-weekly)');
     },
 };
