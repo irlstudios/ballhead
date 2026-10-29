@@ -136,13 +136,14 @@ const SPREADSHEET_HOST_SESSIONS = '1BEypzniqiUb-fB7dfmV9AyODisSL3ZNIgPOCMBa6CQk'
 const SPREADSHEET_LEAGUES = '1dlWAdJzfO5V46SFW2YgaZQIZSuudZAnGOTffz9ZUVxM';
 const HOST_SESSION_SHEET_TAB = 'Session Stats';
 // EMH self-scheduling. Leads may cancel or move any host's slot; BOT_OWNER_ID
-// is added at check time. The bot draws the calendar into EMH_SCHEDULE_TAB,
-// which stays on the preview tab until Roy approves taking over Monthly View.
+// is added at check time. The bot draws the calendar into EMH_SCHEDULE_TAB.
+// It took over Monthly View on 2026-10-29; the hand-typed September calendar
+// it replaced is kept in the "Monthly View Backup 2026-10-29" tab.
 const EMH_LEAD_IDS = (process.env.EMH_LEAD_IDS || '942807149627736135')
     .split(',')
     .map((id) => id.trim())
     .filter(Boolean);
-const EMH_SCHEDULE_TAB = process.env.EMH_SCHEDULE_TAB || 'Monthly View (Bot Preview)';
+const EMH_SCHEDULE_TAB = process.env.EMH_SCHEDULE_TAB || 'Monthly View';
 // How often a live session advertises itself in general chat. Overridable so the
 // cadence can be tuned without a deploy.
 const HOST_SESSION_NUDGE_MINUTES = Number(process.env.HOST_SESSION_NUDGE_MINUTES || '15');

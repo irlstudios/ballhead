@@ -9,7 +9,7 @@ const { setImmediate } = require('node:timers');
 // renderer runs without Google or Postgres.
 const writes = [];
 const optionsSeen = [];
-const state = { tabs: ['Monthly View (Bot Preview)'], fail: false, bookings: [], delays: [] };
+const state = { tabs: ['Monthly View'], fail: false, bookings: [], delays: [] };
 const fakeSheets = {
     spreadsheets: {
         get: async (_params, options) => {
@@ -46,11 +46,11 @@ const updates = () => writes.flat().filter((r) => r.updateCells);
 beforeEach(() => {
     writes.length = 0;
     optionsSeen.length = 0;
-    Object.assign(state, { tabs: ['Monthly View (Bot Preview)'], fail: false, bookings: [], delays: [] });
+    Object.assign(state, { tabs: ['Monthly View'], fail: false, bookings: [], delays: [] });
     resetRenderState();
 });
 
-test('writes the grid to the preview tab, then skips an identical rerender', async () => {
+test('writes the grid to the Monthly View tab, then skips an identical rerender', async () => {
     assert.strictEqual(await renderMonthlyView(NOW), true);
     assert.strictEqual(await renderMonthlyView(NOW), false);
     assert.strictEqual(updates().length, 1);
@@ -58,16 +58,16 @@ test('writes the grid to the preview tab, then skips an identical rerender', asy
 });
 
 test('creates the tab when it is missing and merges the title row', async () => {
-    state.tabs = ['Monthly View'];
+    state.tabs = ['Monthly View (Bot Preview)'];
     await renderMonthlyView(NOW);
     const requests = writes.flat();
-    assert.ok(requests.some((r) => r.addSheet?.properties.title === 'Monthly View (Bot Preview)'));
+    assert.ok(requests.some((r) => r.addSheet?.properties.title === 'Monthly View'));
     assert.ok(requests.some((r) => r.mergeCells));
     assert.strictEqual(updates()[0].updateCells.range.sheetId, 99);
 });
 
-test('never touches the real Monthly View tab by default', async () => {
-    state.tabs = ['Monthly View', 'Monthly View (Bot Preview)'];
+test('draws into the real Monthly View tab by default, not the old preview tab', async () => {
+    state.tabs = ['Monthly View (Bot Preview)', 'Monthly View'];
     await renderMonthlyView(NOW);
     assert.strictEqual(updates()[0].updateCells.range.sheetId, 2);
 });
@@ -98,7 +98,8 @@ test('renders are serialized so older data cannot land last', async () => {
 // gaxios has no default timeout; without one a stalled request would hold the
 // render queue forever.
 test('every sheets call carries a timeout', async () => {
-    state.tabs = ['Monthly View'];
+    // No tabs yet, so the create path's calls are covered too.
+    state.tabs = [];
     await renderMonthlyView(NOW);
     assert.ok(optionsSeen.length >= 3);
     assert.ok(optionsSeen.every((options) => options?.timeout > 0));
