@@ -18,7 +18,8 @@ const textOf = (payload) => JSON.stringify(payload.components.map((c) => c.toJSO
 function assertRedirect(text) {
     assert.match(text, /GC mobile app/);
     assert.match(text, /Instagram/);
-    assert.match(text, /\/verify/);
+    assert.match(text, /https:\/\/play\.gymclass\.com\/verify\/discord/);
+    assert.ok(!text.includes('`/verify`'), 'must not send people to the /verify command');
     assert.match(text, /\/cc_status/);
     assert.ok(!text.includes('/cc apply-instagram'), 'must not send people back to the old command');
 }

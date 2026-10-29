@@ -1,7 +1,7 @@
 'use strict';
 
 const { CDT_DESIGNS_FORUM_CHANNEL_ID, GYM_CLASS_COMMANDS_CHANNEL_ID } = require('../config/constants');
-const { GC_MOBILE_LINKS } = require('./cc_redirect');
+const { GC_MOBILE_LINKS, VERIFY_DISCORD_URL } = require('./cc_redirect');
 
 // The server-wide front door: one short page per system, every page ending
 // with the command to start with. Content lives here, in one place, in the
@@ -33,7 +33,8 @@ const GUIDE_TOPICS = Object.freeze({
         lines: Object.freeze([
             'Post Gym Class content, earn points, and unlock the Content Creator role. Instagram, TikTok, and YouTube creators all sign up in the GC mobile app.',
             `- Get the GC mobile app (${GC_MOBILE_LINKS}) and link your Instagram, TikTok, or YouTube account`,
-            `- \`/verify\`, then \`/cc_status\` in <#${GYM_CLASS_COMMANDS_CHANNEL_ID}> - Gym Class bot commands that show your status and weekly points`,
+            `- Connect your Discord at ${VERIFY_DISCORD_URL}`,
+            `- \`/cc_status\` in <#${GYM_CLASS_COMMANDS_CHANNEL_ID}> - Gym Class bot command that shows your status and weekly points`,
             '- `/cc_post_feedback` - Gym Class bot command that shows how a post scored',
             'Start by linking your account in the GC mobile app.',
         ]),

@@ -38,7 +38,7 @@ const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
 const LEAGUE_OFFICIALS_CHANNEL_ID = process.env.LEAGUE_OFFICIALS_CHANNEL_ID || LEAGUE_LOG_CHANNEL_ID;
 const SQUAD_PRACTICE_CHANNEL_ID = '1233854185276051516';
 const GYM_CLASS_GENERAL_CHANNEL_ID = '752216589792706624';
-// The Gym Class bot's creator commands (/verify, /cc_status) run here.
+// The Gym Class bot's creator commands (/cc_status, /cc_post_feedback) run here.
 const GYM_CLASS_COMMANDS_CHANNEL_ID = '879142306932981800';
 const CC_SUPPORT_CHANNEL_ID = '1129535902826364968';
 // Channel that hosts the "Weekly Discussion: <topic>" threads created by

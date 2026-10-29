@@ -9,13 +9,14 @@ const { GYM_CLASS_COMMANDS_CHANNEL_ID, CC_SUPPORT_CHANNEL_ID } = require('../con
 const GC_MOBILE_IOS_URL = 'https://apps.apple.com/us/app/gym-class-vr-companion-app/id6459104919';
 const GC_MOBILE_ANDROID_URL = 'https://play.google.com/store/apps/details?id=com.gymclassvr';
 const GC_MOBILE_LINKS = `[iPhone](${GC_MOBILE_IOS_URL}) | [Android](${GC_MOBILE_ANDROID_URL})`;
+const VERIFY_DISCORD_URL = 'https://play.gymclass.com/verify/discord';
 
 // Gaps go in a trailing \n because buildTextBlock drops empty lines.
 const CC_REDIRECT_LINES = Object.freeze([
     'Instagram, TikTok, and YouTube creators now sign up and get tracked in the GC mobile app. Ballhead no longer handles CC applications or progress.\n',
     `**1.** Get the GC mobile app: ${GC_MOBILE_LINKS}`,
     '**2.** Link your Instagram, TikTok, or YouTube account in the app.',
-    `**3.** In <#${GYM_CLASS_COMMANDS_CHANNEL_ID}>, run \`/verify\` to connect your Discord, then \`/cc_status\` to see your status and weekly points.\n`,
+    `**3.** Connect your Discord at ${VERIFY_DISCORD_URL}, then run \`/cc_status\` in <#${GYM_CLASS_COMMANDS_CHANNEL_ID}> to see your status and weekly points.\n`,
     '**More Gym Class bot commands**',
     '- `/cc_post_feedback` - see the quality score for one of your posts',
     '- `/claim_roles` - claim your creator role perks',
@@ -35,6 +36,7 @@ function replyWithCcRedirect(interaction, title) {
 
 module.exports = {
     GC_MOBILE_LINKS,
+    VERIFY_DISCORD_URL,
     ccRedirectPayload,
     replyWithCcRedirect,
 };
