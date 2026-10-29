@@ -110,11 +110,13 @@ const openRoomForActivities = async (channel, hostId) => {
         UseEmbeddedActivities: true,
         ...externalApps,
         Connect: true,
+        SendMessages: true
     });
     await channel.permissionOverwrites.edit(hostId, {
         UseEmbeddedActivities: true,
         ...externalApps,
         ManageChannels: false,
+        SendMessages: true
     });
 };
 
