@@ -110,13 +110,14 @@ const openRoomForActivities = async (channel, hostId) => {
         UseEmbeddedActivities: true,
         ...externalApps,
         Connect: true,
-        SendMessages: true
+        // Personal rooms deny text chat; an event opens it so attendees can talk in the VC chat.
+        SendMessages: true,
     });
     await channel.permissionOverwrites.edit(hostId, {
         UseEmbeddedActivities: true,
         ...externalApps,
         ManageChannels: false,
-        SendMessages: true
+        SendMessages: true,
     });
 };
 
@@ -128,6 +129,7 @@ const restoreRoom = async (channel, session) => {
     await channel.permissionOverwrites.edit(channel.guild.roles.everyone, {
         UseEmbeddedActivities: false,
         ...(canExternal ? { UseExternalApps: null } : {}),
+        SendMessages: false,
     }).catch(() => {});
     const hostMember = await channel.guild.members.fetch(session.hostId).catch(() => null);
     const hostKeepsActivities = Boolean(hostMember?.roles.cache.some((role) => VC_ACTIVITY_ALLOWED_ROLE_IDS.has(role.id)));
@@ -135,6 +137,7 @@ const restoreRoom = async (channel, session) => {
         UseEmbeddedActivities: hostKeepsActivities,
         ...(canExternal ? { UseExternalApps: hostKeepsActivities ? true : null } : {}),
         ManageChannels: true,
+        SendMessages: null,
     }).catch(() => {});
     if (session.originalName && channel.name !== session.originalName) {
         await channel.setName(session.originalName).catch(() => {});
