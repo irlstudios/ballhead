@@ -14,15 +14,15 @@ const {
     FF_OFFICIAL_APPLICATIONS_CHANNEL_ID,
     FF_OFFICIAL_ELIGIBLE_ROLE_IDS,
     FF_OFFICIAL_ROLE_ID,
-    OFFICIAL_SENIOR_ROLE_ID,
+    OFFICIAL_SPONSORED_ROLE_ID,
     FF_APPLICATION_MANAGERS,
     FF_APPLICATIONS_PAUSED,
     FF_APPLICATIONS_PAUSE_MESSAGE,
 } = require('../config/constants');
 
 const resolveCurrentRole = (member) => {
-    if (member.roles.cache.has(OFFICIAL_SENIOR_ROLE_ID)) {
-        return 'Senior Official';
+    if (member.roles.cache.has(OFFICIAL_SPONSORED_ROLE_ID)) {
+        return 'Sponsored Official';
     }
     return 'Active Official';
 };
@@ -86,7 +86,7 @@ const handleFfOfficialApplicationSubmission = async (interaction) => {
         if (!FF_OFFICIAL_ELIGIBLE_ROLE_IDS.some(roleId => member.roles.cache.has(roleId))) {
             await interaction.editReply({
                 ...noticePayload(
-                    'Only Active Officials and Senior Officials can apply to become an FF Official.',
+                    'Only Active Officials and Sponsored Officials can apply to become an FF Official.',
                     { title: 'Role Required', subtitle: 'FF Official Application' }
                 ),
             });

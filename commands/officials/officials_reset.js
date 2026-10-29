@@ -1,7 +1,7 @@
 const { SlashCommandBuilder, MessageFlags, ContainerBuilder, TextDisplayBuilder } = require('discord.js');
 const { getSheetsClient } = require('../../utils/sheets_cache');
 const logger = require('../../utils/logger');
-const { SPREADSHEET_LFO, OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID } = require('../../config/constants');
+const { SPREADSHEET_LFO, OFFICIAL_SPONSORED_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID } = require('../../config/constants');
 
 function buildTextBlock({ title, subtitle, lines } = {}) {
     const parts = [];
@@ -24,12 +24,12 @@ function buildTextBlock({ title, subtitle, lines } = {}) {
 }
 
 const roleHierarchy = {
-    [OFFICIAL_SENIOR_ROLE_ID]: 3,
+    [OFFICIAL_SPONSORED_ROLE_ID]: 3,
     [OFFICIAL_ACTIVE_ROLE_ID]: 2,
     [OFFICIAL_PROSPECT_ROLE_ID]: 1
 };
 
-const roleIds = [OFFICIAL_SENIOR_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID];
+const roleIds = [OFFICIAL_SPONSORED_ROLE_ID, OFFICIAL_ACTIVE_ROLE_ID, OFFICIAL_PROSPECT_ROLE_ID];
 
 function sortOfficialsByRole(officials) {
     return officials.sort((a, b) => roleHierarchy[b.highestRoleId] - roleHierarchy[a.highestRoleId]);

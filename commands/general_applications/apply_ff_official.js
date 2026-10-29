@@ -35,7 +35,7 @@ module.exports = {
         if (!FF_OFFICIAL_ELIGIBLE_ROLE_IDS.some(roleId => member.roles.cache.has(roleId))) {
             await interaction.reply({
                 ...noticePayload(
-                    'Only Active Officials and Senior Officials can apply to become an FF Official.',
+                    'Only Active Officials and Sponsored Officials can apply to become an FF Official.',
                     { title: 'Role Required', subtitle: 'FF Official Application' }
                 ),
                 flags: MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral,
