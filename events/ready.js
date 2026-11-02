@@ -5,9 +5,7 @@ const logger = require('../utils/logger');
 const { executeQuery, fetchExpiredPendingInvites, deleteInvite, ensureInvitesSchema,
     ensureTransferRequestsTable,
     fetchExpiredPendingTransfers, updateTransferRequestStatus,
-    ensureFfOfficialApplicationsTable, ensureGameIdeasTables, ensureReengagementTables,
-    ensurePollTables, getPollPostCount } = require('../db');
-const { backfillAllForums } = require('../utils/poll_backfill');
+    ensureFfOfficialApplicationsTable, ensureReengagementTables } = require('../db');
 const { pruneInactiveMembers } = require('../utils/squad_prune');
 require('dotenv').config({ path: './resources/.env' });
 const { ensureLeagueActivitySchema, ensureLeagueOfficialsSchema, ensureLeagueContentSchema, ensureLeagueEnforcementSchema, ensureLeagueRewardsSchema, ensureSquadsSchema } = require('../db');
@@ -16,9 +14,7 @@ const { runLeagueTierSync } = require('../jobs/league-tier-sync');
 const { sendCheckinReminder, sendCheckinWarning, processCheckinDeadline } = require('../jobs/league-checkin-cycle');
 const { cleanReactedMessages } = require('../jobs/chat-reaction-cleanup');
 const { syncRankRoles } = require('../jobs/rank-role-sync');
-const { runWeeklyCommunityMetrics } = require('../jobs/community-metrics');
 const { runReengagementSweep } = require('../jobs/reengagement');
-const { runPollNudge } = require('../jobs/poll-nudge');
 const { runSquadSweep } = require('../jobs/squad-sweep');
 const { runLeaguesSheetSync } = require('../jobs/leagues-sheet-sync');
 const { ensureHostSessionSchema } = require('../utils/host_session_queries');
@@ -171,9 +167,7 @@ module.exports = {
             ['league_enforcement', ensureLeagueEnforcementSchema],
             ['league_rewards', ensureLeagueRewardsSchema],
             ['ff_official_applications', ensureFfOfficialApplicationsTable],
-            ['game_ideas', ensureGameIdeasTables],
             ['reengagement', ensureReengagementTables],
-            ['poll', ensurePollTables],
             ['host_sessions', ensureHostSessionSchema],
             ['event_winner_cycles', ensureEventWinnerSchema],
             ['emh_bookings', ensureEmhScheduleSchema],
@@ -200,19 +194,6 @@ module.exports = {
             await adoptOrphanRooms(client);
         } catch (error) {
             logger.error('[Rooms] Orphan sweep failed:', error);
-        }
-
-        // One-time poll catalog catch-up: if poll_posts is empty (e.g. first run
-        // after deploy), index existing forum posts in the background so autocomplete
-        // and the context menu work without a manual script run. The forum listeners
-        // keep the catalog fresh afterwards.
-        try {
-            if ((await getPollPostCount()) === 0) {
-                logger.info('[Poll] Catalog empty; starting background backfill.');
-                backfillAllForums(client).catch((error) => logger.error('[Poll] Backfill failed:', error));
-            }
-        } catch (error) {
-            logger.error('[Poll] Backfill check failed:', error);
         }
 
         // Process expired transfer requests
@@ -301,15 +282,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        // Weekly: Community Metrics - Monday 9:00 AM Chicago (summarizes trailing 7 days)
-        cron.schedule('0 9 * * 1', async () => {
-            try {
-                await runWeeklyCommunityMetrics(client);
-            } catch (error) {
-                logger.error('[Cron] Community Metrics failed:', error);
-            }
-        }, { timezone: 'America/Chicago' });
-
         // Weekly: Re-engagement sweep - Tuesday 10:00 AM Chicago. The sweep is a
         // no-op unless REENGAGE_ENABLED=true, and the sender further refuses to DM
         // anyone outside REENGAGE_ALLOWLIST when that is set.
@@ -318,15 +290,6 @@ module.exports = {
                 await runReengagementSweep(client);
             } catch (error) {
                 logger.error('[Cron] Re-engagement sweep failed:', error);
-            }
-        }, { timezone: 'America/Chicago' });
-
-        // Daily: Top 5 nudge in idea/bug threads - 1:00 PM Chicago
-        cron.schedule('0 13 * * *', async () => {
-            try {
-                await runPollNudge(client);
-            } catch (error) {
-                logger.error('[Cron] Poll nudge failed:', error);
             }
         }, { timezone: 'America/Chicago' });
 
@@ -379,6 +342,6 @@ module.exports = {
             }
         }, { timezone: 'America/Chicago' });
 
-        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Community Metrics (Mon 9AM CT), Poll Nudge (daily 1PM CT), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT), Event Winner Cycle (daily 11AM CT, acts bi-weekly)');
+        logger.info('[Startup] Scheduled jobs registered: Squad Membership Cleanup (11:59PM CT), Squad Sweep (every 5min), League Health (Sun 12PM CT), Checkin Cycle (1st/21st/28th 12PM CT), Chat Reaction Cleanup (hourly), Rank Role Sync (Wed midnight CT), Leagues Sheet Sync (daily 7AM CT), League Tier Sync (daily 12:30PM CT), Event Winner Cycle (daily 11AM CT, acts bi-weekly)');
     },
 };

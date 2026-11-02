@@ -15,19 +15,6 @@ const LOGGING_CHANNEL_ID = '1233853415952748645';
 const OFFICIALS_APPLICATIONS_CHANNEL_ID = '1284290923819175976';
 const FF_OFFICIAL_APPLICATIONS_CHANNEL_ID = '1510056368520823006';
 
-// Community metrics channels
-// Forum channel for the game-ideas forum (verified). Update here if the channel changes.
-const GAME_IDEAS_FORUM_CHANNEL_ID = '1149459026304827442';
-// Forum channel for community-submitted bug reports (UGC, no standard post format).
-const BUG_REPORTS_FORUM_CHANNEL_ID = '1047355363223163010';
-// Forum tag applied to a bug report thread when it has been escalated.
-// Threads in BUG_REPORTS_FORUM_CHANNEL_ID without this tag are counted as un-escalated.
-const BUG_REPORT_ESCALATED_TAG_ID = '1265408485361975338';
-// Forum tags on the game-ideas forum that map a post to a poll board.
-// The bugs board is resolved by channel (the whole bug-report forum), so it needs no tag.
-const GAMEPLAY_TAG_ID = '1256306810722193489';
-const SKINS_TAG_ID = '1149459536835518555';
-const BOARD_TAG_MAP = { gameplay: GAMEPLAY_TAG_ID, skins: SKINS_TAG_ID };
 // Forum channel where /report player opens a thread per report and moderators
 // action them. Was hardcoded in the report command and lookup separately.
 const REPORTS_FORUM_CHANNEL_ID = '1139975178013655183';
@@ -131,7 +118,6 @@ const SPREADSHEET_OFFICIALS = '116zau8gWkOizH9KCboH8Xg5SjKOHR_Lc_asfaYQfMdI';
 const SPREADSHEET_CONTENT_CREATORS = '1ZFLMKI7kytkUXU0lDKXDGSuNFn4OqZYnpyLIe6urVLI';
 const SPREADSHEET_RANKED_SESSIONS = '1XQ3kY7v8IaQzjk7jmUvoaOV2OZB6gFL0DcNlRNLQ8-I';
 const SPREADSHEET_LFO = '14J4LOdWDa2mzS6HzVBzAJgfnfi8_va1qOWVsxnwB-UM';
-const SPREADSHEET_COMMUNITY_METRICS = '1cukQXP1_HKt-bwos3sd4-YR51EskJ6Fl_vgZR4hF0IQ';
 const SPREADSHEET_HOST_SESSIONS = '1BEypzniqiUb-fB7dfmV9AyODisSL3ZNIgPOCMBa6CQk';
 const SPREADSHEET_LEAGUES = '1dlWAdJzfO5V46SFW2YgaZQIZSuudZAnGOTffz9ZUVxM';
 const HOST_SESSION_SHEET_TAB = 'Session Stats';
@@ -284,12 +270,6 @@ module.exports = {
     LOGGING_CHANNEL_ID,
     OFFICIALS_APPLICATIONS_CHANNEL_ID,
     FF_OFFICIAL_APPLICATIONS_CHANNEL_ID,
-    GAME_IDEAS_FORUM_CHANNEL_ID,
-    BUG_REPORTS_FORUM_CHANNEL_ID,
-    BUG_REPORT_ESCALATED_TAG_ID,
-    GAMEPLAY_TAG_ID,
-    SKINS_TAG_ID,
-    BOARD_TAG_MAP,
     REPORTS_FORUM_CHANNEL_ID,
     LEAGUE_LOG_CHANNEL_ID,
     LEAGUE_OFFICIALS_CHANNEL_ID,
@@ -337,7 +317,6 @@ module.exports = {
     SPREADSHEET_CONTENT_CREATORS,
     SPREADSHEET_RANKED_SESSIONS,
     SPREADSHEET_LFO,
-    SPREADSHEET_COMMUNITY_METRICS,
     SPREADSHEET_HOST_SESSIONS,
     SPREADSHEET_LEAGUES,
     HOST_SESSION_SHEET_TAB,
