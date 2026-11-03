@@ -1,5 +1,6 @@
 const { Pool } = require('pg');
 const logger = require('./utils/logger');
+const { LEAGUE_UNREACHABLE_AFTER_CHECKS } = require('./config/constants');
 
 const poolConfig = {
     host: process.env.DB_HOST,
@@ -1093,7 +1094,8 @@ const updateLeagueInvite = async (leagueId, invite, data) => {
         `UPDATE "Active Leagues"
          SET league_invite = $1, server_name = $2, server_id = $3,
              member_count = $4, server_icon = $5, server_banner = $6,
-             vanity_url = $7, server_description = $8, server_features = $9
+             vanity_url = $7, server_description = $8, server_features = $9,
+             invite_dead_checks = 0
          WHERE league_id = $10`,
         [invite, data.serverName, data.serverId, data.memberCount, data.serverIcon,
             data.serverBanner, data.vanityUrl, data.serverDescription, data.serverFeatures, leagueId]
@@ -1733,6 +1735,9 @@ const getLeagueContentSummary = async (leagueId) => {
 
 const ensureLeagueEnforcementSchema = async () => {
     await executeQuery('ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS health_status TEXT NOT NULL DEFAULT \'Healthy\'').catch(() => {});
+    // Consecutive weekly health checks that found the invite dead; see
+    // jobs/league-health-check.js and fetchLeaguesForDirectory.
+    await executeQuery('ALTER TABLE "Active Leagues" ADD COLUMN IF NOT EXISTS invite_dead_checks INTEGER NOT NULL DEFAULT 0').catch(() => {});
 
     await executeQuery(`
         CREATE TABLE IF NOT EXISTS league_strikes (
@@ -1853,6 +1858,10 @@ const resolveStrike = async (strikeId, resolvedBy) => {
         [strikeId, resolvedBy]
     );
     return result.rows[0] || null;
+};
+
+const setLeagueDeadInviteChecks = async (leagueId, count) => {
+    await executeQuery('UPDATE "Active Leagues" SET invite_dead_checks = $2 WHERE league_id = $1', [leagueId, count]);
 };
 
 const setLeagueHealthStatus = async (leagueId, status) => {
@@ -2022,13 +2031,16 @@ const markRewardFulfilled = async (id, fulfilledBy) => {
 };
 
 // Public directory: active leagues grouped Sponsored -> Active -> Base.
+// Leagues whose invite has been dead for several checks in a row are left out:
+// nobody can join them, and the owner was DMed each week to fix it.
 const fetchLeaguesForDirectory = async () => {
     const result = await executeQuery(
         `SELECT league_name, league_type, health_status, league_invite, member_count
          FROM "Active Leagues"
-         WHERE league_status = 'Active'
+         WHERE league_status = 'Active' AND invite_dead_checks < $1
          ORDER BY CASE league_type WHEN 'Sponsored' THEN 0 WHEN 'Active' THEN 1 WHEN 'Base' THEN 2 ELSE 3 END,
-                  member_count DESC NULLS LAST, league_name ASC`
+                  member_count DESC NULLS LAST, league_name ASC`,
+        [LEAGUE_UNREACHABLE_AFTER_CHECKS]
     );
     return result.rows;
 };
@@ -2267,6 +2279,7 @@ module.exports = {
     fetchStrikeById,
     resolveStrike,
     setLeagueHealthStatus,
+    setLeagueDeadInviteChecks,
     hasPendingAppealForStrike,
     insertAppeal,
     setAppealOpsMessage,

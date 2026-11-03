@@ -6,8 +6,9 @@ const {
     fetchActiveLeagues,
     insertLeagueHealthLog,
     updateLeagueHealthData,
+    setLeagueDeadInviteChecks,
 } = require('../db');
-const { GYM_CLASS_GUILD_ID } = require('../config/constants');
+const { GYM_CLASS_GUILD_ID, LEAGUE_UNREACHABLE_AFTER_CHECKS } = require('../config/constants');
 
 const DELAY_MS = 1000;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,6 +18,18 @@ function extractInviteCode(url) {
     const match = url.match(/discord(?:app)?\.com\/invite\/([^/\s]+)/i)
         || url.match(/discord\.gg\/([^/\s]+)/i);
     return match ? match[1] : null;
+}
+
+const INVITE_OUTCOME = Object.freeze({ VALID: 'valid', DEAD: 'dead', UNKNOWN: 'unknown' });
+
+// Consecutive dead-invite count after one check. An inconclusive check (rate
+// limit, Discord outage) keeps the count so a hiccup neither hides nor revives
+// a league.
+function nextDeadInviteChecks(previous, outcome) {
+    const prev = Number(previous) || 0;
+    if (outcome === INVITE_OUTCOME.VALID) return 0;
+    if (outcome === INVITE_OUTCOME.DEAD) return prev + 1;
+    return prev;
 }
 
 function buildIconUrl(guildId, hash) {
@@ -39,11 +52,14 @@ async function runLeagueHealthCheck(client) {
     let checked = 0;
     let invalidInvites = 0;
     let ownersGone = 0;
+    let unreachable = 0;
 
     for (const league of leagues) {
         let inviteValid = false;
         let memberCount = null;
         let ownerInGuild = false;
+        // A missing or unparseable invite is as unjoinable as a revoked one.
+        let outcome = INVITE_OUTCOME.DEAD;
 
         const code = extractInviteCode(league.league_invite);
 
@@ -61,6 +77,7 @@ async function runLeagueHealthCheck(client) {
 
                 if (guild) {
                     inviteValid = true;
+                    outcome = INVITE_OUTCOME.VALID;
                     memberCount = data.approximate_member_count || null;
 
                     const serverName = guild.name || 'Unknown Server Name';
@@ -89,17 +106,21 @@ async function runLeagueHealthCheck(client) {
                 const status = error.response?.status;
                 if (status === 404) {
                     invalidInvites += 1;
+                    const hidden = nextDeadInviteChecks(league.invite_dead_checks, INVITE_OUTCOME.DEAD)
+                        >= LEAGUE_UNREACHABLE_AFTER_CHECKS;
                     try {
                         const owner = await client.users.fetch(league.owner_id.toString());
                         await owner.send(
                             `Your league invite for **${league.league_name}** is no longer valid. ` +
                             'Please update it with `/league update-invite` so players can find your league ' +
-                            'and the weekly health checks can verify it.'
+                            'and the weekly health checks can verify it.' +
+                            (hidden ? ' Until then your league is hidden from `/league directory`.' : '')
                         ).catch(() => {});
                     } catch (dmError) {
                         logger.error(`[Health Check] Failed to DM owner ${league.owner_id}:`, dmError);
                     }
                 } else {
+                    outcome = INVITE_OUTCOME.UNKNOWN;
                     logger.error(`[Health Check] Error resolving invite for league ${league.league_id}:`, error.message);
                 }
             }
@@ -118,13 +139,22 @@ async function runLeagueHealthCheck(client) {
 
         await insertLeagueHealthLog(league.league_id, inviteValid, memberCount, ownerInGuild);
 
+        const deadChecks = nextDeadInviteChecks(league.invite_dead_checks, outcome);
+        if (deadChecks !== (Number(league.invite_dead_checks) || 0)) {
+            await setLeagueDeadInviteChecks(league.league_id, deadChecks);
+        }
+        if (deadChecks >= LEAGUE_UNREACHABLE_AFTER_CHECKS) {
+            unreachable += 1;
+        }
+
         checked += 1;
         await delay(DELAY_MS);
     }
 
     logger.info(
-        `[Health Check] Complete. Checked: ${checked}, Invalid invites: ${invalidInvites}, Owners gone: ${ownersGone}`
+        `[Health Check] Complete. Checked: ${checked}, Invalid invites: ${invalidInvites}, ` +
+        `Unreachable: ${unreachable}, Owners gone: ${ownersGone}`
     );
 }
 
-module.exports = { runLeagueHealthCheck };
+module.exports = { runLeagueHealthCheck, nextDeadInviteChecks, INVITE_OUTCOME };
