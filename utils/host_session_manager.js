@@ -70,8 +70,6 @@ const forgetSession = (session) => {
 // headset and to hosts with activity sharing off, and gating on it left those
 // events with no stats and no general-chat nudges. The callback re-checks state
 // so a session that went live or ended in the meantime is left alone.
-const FALLBACK_ACTIVITY_NAME = 'Undetected';
-
 const describePresence = (presence) => (presence?.activities || [])
     .map((activity) => `${activity.type}:${activity.name}`).join(', ') || 'none';
 
@@ -100,7 +98,8 @@ const goLiveWithoutDetection = async (client, session) => {
     // Kept so the next "not tracked" report shows what Discord actually reported.
     logger.info(`[Host Session] Session ${session.id}: no tracked activity, host presence [${describePresence(presence)}]; going live anyway.`);
     const minutes = Math.round((Date.now() - new Date(session.startedAt).getTime()) / 60000);
-    await goLive(client, session, FALLBACK_ACTIVITY_NAME, dms.fallbackTrackingNotice({ minutes }));
+    // No name: the sheet shows Unknown and the general-chat invite omits it.
+    await goLive(client, session, null, dms.fallbackTrackingNotice({ minutes }));
 };
 
 const countParticipants = (channel, hostId) => (channel?.members
@@ -226,7 +225,7 @@ const goLive = async (client, session, activityName, notice = dms.trackingStarte
     }
 
     if (finishing.has(live.id)) return;
-    logger.info(`[Host Session] Session ${live.id} is live: ${live.hostName} playing ${activityName}.`);
+    logger.info(`[Host Session] Session ${live.id} is live: ${live.hostName} playing ${activityName || 'an undetected activity'}.`);
     clearActivityWarning(live.id);
     // Fire-and-forget: awaiting the DM here would open a gap between the
     // finishing check above and postNudge, letting a host who leaves mid-DM
