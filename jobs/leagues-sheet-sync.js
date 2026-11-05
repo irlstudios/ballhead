@@ -3,7 +3,7 @@
 const { getSheetsClient } = require('../utils/sheets_cache');
 const { fetchLeaguesForSheetSync } = require('../db');
 const { tierStanding } = require('../utils/league_tier_sync');
-const { SPREADSHEET_LEAGUES } = require('../config/constants');
+const { SPREADSHEET_LEAGUES, LEAGUE_UNREACHABLE_AFTER_CHECKS } = require('../config/constants');
 const logger = require('../utils/logger');
 
 // Every column on the "Active Leagues" table, in ordinal order.
@@ -22,6 +22,8 @@ const DB_COLUMNS = [
 const METRIC_COLUMNS = [
     'active_strikes', 'total_strikes', 'checkin_months_count',
     'games_total', 'games_30d', 'meets_active_requirements', 'failed_requirements',
+    // A DB column, kept last so adding it did not shift existing sheet columns.
+    'invite_dead_checks',
 ];
 
 const SHEET_COLUMNS = [...DB_COLUMNS, ...METRIC_COLUMNS];
@@ -97,6 +99,7 @@ function buildMetricsRows(leagues, now = new Date()) {
         ['Active leagues below retention bar', standings.filter((s) => s.tier === 'Active' && s.meets === false).length],
         ['Live leagues checked in (last 35 days)', live.filter((l) => l.last_checkin_date && now.getTime() - new Date(l.last_checkin_date).getTime() <= 35 * DAY_MS).length],
         ['Live leagues never checked in', live.filter((l) => !l.last_checkin_date).length],
+        ['Live leagues unreachable (dead invite)', live.filter((l) => (l.invite_dead_checks || 0) >= LEAGUE_UNREACHABLE_AFTER_CHECKS).length],
         ['Active strikes (all leagues)', sum('active_strikes')],
         ['Median member count (live leagues)', memberCounts.length > 0 ? memberCounts[Math.floor(memberCounts.length / 2)] : ''],
         ['Games recorded (all time)', sum('games_total')],

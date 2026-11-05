@@ -19,6 +19,9 @@ const FF_OFFICIAL_APPLICATIONS_CHANNEL_ID = '1510056368520823006';
 // action them. Was hardcoded in the report command and lookup separately.
 const REPORTS_FORUM_CHANNEL_ID = '1139975178013655183';
 const LEAGUE_LOG_CHANNEL_ID = '1298997780303315016';
+// Consecutive weekly health checks with a dead invite before a league is
+// hidden from /league directory and counted as unreachable.
+const LEAGUE_UNREACHABLE_AFTER_CHECKS = 2;
 // Ops channel where /league request-official cards post and staff assign/deny. Set
 // LEAGUE_OFFICIALS_CHANNEL_ID in the env to use a dedicated channel; otherwise
 // requests fall back to the shared league log channel.
@@ -272,6 +275,7 @@ module.exports = {
     FF_OFFICIAL_APPLICATIONS_CHANNEL_ID,
     REPORTS_FORUM_CHANNEL_ID,
     LEAGUE_LOG_CHANNEL_ID,
+    LEAGUE_UNREACHABLE_AFTER_CHECKS,
     LEAGUE_OFFICIALS_CHANNEL_ID,
     SQUAD_PRACTICE_CHANNEL_ID,
     GYM_CLASS_GENERAL_CHANNEL_ID,

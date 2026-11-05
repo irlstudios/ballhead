@@ -198,10 +198,13 @@ test('buildMetricsRows summarizes the program', () => {
     const rows = buildMetricsRows([
         withMetrics(league({ league_id: 1, league_status: 'Active', league_type: 'Base', active_strikes: 1, games_total: 3, games_30d: 2, checkin_months: [] }), now),
         withMetrics(league({ league_id: 2, league_status: 'Disbanded', checkin_months: [] }), now),
+        withMetrics(league({ league_id: 3, league_status: 'Active', league_type: 'Base', invite_dead_checks: 2, checkin_months: [] }), now),
+        withMetrics(league({ league_id: 4, league_status: 'Active', league_type: 'Base', invite_dead_checks: 1, checkin_months: [] }), now),
     ], now);
     const asMap = new Map(rows.slice(1).map(([k, v]) => [k, v]));
-    assert.strictEqual(asMap.get('Total leagues'), 2);
-    assert.strictEqual(asMap.get('Status: Active'), 1);
+    assert.strictEqual(asMap.get('Total leagues'), 4);
+    assert.strictEqual(asMap.get('Status: Active'), 3);
+    assert.strictEqual(asMap.get('Live leagues unreachable (dead invite)'), 1);
     assert.strictEqual(asMap.get('Status: Disbanded'), 1);
     assert.strictEqual(asMap.get('Active strikes (all leagues)'), 1);
     assert.strictEqual(asMap.get('Games recorded (all time)'), 3);
