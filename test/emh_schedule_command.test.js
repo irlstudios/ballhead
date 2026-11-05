@@ -38,6 +38,9 @@ stub('utils/emh_schedule_sheet', {
         return true;
     },
 });
+stub('utils/emh_events', {
+    reconcileBookingEvent: async (client, id) => calls.push(['event-sync', id]),
+});
 
 const { HOST_ROLE_ID, EMH_LEAD_IDS } = require('../config/constants');
 const rules = require('../utils/emh_schedule');
@@ -47,6 +50,7 @@ const fakeInteraction = ({ sub, userId = 'host-1', roles = [HOST_ROLE_ID], optio
     const replies = [];
     return {
         replies,
+        client: {},
         user: { id: userId, username: userId === 'host-1' ? 'host_a' : 'other_user' },
         member: { roles: { cache: { has: (id) => roles.includes(id) } } },
         options: {
@@ -198,4 +202,21 @@ test('a lead can find a slot past the first 25 by typing its day', async () => {
     assert.ok(choices.length <= 25);
     assert.ok(choices.some((choice) => choice.value === String(last.id)), 'last slot reachable');
     assert.ok(choices.every((choice) => choice.name.toLowerCase().includes(day)));
+});
+
+test('a new booking gets a Discord event; a taken time does not', async () => {
+    await handler.execute(fakeInteraction({ sub: 'schedule', options: futureSlot() }));
+    assert.deepStrictEqual(calls.filter(([name]) => name === 'event-sync'), [['event-sync', 9]]);
+    calls.length = 0;
+    state.conflict = booking({ hostUsername: 'host_b' });
+    await handler.execute(fakeInteraction({ sub: 'schedule', options: futureSlot() }));
+    assert.strictEqual(calls.some(([name]) => name === 'event-sync'), false);
+});
+
+test('a reschedule and a cancel both resync the slot\'s event', async () => {
+    state.booking = booking();
+    state.reschedule = { booking: booking({ id: 5 }) };
+    await handler.execute(fakeInteraction({ sub: 'reschedule', options: { slot: '5', ...futureSlot() } }));
+    await handler.execute(fakeInteraction({ sub: 'cancel', options: { slot: '5' } }));
+    assert.deepStrictEqual(calls.filter(([name]) => name === 'event-sync'), [['event-sync', 5], ['event-sync', 5]]);
 });

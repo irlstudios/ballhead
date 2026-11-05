@@ -10,6 +10,7 @@ const { noticePayload } = require('../utils/ui');
 const rules = require('../utils/emh_schedule');
 const store = require('../utils/emh_schedule_queries');
 const { renderMonthlyView } = require('../utils/emh_schedule_sheet');
+const events = require('../utils/emh_events');
 const { HOST_ROLE_ID, EMH_LEAD_IDS } = require('../config/constants');
 const logger = require('../utils/logger');
 
@@ -53,6 +54,8 @@ const handleSchedule = async (interaction) => {
     });
     if (result.conflict) return reply(interaction, 'Time Taken', conflictLines(result.conflict));
     redraw();
+    // Fire-and-forget like redraw: emh_events logs its own failures.
+    void events.reconcileBookingEvent(interaction.client, result.booking.id);
     return reply(interaction, 'Slot Booked', [
         `You are booked for **${rules.slotLabel(result.booking)}** (Central time).`,
         'Need to move it? Use `/emh reschedule`. Can\'t make it? Use `/emh cancel`.',
@@ -97,6 +100,7 @@ const handleReschedule = async (interaction) => {
         return reply(interaction, 'Time Taken', [...conflictLines(result.conflict), `Your ${rules.slotLabel(booking)} booking is unchanged.`]);
     }
     redraw();
+    void events.reconcileBookingEvent(interaction.client, result.booking.id);
     return reply(interaction, 'Slot Moved', [`**${rules.slotLabel(booking)}** moved to **${rules.slotLabel(result.booking)}**.`]);
 };
 
@@ -106,6 +110,7 @@ const handleCancel = async (interaction) => {
     const cancelled = await store.cancelBooking({ id: booking.id, cancelledBy: interaction.user.id });
     if (!cancelled) return reply(interaction, 'Slot Not Found', ['That slot was cancelled or already resolved.']);
     redraw();
+    void events.reconcileBookingEvent(interaction.client, cancelled.id);
     return reply(interaction, 'Slot Cancelled', [`**${rules.slotLabel(booking)}** (${booking.hostUsername}) is cancelled and the time is open again.`]);
 };
 

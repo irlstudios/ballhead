@@ -23,6 +23,7 @@ const { ensureEmhScheduleSchema } = require('../utils/emh_schedule_queries');
 const { runEventWinnerCycle } = require('../jobs/event-winner-cycle');
 const { runEmhScheduleSync } = require('../jobs/emh-schedule-sync');
 const { runEmhSessionReminders } = require('../jobs/emh-session-reminder');
+const { runEmhTodayPost } = require('../jobs/emh-today-post');
 const { resumeSessions } = require('../utils/host_session_manager');
 const { ensureModPingSubscriptionsTable } = require('../utils/mod_ping_queries');
 const { ensureApplicationDecisionsTable } = require('../utils/application_decision_queries');
@@ -297,9 +298,18 @@ module.exports = {
         // redraw the booking calendar tab.
         cron.schedule('*/15 * * * *', async () => {
             try {
-                await runEmhScheduleSync();
+                await runEmhScheduleSync(new Date(), { client });
             } catch (error) {
                 logger.error('[Cron] EMH schedule sync failed:', error);
+            }
+        }, { timezone: 'America/Chicago' });
+
+        // Daily at noon: list today's remaining EMH sessions in general chat.
+        cron.schedule('0 12 * * *', async () => {
+            try {
+                await runEmhTodayPost(client);
+            } catch (error) {
+                logger.error('[Cron] EMH today post failed:', error);
             }
         }, { timezone: 'America/Chicago' });
 
