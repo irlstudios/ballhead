@@ -36,6 +36,8 @@ const ensureEmhScheduleSchema = async () => {
     await executeQuery(bookingsTableSql());
     await executeQuery('CREATE INDEX IF NOT EXISTS idx_emh_bookings_host_start ON emh_bookings (host_id, starts_at)');
     await executeQuery('ALTER TABLE emh_bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ');
+    // The Discord server event mirroring the slot (utils/emh_events.js).
+    await executeQuery('ALTER TABLE emh_bookings ADD COLUMN IF NOT EXISTS discord_event_id TEXT');
 };
 
 const mapBooking = (row) => (row ? {
@@ -47,6 +49,7 @@ const mapBooking = (row) => (row ? {
     status: row.status,
     statusSource: row.status_source,
     reminderSentAt: row.reminder_sent_at ?? null,
+    eventId: row.discord_event_id ?? null,
 } : null);
 
 const findConflict = async ({ startsAt, endsAt, excludeId = null }) => {
@@ -180,6 +183,10 @@ const markReminderSent = async (id) => {
     return result.rows.length > 0;
 };
 
+const setBookingEventId = async (id, eventId) => {
+    await executeQuery('UPDATE emh_bookings SET discord_event_id = $2 WHERE id = $1', [id, eventId]);
+};
+
 const bookingExists = async ({ hostId, startsAt }) => {
     const result = await executeQuery(
         'SELECT 1 FROM emh_bookings WHERE host_id = $1 AND starts_at = $2 LIMIT 1',
@@ -204,5 +211,6 @@ module.exports = {
     setBookingStatus,
     listReminderCandidates,
     markReminderSent,
+    setBookingEventId,
     bookingExists,
 };

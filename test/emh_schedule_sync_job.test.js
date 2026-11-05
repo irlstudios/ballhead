@@ -6,7 +6,7 @@ const path = require('node:path');
 const { setImmediate } = require('node:timers');
 
 const calls = [];
-const state = { due: [], sessions: [], hangRender: false };
+const state = { due: [], sessions: [], hangRender: false, upcoming: [], hangEvents: false };
 const stub = (relative, exports) => {
     const file = require.resolve(path.join('..', relative));
     require.cache[file] = { id: file, filename: file, loaded: true, exports };
@@ -18,11 +18,19 @@ stub('utils/emh_schedule_queries', {
         return state.sessions;
     },
     setBookingStatus: async (id, status) => calls.push(['set', id, status]),
+    listUpcomingBookings: async () => state.upcoming,
 });
 stub('utils/emh_schedule_sheet', {
     renderMonthlyView: () => {
         calls.push(['render']);
         return state.hangRender ? new Promise(() => {}) : Promise.resolve(true);
+    },
+});
+
+stub('utils/emh_events', {
+    reconcileBookingEvent: async (client, id) => {
+        calls.push(['event-sync', id]);
+        if (state.hangEvents) await new Promise(() => {});
     },
 });
 
@@ -35,7 +43,7 @@ const slot = (id, hostId, start) => ({
 
 beforeEach(() => {
     calls.length = 0;
-    Object.assign(state, { due: [], sessions: [], hangRender: false });
+    Object.assign(state, { due: [], sessions: [], hangRender: false, upcoming: [], hangEvents: false });
 });
 
 test('due slots resolve to hosted or no-show and the sheet redraws', async () => {
@@ -78,4 +86,38 @@ test('a hung render does not block the next run from resolving slots', async () 
     state.due = [slot(1, 'h1', '2026-10-06T00:00:00Z')];
     const decided = await runEmhScheduleSync(NOW);
     assert.deepStrictEqual(decided, [{ id: 1, status: 'no_show' }]);
+});
+
+test('resolved slots and upcoming slots without an event are synced alongside the redraw', async () => {
+    state.due = [slot(1, 'h1', '2026-10-06T00:00:00Z'), slot(2, 'h2', '2026-10-06T01:00:00Z')];
+    state.upcoming = [{ id: 3, eventId: null }, { id: 4, eventId: 'ev-4' }];
+    await runEmhScheduleSync(NOW, { client: {} });
+    assert.deepStrictEqual(calls.filter(([name]) => name === 'event-sync'), [['event-sync', 1], ['event-sync', 2], ['event-sync', 3]]);
+    assert.ok(calls.some(([name]) => name === 'render'));
+});
+
+test('a hung redraw does not stop the Discord event pass', async () => {
+    state.hangRender = true;
+    state.upcoming = [{ id: 3, eventId: null }];
+    void runEmhScheduleSync(NOW, { client: {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepStrictEqual(calls.filter(([name]) => name === 'event-sync'), [['event-sync', 3]]);
+});
+
+test('no client means no Discord work', async () => {
+    state.due = [slot(1, 'h1', '2026-10-06T00:00:00Z')];
+    state.upcoming = [{ id: 3, eventId: null }];
+    await runEmhScheduleSync(NOW);
+    assert.strictEqual(calls.some(([name]) => name === 'event-sync'), false);
+});
+
+test('a slow event pass is not doubled by the next tick, and does not block resolving', async () => {
+    state.hangEvents = true;
+    state.upcoming = [{ id: 3, eventId: null }];
+    void runEmhScheduleSync(NOW, { client: {} });
+    await new Promise((resolve) => setImmediate(resolve));
+    state.due = [slot(1, 'h1', '2026-10-06T00:00:00Z')];
+    const decided = await runEmhScheduleSync(NOW, { client: {} });
+    assert.deepStrictEqual(decided, [{ id: 1, status: 'no_show' }]);
+    assert.deepStrictEqual(calls.filter(([name]) => name === 'event-sync'), [['event-sync', 3]]);
 });
