@@ -5,7 +5,7 @@ const assert = require('node:assert');
 
 const {
     trackingStartedNotice,
-    noActivityNotice,
+    fallbackTrackingNotice,
     wrapUpNotice,
     endedWithoutTrackingNotice,
     statusNotice,
@@ -21,12 +21,12 @@ test('tracking started notice names the detected activity', () => {
     assert.match(text, /[Tt]racking/);
 });
 
-test('no-activity warning explains the privacy setting and how long it waited', () => {
-    const notice = noActivityNotice({ minutes: 5 });
+test('fallback notice says tracking started without detection and how long it waited', () => {
+    const notice = fallbackTrackingNotice({ minutes: 5 });
     const text = flatten(notice);
     assert.match(text, /5 minutes/);
+    assert.match(text, /now recording/);
     assert.match(text, /Activity Privacy/);
-    assert.match(text, /not being recorded|no stats/i);
 });
 
 test('wrap-up notice reports the session stats', () => {

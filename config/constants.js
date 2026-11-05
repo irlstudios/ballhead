@@ -134,8 +134,8 @@ const EMH_SCHEDULE_TAB = process.env.EMH_SCHEDULE_TAB || 'Monthly View';
 // cadence can be tuned without a deploy.
 const HOST_SESSION_NUDGE_MINUTES = Number(process.env.HOST_SESSION_NUDGE_MINUTES || '15');
 
-// How long a session may sit without a detected activity before the host is
-// DMed a warning that nothing is being recorded.
+// How long a session may sit without a detected activity before it starts
+// tracking anyway (presence cannot see Gym Class on a headset).
 const HOST_SESSION_ACTIVITY_WARNING_MINUTES = Number(process.env.HOST_SESSION_ACTIVITY_WARNING_MINUTES || '5');
 
 // Top Event Winner: EMH hosts record a winner per session, and every two weeks

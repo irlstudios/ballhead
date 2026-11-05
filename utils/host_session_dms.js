@@ -46,16 +46,19 @@ const trackingStartedNotice = ({ activityName } = {}) => ({
     ],
 });
 
-const noActivityNotice = ({ minutes } = {}) => ({
-    title: 'No Activity Detected',
+// Sent when no activity was detected in time and the session went live anyway.
+// Gym Class played on a headset never shows in Discord presence, so detection
+// cannot be the only way a session starts recording.
+const fallbackTrackingNotice = ({ minutes } = {}) => ({
+    title: 'Tracking Started',
     subtitle: SUBTITLE,
     lines: [
-        `Your session opened ${minutes} minutes ago but I have not detected an activity yet, so no stats are being recorded.`,
+        `I could not detect an activity ${minutes} minutes in, so I started tracking anyway. Your session stats are now recording.`,
         '',
-        'To fix it:',
-        ...PRIVACY_STEPS,
+        'If you are running a Discord activity, turn this on so I can see it next time:',
+        PRIVACY_STEPS[0],
         '',
-        'I will DM you the moment tracking starts. `/room event status` shows where things stand.',
+        'Leaving the lobby ends the session and I will DM you the wrap-up.',
     ],
 });
 
@@ -147,7 +150,7 @@ const sendHostDm = async (client, hostId, notice) => {
 
 module.exports = {
     trackingStartedNotice,
-    noActivityNotice,
+    fallbackTrackingNotice,
     wrapUpNotice,
     endedWithoutTrackingNotice,
     statusNotice,

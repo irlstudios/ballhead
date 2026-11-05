@@ -8,7 +8,7 @@ const {
     ActionRowBuilder, ButtonBuilder, ButtonStyle, ContainerBuilder, MessageFlags,
 } = require('discord.js');
 const { pool } = require('../db');
-const { HOST_ROLE_ID, HOST_SESSION_NUDGE_MINUTES } = require('../config/constants');
+const { HOST_ROLE_ID, HOST_SESSION_NUDGE_MINUTES, HOST_SESSION_ACTIVITY_WARNING_MINUTES } = require('../config/constants');
 const { buildTextBlock } = require('../utils/ui');
 const { eventChannelName } = require('../utils/host_session_stats');
 const manager = require('../utils/host_session_manager');
@@ -92,7 +92,7 @@ const handleRoomEventStart = async (interaction) => {
             `This will rename **${channel.name}** to **${eventChannelName(interaction.member.displayName)}** and let everyone launch Discord activities in it.`,
             '',
             'While the event runs:',
-            '- Tracking starts as soon as you launch an activity, not before. I will DM you the moment it does.',
+            `- Tracking starts as soon as you launch an activity, or after ${HOST_SESSION_ACTIVITY_WARNING_MINUTES} minutes if I cannot detect one (Gym Class on a headset never shows). I will DM you when it starts.`,
             `- The bot posts an invite to the lobby in general chat every ${HOST_SESSION_NUDGE_MINUTES} minutes.`,
             '- You will not be able to lock or rename the lobby.',
             '- `/room event status` shows your live stats at any time.',
@@ -175,8 +175,8 @@ const handleRoomEventButton = async (interaction) => {
             title: 'Session Started',
             subtitle: 'Start Event',
             lines: [
-                'The lobby is open for Discord activities. Launch one and tracking begins automatically.',
-                'I will DM you when tracking starts. No DM within a few minutes means the activity is not being detected; run `/room event status` to check.',
+                `The lobby is open. Tracking starts when I detect your activity, or after ${HOST_SESSION_ACTIVITY_WARNING_MINUTES} minutes either way.`,
+                'I will DM you when tracking starts. `/room event status` shows where things stand.',
                 'Stats are saved and DMed to you when you leave the lobby.',
             ],
         });
